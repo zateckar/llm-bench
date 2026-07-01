@@ -1,0 +1,114 @@
+# Reading Comprehension Test Suite
+
+- id: RC-01
+  category: Reading Comprehension
+  prompt: |
+    Read the following passage and answer the question.
+
+    Passage: The Amazon rainforest, also known as Amazonia, is the world's largest tropical rainforest. It covers approximately 5.5 million square kilometers and spans nine countries in South America, with the majority located in Brazil. The forest is home to approximately 10% of all species on Earth and produces roughly 20% of the world's oxygen.
+
+    Question: How many countries does the Amazon rainforest span?
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?i)\\bnine\\b|\\b9\\b"
+
+- id: RC-02
+  category: Reading Comprehension
+  prompt: |
+    Read the following passage and answer the question.
+
+    Passage: Thomas Edison is credited with inventing the practical incandescent light bulb in 1879. While other inventors had worked on similar devices, Edison's version was the first to be commercially viable, lasting over 1,200 hours.
+
+    Question: In what year did Edison invent the practical incandescent light bulb?
+  evaluator: numeric_match
+  expected: 1879.0
+
+- id: RC-03
+  category: Reading Comprehension
+  prompt: |
+    Read the following passage and answer the question.
+
+    Passage: Mount Everest is the Earth's highest mountain above sea level, standing at 8,848.86 meters. It is located in the Mahalangur Himal sub-range of the Himalayas on the border between Nepal and China (Tibet Autonomous Region).
+
+    Question: What is the height of Mount Everest in meters?
+  evaluator: numeric_match
+  expected: 8848.86
+
+- id: RC-04
+  category: Reading Comprehension
+  prompt: |
+    Read the following passage and answer the question.
+
+    Passage: Python was created by Guido van Rossum and first released in 1991. It was designed as a successor to the ABC programming language. Python emphasizes code readability with its use of significant indentation.
+
+    Question: Who created Python?
+  evaluator: contains_keywords
+  expected: ["guido"]
+
+- id: RC-05
+  category: Reading Comprehension
+  prompt: |
+    Read the following passage and answer the question.
+
+    Passage: The Great Wall of China stretches approximately 21,196 kilometers. It was built over many centuries by multiple dynasties, with construction beginning as early as the 7th century BC.
+
+    Question: How long is the Great Wall of China in kilometers?
+  evaluator: numeric_match
+  expected: 21196.0
+
+- id: RC-06
+  category: Reading Comprehension
+  prompt: |
+    Read the following passage and answer the question.
+
+    Passage: Water boils at 100 degrees Celsius (212 degrees Fahrenheit) at standard atmospheric pressure. At higher altitudes, water boils at lower temperatures due to reduced atmospheric pressure.
+
+    Question: At what temperature in Celsius does water boil at standard atmospheric pressure?
+  evaluator: numeric_match
+  expected: 100.0
+
+- id: RC-07
+  category: Reading Comprehension
+  prompt: |
+    Read this passage and answer.
+
+    Sarah left home at 8:00 AM. She drove 30 minutes to the train station, parked her car, and caught the 8:45 AM train. The train ride was 2 hours and 15 minutes. She arrived at her destination at 11:00 AM.
+
+    Question: How long did Sarah wait at the train station after parking?
+  evaluator: numeric_match
+  expected: 15.0
+
+- id: RC-08
+  category: Reading Comprehension
+  prompt: |
+    Read this passage and answer.
+
+    Company A had revenue of $5M in 2023, up 20% from 2022. Company B had revenue of $4M in 2023, up 25% from 2022. Company C had revenue of $6M in 2023, up 15% from 2022.
+
+    Question: Which company had the highest revenue growth rate in 2023?
+  evaluator: contains_keywords
+  expected: ["company b"]
+
+- id: RC-09
+  category: Reading Comprehension
+  prompt: |
+    Read this passage and answer.
+
+    The experiment tested three groups: Group A received the drug, Group B received a placebo, and Group C received no treatment. After 6 weeks, Group A showed 40% improvement, Group B showed 15% improvement, and Group C showed 5% improvement.
+
+    Question: What is the size of the placebo effect (the placebo group's improvement minus the no-treatment group's improvement) in percentage points? Reply with just the number.
+  evaluator: numeric_match
+  expected: 10.0
+
+- id: RC-10
+  category: Reading Comprehension
+  prompt: |
+    Read this passage and answer.
+
+    Alice is Bob's sister. Carol is Alice's daughter. Dave is Carol's brother. Eve is Dave's wife.
+
+    Question: What is Alice's relationship to Eve? (Dave is Alice's son, and Eve is married to Dave.)
+  evaluator: contains_keywords
+  expected: ["mother-in-law", "mother in law"]

@@ -1,0 +1,44 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount a named volume so the database persists across container restarts.
+      - bench-data:/app/data
+      # Mount tests as read-only so new YAML test files can be added without
+      # rebuilding the image. This is a development convenience; for production
+      # pin the tests in the image or use a separate versioned volume.
+      - ./tests:/app/tests:ro
+    environment:
+      # --- Mode ---------------------------------------------------------------
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+
+      # --- Server binding -----------------------------------------------------
+      # In Docker we always bind 0.0.0.0; the host port mapping controls access.
+      - HOST=0.0.0.0
+      - PORT=8000
+
+      # --- Auth (MANDATORY in production) ------------------------------------
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+
+      # --- Cookie security ----------------------------------------------------
+      - COOKIE_SECURE=true
+
+      # --- OIDC (optional) ----------------------------------------------------
+      - OIDC_ENABLED=${OIDC_ENABLED:-false}
+      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-llm-bench}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-http://localhost:8000/auth/oidc/callback}
+
+    restart: unless-stopped
+
+volumes:
+  bench-data:
+    driver: local

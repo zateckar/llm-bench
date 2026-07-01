@@ -1,0 +1,174 @@
+# Terminal File Operations Test Suite
+# Adapted from terminal-bench repository tasks
+
+- id: TF-01
+  category: Terminal File Operations
+  difficulty: easy
+  source: terminal-bench/hello-world
+  prompt: |
+    Create a file called hello.txt in the current directory.
+    Write "Hello, world!" to it.
+    Show the command to create the file and the file content.
+  evaluator: file_content_match
+  expected:
+    content: "Hello, world!"
+    file_name: "hello.txt"
+
+- id: TF-02
+  category: Terminal File Operations
+  difficulty: easy
+  source: terminal-bench/csv-to-parquet
+  prompt: |
+    Write Python code to convert a CSV file named 'data.csv' into a Parquet file named 'data.parquet'.
+    The CSV file contains sample data with headers.
+    Show the complete code using pandas and pyarrow.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Read the CSV"
+      pattern: "read_csv|pd\\.read|csv\\.reader"
+      order: 1
+    - step: "Write Parquet"
+      pattern: "to_parquet|parquet\\.write|write_table"
+      order: 2
+
+- id: TF-03
+  category: Terminal File Operations
+  difficulty: medium
+  source: terminal-bench/deterministic-tarball
+  prompt: |
+    Write a Python script that creates a deterministic tar.gz archive.
+    The script should:
+    1. Take a source directory and output filename as arguments
+    2. Create a tar.gz archive with deterministic timestamps (set to epoch 0)
+    3. Sort files alphabetically for reproducibility
+    Show the complete script.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Sort files for reproducibility"
+      pattern: "sorted|sort\\("
+      order: 1
+    - step: "Use tarfile with gzip"
+      pattern: "tarfile|tar\\.add|w:gz"
+      order: 2
+    - step: "Set deterministic timestamps"
+      pattern: "mtime\\s*=\\s*0|epoch|TarInfo|filter="
+      order: 3
+
+- id: TF-04
+  category: Terminal File Operations
+  difficulty: medium
+  source: terminal-bench/extract-elf
+  prompt: |
+    Write Python code to parse an ELF binary file header.
+    The code should extract and display:
+    - Magic number
+    - Class (32-bit or 64-bit)
+    - Data encoding (little or big endian)
+    - Entry point address
+    Show the complete parser code.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Read and verify ELF magic"
+      pattern: "0x7f|x7fELF|7f454c46|magic"
+      order: 1
+    - step: "Determine 32/64-bit class"
+      pattern: "EI_CLASS|e_ident|32.bit|64.bit|class"
+      order: 2
+    - step: "Parse endianness and entry point"
+      pattern: "endian|e_entry|entry point|struct\\.unpack"
+      order: 3
+
+- id: TF-05
+  category: Terminal File Operations
+  difficulty: easy
+  source: terminal-bench/filter-js-from-html
+  prompt: |
+    Write a Python function that removes JavaScript from HTML files to prevent XSS attacks.
+    The function should:
+    - Take an HTML string as input
+    - Remove all script tags and their content
+    - Remove inline event handlers (onclick, onload, etc.)
+    - Preserve legitimate HTML structure
+    Show the complete function.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Remove script tags and content"
+      pattern: "<script|script.*?>|</script>"
+      order: 1
+    - step: "Strip inline event handlers"
+      pattern: "onclick|onload|on\\w+=|event handler"
+      order: 2
+    - step: "Preserve remaining HTML"
+      pattern: "re\\.sub|re\\.compile|BeautifulSoup|return"
+      order: 3
+
+- id: TF-06
+  category: Terminal File Operations
+  difficulty: medium
+  source: terminal-bench/large-scale-text-editing
+  prompt: |
+    Write a Python script that performs find-and-replace operations on large text files efficiently.
+    The script should:
+    - Handle files larger than available RAM using streaming
+    - Support multiple find-replace pairs
+    - Preserve file encoding (UTF-8)
+    - Create a backup before modifying
+    Show the complete script.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Streaming file reading"
+      pattern: "chunk|buffer|iter"
+      order: 1
+    - step: "Find and replace logic"
+      pattern: "replace|sub"
+      order: 2
+    - step: "Backup creation"
+      pattern: "backup|copy|shutil"
+      order: 3
+
+- id: TF-07
+  category: Terminal File Operations
+  difficulty: hard
+  source: terminal-bench/db-wal-recovery
+  prompt: |
+    Explain the process of recovering a SQLite database from Write-Ahead Logging (WAL) mode.
+    Include:
+    1. What is WAL mode and why it's used
+    2. Steps to force a checkpoint and merge WAL into main database
+    3. How to recover data if the WAL file is corrupted
+    4. Commands to verify database integrity after recovery
+  evaluator: multi_step_solution
+  expected:
+    - step: "WAL mode explanation"
+      pattern: "write.ahead|WAL|journal"
+      order: 1
+    - step: "Checkpoint process"
+      pattern: "checkpoint|PRAGMA wal_checkpoint"
+      order: 2
+    - step: "Recovery steps"
+      pattern: "recover|integrity|PRAGMA integrity_check"
+      order: 3
+
+- id: TF-08
+  category: Terminal File Operations
+  difficulty: easy
+  source: terminal-bench/create-bucket
+  prompt: |
+    Write a Python function to create an S3 bucket with proper configuration.
+    The function should:
+    - Accept bucket name and region as parameters
+    - Create the bucket with appropriate ACL settings
+    - Enable versioning
+    - Set up basic lifecycle rules
+    Show the complete function using boto3.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Create the bucket"
+      pattern: "boto3|create_bucket|s3"
+      order: 1
+    - step: "Enable versioning"
+      pattern: "versioning|put_bucket_versioning|Enabled"
+      order: 2
+    - step: "Configure lifecycle rules"
+      pattern: "lifecycle|put_bucket_lifecycle|expiration"
+      order: 3

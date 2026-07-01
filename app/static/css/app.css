@@ -1,0 +1,23 @@
+/* Custom styles for LLM Bench */
+/* Tailwind handles most styling; this file is for things Tailwind can't do easily */
+
+/* Smooth transitions for Alpine.js collapse */
+[x-collapse] {
+    overflow: hidden;
+}
+
+/* Custom scrollbar */
+.scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+    background: #0f172a;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+}

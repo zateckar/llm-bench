@@ -1,0 +1,188 @@
+# Agentic Use Cases Test Suite
+
+- id: AU-01
+  category: Agentic Use Cases
+  prompt: |
+    You are an AI agent tasked with: 'Deploy a new microservice to production.'
+
+    Available actions:
+    - run_command(cmd: str) -> output
+    - read_file(path: str) -> content
+    - write_file(path: str, content: str) -> bool
+    - create_pull_request(branch, title, body, reviewers) -> {url}
+    - merge_pr(pr_id) -> bool
+    - deploy(environment, version) -> {status, url}
+    - run_tests(filter: str) -> {passed, failed}
+    - notify(channel, message) -> bool
+
+    Create a complete deployment plan with decision points. What do you do if tests fail? What if the deploy fails? What if reviewers reject the PR?
+  evaluator: contains_keywords
+  expected: ["run_tests", "create_pull_request", "merge_pr", "deploy", "notify"]
+
+- id: AU-02
+  category: Agentic Use Cases
+  prompt: |
+    You are a debugging agent. A user reports: 'My app crashes when I click the submit button on the checkout page.'
+
+    You have access to:
+    - Logs (last 1000 entries)
+    - Source code
+    - Browser console
+    - Network tab
+    - Database queries
+
+    Outline your systematic debugging approach. How do you narrow down the cause? What's your hypothesis formation process? Give me at least 5 steps with specific actions.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?i)reproduce|reproduc"
+      - type: regex
+        value: "(?i)log|stack trace|error message"
+      - type: regex
+        value: "(?i)hypothes|isolate|narrow|bisect|root cause"
+      - type: numbered_list
+      - type: min_words
+        value: 100
+
+- id: AU-03
+  category: Agentic Use Cases
+  prompt: |
+    You are a code review agent. Review this code and identify issues:
+
+    ```python
+    def process_order(user_id, items, payment_token):
+        user = db.query(f"SELECT * FROM users WHERE id = {user_id}")
+        if not user:
+            return {'error': 'User not found'}
+        
+        total = sum(item['price'] * item['qty'] for item in items)
+        
+        if user['credits'] >= total:
+            db.execute(f"UPDATE users SET credits = credits - {total} WHERE id = {user_id}")
+            for item in items:
+                db.execute(f"INSERT INTO orders (user_id, product, qty) VALUES ({user_id}, '{item['name']}', {item['qty']})")
+            payment.charge(payment_token, total)
+            return {'status': 'success', 'total': total}
+        else:
+            return {'error': 'Insufficient credits'}
+    ```
+
+    List ALL security vulnerabilities, code quality issues, and design problems. For each issue, explain the risk and provide a fix.
+  evaluator: contains_keywords
+  expected: ["sql injection", "race condition", "idempoten"]
+
+- id: AU-04
+  category: Agentic Use Cases
+  prompt: |
+    You are an agent that needs to migrate a database from PostgreSQL to MySQL.
+
+    Constraints:
+    - 50GB database with 100M rows
+    - 99.9% uptime SLA (max 43 min downtime per year)
+    - Must maintain data consistency
+    - Application code uses SQLAlchemy ORM
+
+    Design a migration strategy that meets the uptime requirement. Include:
+    1. Pre-migration steps
+    2. Cutover strategy
+    3. Rollback plan
+    4. Validation approach
+  evaluator: contains_keywords
+  expected: ["dual write", "cdc", "replication", "rollback"]
+
+- id: AU-05
+  category: Agentic Use Cases
+  prompt: |
+    You are a cost optimization agent. Analyze this cloud infrastructure:
+
+    Current Monthly Costs:
+    - 20x m5.4xlarge EC2 instances ($1.536/hr each): $22,118/mo
+    - 5x r5.2xlarge RDS ($1.008/hr each): $3,628/mo
+    - 2TB EBS gp3 storage: $160/mo
+    - 5TB S3 Standard: $115/mo
+    - 10TB data transfer out: $850/mo
+    - ElastiCache r5.xlarge (3 nodes): $978/mo
+    - CloudWatch + X-Ray: $450/mo
+    Total: $28,299/mo
+
+    Usage patterns:
+    - EC2: Average 40% CPU utilization, peak 80% during business hours
+    - RDS: Average 30% CPU, reads 70% / writes 30%
+    - ElastiCache: Hit rate 85%, mostly used during business hours
+    - Data transfer: 60% from S3 to EC2 (free), 40% to internet
+
+    Propose 5 specific optimizations with estimated monthly savings.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: numbered_list
+      - type: min_words
+        value: 150
+
+- id: AU-06
+  category: Agentic Use Cases
+  prompt: |
+    You are an incident response agent. An alert fires:
+
+    ALERT: API latency > 5s (P99) for payment-service
+    Time: 2024-03-15 14:32 UTC
+    Impact: 15% of payment requests timing out
+    Current state: No recent deployments. Traffic normal.
+
+    Immediate steps you would take (first 15 minutes). Include:
+    1. Triage actions
+    2. Diagnostic commands
+    3. Communication plan
+    4. Potential root causes to investigate
+  evaluator: contains_keywords
+  expected: ["latency", "database", "dependency", "restart"]
+
+- id: AU-07
+  category: Agentic Use Cases
+  prompt: |
+    You are a cost optimization agent. Your company spends $50K/month on cloud. You discover:
+    1. 40% of EC2 instances are idle (CPU < 5% for 30 days)
+    2. RDS is over-provisioned (32GB RAM, using 8GB)
+    3. S3 bucket has 2TB of incomplete multipart uploads
+    4. No reserved instances purchased
+    5. Data transfer costs are $2K/month (mostly cross-AZ)
+
+    For each finding, estimate the monthly savings and list the specific action to take. Reply with a numbered list.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: numbered_list
+      - type: min_words
+        value: 100
+
+- id: AU-08
+  category: Agentic Use Cases
+  prompt: |
+    You are a code review agent. Review this code for bugs:
+
+    ```python
+    def transfer_funds(from_account, to_account, amount):
+        balance = get_balance(from_account)
+        if balance >= amount:
+            deduct(from_account, amount)
+            credit(to_account, amount)
+            return True
+        return False
+    ```
+
+    What are ALL the problems? Be specific about race conditions, error handling, and atomicity issues.
+  evaluator: contains_keywords
+  expected: ["race condition", "atomic", "rollback", "error handling"]
+
+- id: AU-09
+  category: Agentic Use Cases
+  prompt: |
+    You are a debugging agent. The user reports: 'Our API returns 500 errors intermittently, about 5% of requests, only during peak hours (2-6 PM).'
+
+    Logs show: 'ConnectionError: Cannot connect to database pool'
+    Metrics show: DB connection pool at 100% during peak, CPU at 40%.
+
+    What is the most likely root cause, and what 3 specific actions would you take?
+  evaluator: contains_keywords
+  expected: ["connection pool", "max_connections", "increase"]

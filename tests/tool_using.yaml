@@ -1,0 +1,262 @@
+# Tool Using Test Suite
+
+- id: TU-01
+  category: Tool Using
+  prompt: |
+    You have access to these tools:
+    1. `search_web(query: str) -> list[str]` - Searches the web
+    2. `read_file(path: str) -> str` - Reads a file
+    3. `write_file(path: str, content: str) -> bool` - Writes to a file
+    4. `run_code(code: str) -> str` - Executes Python code
+    5. `send_email(to: str, subject: str, body: str) -> bool`
+
+    Task: I need to find the current population of Tokyo, save it to a file called 'tokyo_pop.txt', and email it to alice@example.com.
+
+    List the tools you would use IN ORDER, with the exact function call for each step. Reply with a numbered list like: 1. tool_name(args)
+  evaluator: format_check
+  expected:
+    checks:
+      - type: contains
+        value: search_web
+      - type: contains
+        value: write_file
+      - type: contains
+        value: send_email
+      - type: numbered_list
+
+- id: TU-02
+  category: Tool Using
+  prompt: |
+    You have a tool `execute_sql(query: str) -> list[dict]` that runs SQL queries.
+
+    Database schema:
+    - users(id, name, email, created_at)
+    - orders(id, user_id, amount, status, created_at)
+    - products(id, name, price, category)
+
+    Task: Find the top 5 customers by total order amount in the last 30 days.
+
+    Write the exact SQL query you would pass to execute_sql.
+  evaluator: contains_keywords
+  expected: ["join", "sum", "group by", "order by", "limit"]
+
+- id: TU-03
+  category: Tool Using
+  prompt: |
+    You are building a tool-use agent. You have these tools:
+    - `get_weather(city: str) -> dict` returns {temp, condition, humidity}
+    - `search_products(query: str) -> list[dict]` returns [{name, price, rating}]
+    - `book_hotel(city, checkin, checkout, guests) -> dict` returns {confirmation, total}
+    - `send_notification(user_id, message) -> bool`
+
+    A user says: 'I'm planning a trip to Paris next week for 2 people. Find me a hotel and let me know what the weather will be like.'
+
+    Describe your multi-step tool plan. What information do you need from each tool, and how does the output of one tool feed into the next?
+  evaluator: contains_keywords
+  expected: ["get_weather", "book_hotel", "send_notification"]
+
+- id: TU-04
+  category: Tool Using
+  prompt: |
+    You have a tool `fetch_url(url: str) -> str` that returns HTML content.
+    You need to extract all email addresses from a company's website.
+
+    Describe your approach step by step. Include:
+    1. How you discover pages on the site
+    2. How you extract emails from HTML
+    3. How you handle duplicates
+    4. What edge cases to watch for
+  evaluator: format_check
+  expected:
+    checks:
+      - type: contains
+        value: fetch_url
+      - type: regex
+        value: "(?i)regex|regular expression|re\\.|pattern"
+      - type: min_words
+        value: 50
+
+- id: TU-05
+  category: Tool Using
+  prompt: |
+    You have tools:
+    - `create_issue(repo, title, body, labels) -> {url}`
+    - `search_code(repo, query) -> list[{file, line, content}]`
+    - `read_file(repo, path) -> str`
+    - `run_tests(repo, test_filter) -> {passed, failed, errors}`
+
+    A CI pipeline failed with 'test_login_returns_401'. Write the exact sequence of tool calls to investigate and fix this. For each call, show the arguments you'd use.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: contains
+        value: run_tests
+      - type: contains
+        value: search_code
+      - type: contains
+        value: read_file
+
+- id: TU-06
+  category: Tool Using
+  prompt: |
+    You have a tool `http_request(method, url, headers, body) -> {status, body}`.
+    The API at https://api.example.com requires:
+    - GET /users for list of users
+    - POST /users/{id}/tasks to create a task
+    - DELETE /tasks/{task_id} to remove a task
+    - Auth: Bearer token in Authorization header
+
+    Write the exact http_request calls to:
+    1. Get all users
+    2. Create a task 'Buy groceries' for user 42
+    3. Delete task with id 99
+  evaluator: format_check
+  expected:
+    checks:
+      - type: contains
+        value: GET
+      - type: contains
+        value: POST
+      - type: contains
+        value: DELETE
+      - type: contains
+        value: Authorization
+
+- id: TU-07
+  category: Tool Using
+  prompt: |
+    You have tools:
+    - `get_user(user_id) -> {name, email, department}`
+    - `get_tickets(user_id) -> list[{id, subject, status, created_at}]`
+    - `send_slack_message(channel, message) -> bool`
+    - `create_jira_ticket(project, summary, description, assignee) -> {key}`
+
+    A customer named Alice (user_id: 123) emailed support@company.com complaining about 3 open tickets. Write the tool call sequence to: 1) Get Alice's info, 2) Get her tickets, 3) Send her a Slack message acknowledging, 4) Create a Jira ticket to track the escalation.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: contains
+        value: get_user
+      - type: contains
+        value: get_tickets
+      - type: contains
+        value: send_slack_message
+      - type: contains
+        value: create_jira_ticket
+
+- id: TU-08
+  category: Tool Using
+  prompt: |
+    You have a tool `query_db(sql: str) -> list[dict]`.
+
+    Schema:
+    - employees(id, name, dept_id, salary, hire_date)
+    - departments(id, name, budget)
+    - projects(id, name, dept_id, start_date, end_date)
+
+    Task: Find all employees in departments whose budget exceeds $1M, who are assigned to active projects (end_date > today), earning more than the department average salary.
+
+    Write the SQL query.
+  evaluator: contains_keywords
+  expected: ["join", "avg", "where", "group by"]
+
+# --- NEW HARDER QUESTIONS ---
+
+- id: TU-09
+  category: Tool Using
+  prompt: |
+    You have these tools:
+    - `fetch_data(url: str, headers: dict) -> dict` - Makes HTTP requests
+    - `parse_json(data: dict, path: str) -> any` - Extracts data from JSON
+    - `transform(fn: str, data: list) -> list` - Applies transformation
+    - `aggregate(fn: str, data: list) -> number` - Aggregates data
+    - `write_result(data: any, destination: str) -> bool` - Saves output
+
+    Task: Fetch user activity data from https://api.example.com/users/activity, extract the "sessions" array, filter sessions longer than 30 minutes, calculate the average duration, and save to /tmp/report.json.
+
+    Write the complete tool call sequence with exact arguments for each step.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: contains
+        value: fetch_data
+      - type: contains
+        value: parse_json
+      - type: contains
+        value: aggregate
+      - type: numbered_list
+
+- id: TU-10
+  category: Tool Using
+  prompt: |
+    You have tools:
+    - `git_status(repo: str) -> {branch, modified, staged, untracked}`
+    - `git_diff(repo: str, file: str) -> str` - Shows file changes
+    - `git_commit(repo: str, message: str, files: list) -> {hash}`
+    - `git_push(repo: str, branch: str) -> bool`
+    - `create_pr(repo: str, title: str, body: str, reviewers: list) -> {url}`
+
+    Task: You need to commit and push changes to a feature branch, then create a pull request. The repo is "myorg/webapp", branch is "feat/auth". Changes include modified files: src/auth.py and tests/test_auth.py. PR reviewers: alice, bob.
+
+    Write the exact sequence of tool calls.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: contains
+        value: git_diff
+      - type: contains
+        value: git_commit
+      - type: contains
+        value: git_push
+      - type: contains
+        value: create_pr
+      - type: numbered_list
+
+- id: TU-11
+  category: Tool Using
+  prompt: |
+    You have tools:
+    - `read_file(path: str) -> str`
+    - `list_files(directory: str) -> list[str]`
+    - `search_text(pattern: str, path: str) -> list[{file, line, content}]`
+    - `replace_text(file: str, old: str, new: str) -> bool`
+
+    Task: A Python project has a deprecated API call `requests.get()` that needs to be replaced with `httpx.get()` across all Python files. Find all occurrences and make the replacement.
+
+    Write the tool call sequence to accomplish this.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: contains
+        value: list_files
+      - type: contains
+        value: search_text
+      - type: contains
+        value: replace_text
+      - type: numbered_list
+
+- id: TU-12
+  category: Tool Using
+  prompt: |
+    You have tools:
+    - `deploy(service: str, environment: str, version: str) -> {status, url}`
+    - `health_check(url: str) -> {status, latency_ms}`
+    - `rollback(service: str, environment: str) -> {status}`
+    - `notify(channel: str, message: str) -> bool`
+    - `get_logs(service: str, lines: int) -> list[str]`
+
+    Task: Deploy version 2.1.0 of "api-gateway" to production. If health check fails after deployment, rollback immediately and notify the #alerts Slack channel with the error details.
+
+    Write the complete tool call sequence with conditional logic.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: contains
+        value: deploy
+      - type: contains
+        value: health_check
+      - type: contains
+        value: rollback
+      - type: contains
+        value: notify
+      - type: numbered_list

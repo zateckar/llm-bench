@@ -1,0 +1,62 @@
+# Summarization Test Suite
+
+- id: SU-01
+  category: Summarization
+  prompt: |
+    Summarize the following in exactly 2-3 sentences:
+
+    The James Webb Space Telescope (JWST) has made a groundbreaking discovery by detecting carbon dioxide in the atmosphere of an exoplanet for the first time. The planet, WASP-39b, is a hot gas giant located 700 light-years from Earth. Using its Near-Infrared Spectrograph (NIRSpec) and Mid-Infrared Instrument (MIRI), JWST identified the CO2 signature in starlight passing through the planet's atmosphere. This discovery demonstrates JWST's ability to detect atmospheric composition of distant worlds, bringing us closer to identifying potentially habitable planets. The finding was published in Nature and represents a major milestone in exoplanet research.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: min_sentences
+        value: 2
+      - type: max_sentences
+        value: 3
+      - type: regex
+        value: "(?i)carbon dioxide|co2|co₂"
+
+- id: SU-02
+  category: Summarization
+  prompt: |
+    Summarize this article in one sentence (max 30 words):
+
+    A new study published in Science reveals that global coral reef coverage has declined by 14% since 2009. Researchers from the Australian Institute of Marine Science surveyed 127 reef sites across the Great Barrier Reef and found that staghorn and tabulate corals were most affected. The primary cause is repeated marine heatwaves linked to climate change. However, some northern reefs showed unexpected recovery when water temperatures stabilized. The team recommends immediate action on carbon emissions and local pollution reduction to prevent further decline.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: min_sentences
+        value: 1
+      - type: max_sentences
+        value: 1
+      - type: max_words
+        value: 30
+
+- id: SU-03
+  category: Summarization
+  prompt: |
+    Extract the key facts from this passage as a bullet list (max 5 bullets):
+
+    SpaceX's Starship successfully completed its fourth test flight on June 6, 2024. The Super Heavy booster performed a soft splashdown in the Gulf of Mexico, while the Starship upper stage reached orbital velocity and re-entered the atmosphere over the Indian Ocean. Both stages survived reentry, marking a significant milestone. The flight lasted approximately 95 minutes. This was the first time both stages survived their respective trajectories. SpaceX plans to attempt a booster catch with the launch tower Mechazilla on the next flight.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: bullet_list
+      - type: regex
+        value: "(?i)starship|booster|june 6|95 min|reentry|re-entry"
+
+- id: SU-04
+  category: Summarization
+  prompt: |
+    Rewrite this technical passage for a non-technical audience (keep it under 50 words):
+
+    Kubernetes orchestrates containerized applications across clusters of machines. It uses a declarative configuration model where desired state is specified in YAML manifests. The control plane continuously reconciles actual state with desired state, automatically handling scaling, self-healing, and rolling updates.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: max_words
+        value: 50
+      - type: min_words
+        value: 10
+      - type: regex
+        value: "(?i)app|software|program|machine|server|manage|run"

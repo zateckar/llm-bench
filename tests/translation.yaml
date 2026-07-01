@@ -1,0 +1,58 @@
+# Translation Test Suite
+
+- id: TR-01
+  category: Translation
+  prompt: "Translate to French: 'The quick brown fox jumps over the lazy dog.' Reply with only the translation."
+  evaluator: contains_keywords
+  expected: ["renard", "brun", "chien"]
+
+- id: TR-02
+  category: Translation
+  prompt: "Translate to Spanish: 'Artificial intelligence is transforming how we work and live.' Reply with only the translation."
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?i)inteligencia artificial"
+      - type: regex
+        value: "(?i)transform|cambia|revoluciona"
+
+- id: TR-03
+  category: Translation
+  prompt: |
+    Translate this English text to German:
+
+    'Machine learning models require large datasets for training. The quality of the training data directly impacts model performance.'
+
+    Reply with only the German translation.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?i)maschinelles lernen|maschinellen lernens"
+      - type: regex
+        value: "(?i)daten"
+      - type: regex
+        value: "(?i)modell"
+
+- id: TR-04
+  category: Translation
+  prompt: "Translate to Japanese: 'Thank you for your help.' Reply with only the Japanese text."
+  evaluator: contains_keywords
+  expected: ["ありがとう"]
+
+- id: TR-05
+  category: Translation
+  prompt: |
+    Translate from Chinese to English: '深度学习是机器学习的一个子领域，它试图模仿人脑的工作方式。'
+
+    Reply with only the English translation.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?i)deep learning"
+      - type: regex
+        value: "(?i)machine learning"
+      - type: regex
+        value: "(?i)brain|mind"

@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}Run #{{ run.id }} - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="{ expandedCategories: {}, expandedQuestion: null }">
+    <div class="flex items-center gap-4">
+        <a href="/runs" class="text-slate-400 hover:text-white">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold text-white">Run #{{ run.id }}</h1>
+            <p class="text-slate-400 mt-1">{{ run.model_name }} ({{ run.model_id }})</p>
+        </div>
+        <div class="ml-auto flex items-center gap-3">
+            {% if run.status == 'completed' %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-pass">
+                {{ run.passed_questions }}/{{ run.total_questions }} passed ({{ "%.1f"|format(run.avg_score * 100) }}%)
+            </span>
+            {% elif run.status == 'running' %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-running">Running</span>
+            {% elif run.status == 'failed' %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-fail">Failed</span>
+            {% else %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-pending">Pending</span>
+            {% endif %}
+            {% if evaluator_errors and user and user.role == 'admin' %}
+            <form method="POST" action="/runs/{{ run.id }}/rerun-failed" class="inline"
+                  x-data
+                  x-on:submit.prevent="if(confirm('Re-run {{ evaluator_errors|length }} errored questions?')) $el.submit()">
+                <button type="submit" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-900/50 text-amber-400 hover:bg-amber-900/70 transition-colors">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    Re-run Errored ({{ evaluator_errors|length }})
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Run Info -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div class="card p-4">
+            <p class="text-xs text-slate-500 uppercase tracking-wider">Endpoint</p>
+            <p class="text-sm text-slate-300 mt-1 font-mono truncate">{{ run.base_url }}</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-500 uppercase tracking-wider">Started</p>
+            <p class="text-sm text-slate-300 mt-1">{{ run.started_at[:19] if run.started_at else 'N/A' }}</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-500 uppercase tracking-wider">Completed</p>
+            <p class="text-sm text-slate-300 mt-1">{{ run.completed_at[:19] if run.completed_at else 'N/A' }}</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-500 uppercase tracking-wider">Test Suite</p>
+            <p class="text-sm text-slate-300 mt-1 font-mono" title="{{ run.test_suite_hash or 'N/A' }}">{{ run.test_suite_hash or 'N/A' }}</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-500 uppercase tracking-wider">Tokens</p>
+            <p class="text-sm text-slate-300 mt-1">{{ "{:,}".format(run.total_prompt_tokens + run.total_completion_tokens) }}</p>
+            <p class="text-xs text-slate-500">{{ "{:,}".format(run.total_prompt_tokens) }} in + {{ "{:,}".format(run.total_completion_tokens) }} out</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-500 uppercase tracking-wider">Error</p>
+            <p class="text-sm text-slate-300 mt-1 truncate">{{ run.error_message or 'None' }}</p>
+        </div>
+    </div>
+
+    {% if evaluator_errors %}
+    <!-- Evaluator Errors -->
+    <div class="card p-5 bg-red-900/20 border border-red-800/50">
+        <h2 class="text-lg font-semibold text-red-400 mb-3">Evaluator Errors ({{ evaluator_errors|length }})</h2>
+        <p class="text-sm text-slate-400 mb-3">These questions had errors during evaluation. Use "Re-run Errored" to retry them.</p>
+        <div class="space-y-2">
+            {% for r in evaluator_errors %}
+            <div class="flex items-center gap-3 px-3 py-2 rounded bg-slate-900/50">
+                <span class="w-6 h-6 rounded flex items-center justify-center text-xs bg-red-900/50 text-red-400">!</span>
+                <span class="font-mono text-xs text-slate-500">{{ r.test_id }}</span>
+                <span class="text-sm text-slate-300 truncate flex-1">{{ r.prompt[:60] }}{% if r.prompt|length > 60 %}...{% endif %}</span>
+                <span class="text-xs text-red-400">{{ r.detail[:80] }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if run.status == 'completed' %}
+    <!-- Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card p-5">
+            <h2 class="text-lg font-semibold text-white mb-4">Category Scores</h2>
+            <div style="position: relative; height: 200px;"><canvas id="barChart"></canvas></div>
+        </div>
+        <div class="card p-5">
+            <h2 class="text-lg font-semibold text-white mb-4">Score Distribution</h2>
+            <div style="position: relative; height: 200px;"><canvas id="pieChart"></canvas></div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Category Breakdown -->
+    <div class="card p-5">
+        <h2 class="text-lg font-semibold text-white mb-4">Category Breakdown</h2>
+        <div class="space-y-3">
+            {% for cat in categories %}
+            <div class="rounded-lg bg-slate-800/50 overflow-hidden">
+                <button class="w-full flex items-center justify-between p-4 text-left hover:bg-slate-800 transition-colors"
+                        @click="expandedCategories['{{ cat.category }}'] = !expandedCategories['{{ cat.category }}']">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold
+                            {% if cat.avg_score >= 0.7 %}bg-emerald-900/50 text-emerald-400
+                            {% elif cat.avg_score >= 0.5 %}bg-yellow-900/50 text-yellow-400
+                            {% else %}bg-red-900/50 text-red-400{% endif %}">
+                            {{ "%.0f"|format(cat.avg_score * 100) }}%
+                        </div>
+                        <div>
+                            <p class="font-medium text-slate-200">{{ cat.category }}</p>
+                            <p class="text-xs text-slate-500">{{ cat.passed }}/{{ cat.total }} questions passed</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-32 progress-bar">
+                            <div class="progress-fill" style="width: {{ cat.avg_score * 100 }}%"></div>
+                        </div>
+                        <svg class="w-4 h-4 text-slate-500 transition-transform"
+                             :class="expandedCategories['{{ cat.category }}'] ? 'rotate-180' : ''"
+                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </div>
+                </button>
+
+                <!-- Expanded questions -->
+                <div x-show="expandedCategories['{{ cat.category }}']" x-collapse>
+                    <div class="px-4 pb-4 space-y-2">
+                        {% for r in results_by_category.get(cat.category, []) %}
+                        <div class="rounded-lg bg-slate-900/50 p-3 cursor-pointer hover:bg-slate-900 transition-colors"
+                             @click="expandedQuestion = expandedQuestion === '{{ r.test_id }}_{{ run.id }}' ? null : '{{ r.test_id }}_{{ run.id }}'">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-6 h-6 rounded flex items-center justify-center text-xs
+                                        {% if r.score >= 0.5 %}bg-emerald-900/50 text-emerald-400{% else %}bg-red-900/50 text-red-400{% endif %}">
+                                        {% if r.score >= 0.5 %}&#10003;{% else %}&#10007;{% endif %}
+                                    </span>
+                                    <span class="font-mono text-xs text-slate-500">{{ r.test_id }}</span>
+                                    <span class="text-sm text-slate-300 truncate max-w-md">{{ r.prompt[:80] }}{% if r.prompt|length > 80 %}...{% endif %}</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span class="text-xs text-slate-500">{{ r.prompt_tokens + r.completion_tokens }} tok</span>
+                                    <span class="text-xs font-medium {% if r.score >= 0.5 %}text-emerald-400{% else %}text-red-400{% endif %}">
+                                        {{ "%.0f"|format(r.score * 100) }}%
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Expanded detail -->
+                            <div x-show="expandedQuestion === '{{ r.test_id }}_{{ run.id }}'" x-collapse class="mt-3 space-y-3">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <p class="text-xs font-medium text-slate-500 mb-1">Prompt</p>
+                                        <div class="bg-slate-950 rounded p-3 text-xs text-slate-300 max-h-40 overflow-auto scrollbar-thin whitespace-pre-wrap">{{ r.prompt }}</div>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs font-medium text-slate-500 mb-1">Response</p>
+                                        <div class="bg-slate-950 rounded p-3 text-xs text-slate-300 max-h-40 overflow-auto scrollbar-thin whitespace-pre-wrap">{{ r.response }}</div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-medium text-slate-500 mb-1">Evaluation</p>
+                                    <p class="text-sm text-slate-300">{{ r.detail }}</p>
+                                </div>
+                                <div class="flex items-center gap-4 text-xs text-slate-500">
+                                    <div class="flex items-center gap-1">
+                                        <span>Evaluator:</span>
+                                        <span class="font-mono text-slate-400">{{ r.evaluator }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <span>Tokens:</span>
+                                        <span class="text-slate-400">{{ r.prompt_tokens }} in + {{ r.completion_tokens }} out = {{ r.prompt_tokens + r.completion_tokens }} total</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+{% if run.status == 'completed' %}
+<script>
+    // Bar chart
+    const barCtx = document.getElementById('barChart').getContext('2d');
+    const barLabels = {{ categories | map(attribute='category') | list | tojson }};
+    const barScoresRaw = {{ categories | map(attribute='avg_score') | list | tojson }};
+    const barScores = barScoresRaw.map(s => s * 100);
+    const barColors = barScores.map(s => s >= 70 ? 'rgba(16, 185, 129, 0.8)' : s >= 50 ? 'rgba(234, 179, 8, 0.8)' : 'rgba(239, 68, 68, 0.8)');
+
+    new Chart(barCtx, {
+        type: 'bar',
+        data: {
+            labels: barLabels,
+            datasets: [{
+                data: barScores,
+                backgroundColor: barColors,
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            scales: {
+                x: { max: 100, grid: { color: 'rgba(148, 163, 184, 0.1)' }, ticks: { color: '#94a3b8' } },
+                y: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11 } } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    // Pie chart
+    const pieCtx = document.getElementById('pieChart').getContext('2d');
+    const passedCount = {{ run.passed_questions }};
+    const failedCount = {{ run.total_questions }} - {{ run.passed_questions }};
+
+    new Chart(pieCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Passed', 'Failed'],
+            datasets: [{
+                data: [passedCount, failedCount],
+                backgroundColor: ['rgba(16, 185, 129, 0.8)', 'rgba(239, 68, 68, 0.8)'],
+                borderColor: ['#065f46', '#7f1d1d'],
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '60%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#94a3b8', padding: 20 }
+                }
+            }
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}

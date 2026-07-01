@@ -1,0 +1,107 @@
+# Logical Reasoning Test Suite
+
+- id: LR-01
+  category: Logical Reasoning
+  prompt: "Five houses in a row (positions 1-5 from the left) are painted green, white, blue, red, and yellow. The green house is immediately to the left of the white house. The blue house is in position 1. The red house is in position 5. The yellow house is not next to the white house. Which position is the green house in? Reply with just the number."
+  evaluator: numeric_match
+  expected: 3.0
+
+- id: LR-02
+  category: Logical Reasoning
+  prompt: "A farmer needs to transport a wolf, a goat, and a cabbage across a river. The boat can carry only the farmer and one item. The wolf eats the goat if left alone, and the goat eats the cabbage if left alone. What is the minimum number of river crossings needed? Reply with just the number."
+  evaluator: numeric_match
+  expected: 7.0
+
+- id: LR-03
+  category: Logical Reasoning
+  prompt: "Three people check into a hotel room that costs $30. They each pay $10. The manager realizes the room costs $25 and gives $5 to the bellboy to return. The bellboy keeps $2 and gives $1 back to each guest. Now each guest paid $9 (total $27), the bellboy has $2. That's $29. Where is the missing dollar?"
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?i)trick|misleading|fallacy|already included|no missing|faulty|flawed|incorrect.*addition|should not be added"
+
+- id: LR-04
+  category: Logical Reasoning
+  prompt: |
+    You have 12 identical-looking balls. One is either heavier or lighter than the rest (you don't know which). Using a balance scale exactly 3 times, can you always find the odd ball AND determine if it's heavier or lighter? Answer Yes or No.
+  evaluator: exact_match
+  expected: "Yes"
+
+- id: LR-05
+  category: Logical Reasoning
+  prompt: |
+    There are 3 boxes: one contains only apples, one contains only oranges, and one contains both. All boxes are mislabeled. You can pick one fruit from one box. What should you pick from which box to correctly label all boxes? Reply with: box label + fruit to pick.
+  evaluator: contains_keywords
+  expected: ["both", "apple", "orange"]
+
+- id: LR-06
+  category: Logical Reasoning
+  prompt: |
+    A man looks at a portrait and says: "Brothers and sisters have I none, but that man's father is my father's son." Who is in the portrait? Reply with the relationship.
+  evaluator: contains_keywords
+  expected: ["son", "my son"]
+
+- id: LR-07
+  category: Logical Reasoning
+  prompt: |
+    What comes next in the sequence: 1, 11, 21, 1211, 111221, ?
+    (Hint: Look at how each number describes the previous one)
+  evaluator: contains_keywords
+  expected: ["312211"]
+
+- id: LR-08
+  category: Logical Reasoning
+  prompt: |
+    You have 8 identical-looking coins. One is counterfeit and heavier. Using a balance scale exactly 2 times, can you always find the counterfeit coin? Answer Yes or No.
+  evaluator: exact_match
+  expected: "Yes"
+
+- id: LR-09
+  category: Logical Reasoning
+  prompt: |
+    If the day before yesterday was Thursday, what day will it be 3 days after tomorrow? Reply with just the day name.
+  evaluator: contains_keywords
+  expected: ["monday"]
+
+- id: LR-10
+  category: Logical Reasoning
+  prompt: |
+    A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. How much does the ball cost? Reply with just the amount in cents (e.g. 5 for 5 cents).
+  evaluator: numeric_match
+  expected: 5.0
+
+- id: LR-11
+  category: Logical Reasoning
+  prompt: |
+    If it takes 5 machines 5 minutes to make 5 widgets, how long would it take 100 machines to make 100 widgets? Reply with just the number (in minutes).
+  evaluator: numeric_match
+  expected: 5.0
+
+- id: LR-12
+  category: Logical Reasoning
+  prompt: |
+    In a room of 23 people, what is the approximate probability (as a percentage) that at least two people share a birthday? Reply with just the number (e.g. 50 for 50%).
+  evaluator: numeric_match
+  expected: 50.0
+
+- id: LR-13
+  category: Logical Reasoning
+  prompt: "If some A are B, and all B are C, which one of these statements must be true? A) All A are C  B) Some A are C  C) No A are C  D) All C are A. Reply with the letter only."
+  evaluator: exact_match
+  expected: "B"
+
+- id: LR-14
+  category: Logical Reasoning
+  prompt: "What comes next in the sequence: 2, 6, 12, 20, 30, ?"
+  evaluator: numeric_match
+  expected: 42.0
+
+- id: LR-15
+  category: Logical Reasoning
+  prompt: "If it is raining, the ground is wet. The ground is wet. Is it necessarily raining? Answer Yes, No, or Cannot be determined."
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?i)not necessarily|cannot be determined|can't be determined|\\bno\\b"

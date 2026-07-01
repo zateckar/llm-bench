@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - LLM Bench</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <script src="/static/vendor/tailwind.js"></script>
+    <link href="/static/vendor/fonts/fonts.css" rel="stylesheet">
+    <style>body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="h-full bg-slate-950 flex items-center justify-center">
+    <div class="w-full max-w-md px-6">
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg class="w-9 h-9 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold text-white">LLM Bench</h1>
+            <p class="text-slate-400 mt-1">Sign in to your account</p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-700 rounded-xl p-6">
+            {% if error %}
+            <div class="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
+                Invalid username or password.
+            </div>
+            {% endif %}
+
+            <form method="POST" action="/login" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Username</label>
+                    <input type="text" name="username" required autofocus
+                           class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                    <input type="password" name="password" required
+                           class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                </div>
+                <button type="submit"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors">
+                    Sign In
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

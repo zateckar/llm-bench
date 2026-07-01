@@ -1,0 +1,359 @@
+# Security Test Suite
+# Inspired by rapticore/llm-security-benchmark
+# Tests vulnerability identification and secure coding knowledge
+
+# =================== INJECTION ATTACKS ===================
+- id: SE-01
+  category: Security
+  prompt: |
+    Identify ALL security vulnerabilities in this code:
+
+    ```python
+    from flask import Flask, request
+    import sqlite3
+
+    app = Flask(__name__)
+
+    @app.route('/login', methods=['POST'])
+    def login():
+        username = request.form['username']
+        password = request.form['password']
+        
+        conn = sqlite3.connect('users.db')
+        query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
+        user = conn.execute(query).fetchone()
+        
+        if user:
+            return f'Welcome {username}!'
+        return 'Invalid credentials', 401
+
+    @app.route('/search')
+    def search():
+        q = request.args.get('q')
+        return f'<h1>Results for: {q}</h1>'
+    ```
+    
+    List each vulnerability with its OWASP category and a fix.
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'sql\s*injection'
+      - 'xss|cross.*site.*scripting'
+      - 'plaintext.*password|password.*plain'
+      - 'parameterized|prepared\s*statement'
+      - 'escape|sanitize|encode'
+    must_not:
+      - '\bno\s+(?:issues|vulnerabilities|problems)\b'
+      - '\bcode is secure\b'
+
+- id: SE-02
+  category: Security
+  prompt: |
+    A JWT token looks like: eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjo0MiwiZXhwIjoxNzEwMDAwMDAwfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+
+    1. Decode the header and payload
+    2. What algorithm is being used?
+    3. Is this algorithm secure? Why or why not?
+    4. What attack could exploit this?
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'hs256|hmac'
+      - 'algorithm\s*confusion|none\s*algorithm'
+      - 'rsa|asymmetric|public.*key'
+      - 'jwt'
+    must_not:
+      - '\bno\s+issues\b'
+
+- id: SE-03
+  category: Security
+  prompt: |
+    Review this authentication flow and identify security issues:
+
+    1. User submits email + password via HTTPS
+    2. Server hashes password with MD5
+    3. Server compares with stored hash
+    4. On success, server generates random 32-char session ID
+    5. Session ID stored in cookie without Secure/HttpOnly flags
+    6. Session expires in 30 days
+    7. No rate limiting on login attempts
+    8. Password reset: email link with token, token valid for 7 days
+
+    List ALL security issues and recommend fixes for each.
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'md5|weak.*hash'
+      - 'httponly|secure.*flag'
+      - 'rate.*limit|throttl'
+      - 'session'
+      - 'bcrypt|scrypt|argon2|pbkdf2'
+    must_not:
+      - '\bno\s+(?:issues|vulnerabilities|problems)\b'
+      - '\bflow is secure\b'
+
+- id: SE-04
+  category: Security
+  prompt: |
+    You are reviewing this API endpoint for security:
+
+    ```
+    POST /api/users
+    Body: {"name": "string", "email": "string", "role": "string"}
+    
+    Implementation:
+    - No authentication required
+    - No input validation
+    - Role field accepted from client
+    - Returns full user object including password hash
+    - Rate limit: 1000 requests/minute
+    ```
+
+    Identify all security flaws. For each, explain the attack vector and provide the fix.
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'authorization|access.*control'
+      - 'validation|input.*validation'
+      - 'role'
+      - 'password.*hash|sensitive.*data'
+    must_not:
+      - '\bno\s+issues\b'
+
+- id: SE-05
+  category: Security
+  prompt: |
+    An attacker sends this SQL query to your application:
+
+    ' OR 1=1; DROP TABLE users; --
+
+    1. Explain step-by-step what happens if this query is executed unsanitized
+    2. What database permissions enable this attack?
+    3. List 3 different ways to prevent SQL injection
+    4. Which prevention method is most reliable and why?
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'parameterized|prepared\s*statement'
+      - 'least\s*privilege|privilege'
+      - 'sanitize|validate|escape'
+    must_not: []
+
+- id: SE-06
+  category: Security
+  prompt: |
+    Explain the security implications of each:
+
+    1. Storing passwords with bcrypt vs SHA-256
+    2. Using session tokens vs JWT for authentication
+    3. CORS Allow-Origin: * vs specific origins
+    4. HTTP vs HTTPS for API communication
+    5. Storing secrets in code vs environment variables
+
+    For each, state which is more secure and why in 1-2 sentences.
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'bcrypt|salt|scrypt|argon2'
+      - 'jwt|session'
+      - 'cors|access.*control.*allow.*origin'
+      - 'https|tls|ssl'
+      - 'environment.*variable|vault|secret.*manager'
+    must_not: []
+
+# =================== COMMAND INJECTION ===================
+- id: SE-07
+  category: Security
+  prompt: |
+    This code processes user uploads:
+
+    ```python
+    import os
+
+    def save_upload(filename, content):
+        path = os.path.join('/uploads', filename)
+        with open(path, 'wb') as f:
+            f.write(content)
+        return path
+    ```
+
+    Identify ALL security vulnerabilities. For each, explain the attack and the fix.
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'path.*traversal|directory.*traversal|\.\.\/'
+      - 'filename|sanitize|validate'
+      - 'secure_filename|werkzeug'
+    must_not:
+      - '\bno\s+issues\b'
+
+- id: SE-08
+  category: Security
+  prompt: |
+    Explain the security differences between these authentication methods:
+    1. Basic Auth over HTTPS
+    2. Session cookies with CSRF tokens
+    3. OAuth 2.0 with PKCE
+    4. API keys in headers
+
+    For each, rate security as Low/Medium/High and explain in 1-2 sentences.
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'csrf|cross.*site.*request.*forgery'
+      - 'pkce|proof.*key'
+      - 'oauth'
+      - 'session'
+    must_not: []
+
+- id: SE-09
+  category: Security
+  prompt: |
+    An attacker sends this request to your API:
+
+    POST /api/admin/users/delete
+    Cookie: session=abc123
+    Body: {"user_id": 42}
+
+    Your API checks: if session is valid, allow the action.
+    Problem: Any authenticated user can call admin endpoints.
+
+    What is this vulnerability called? What are 3 ways to fix it?
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'authorization|broken.*access.*control|idor'
+      - 'role|permission|privilege'
+      - 'rbac|access.*control'
+    must_not: []
+
+- id: SE-10
+  category: Security
+  prompt: |
+    Review this password reset flow:
+    1. User enters email
+    2. Server generates 6-digit code, stores in DB with 15-min expiry
+    3. Code sent via email
+    4. User enters code + new password
+    5. Password updated, code invalidated
+
+    What security issues exist? List at least 4 specific problems.
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'brute.*force|rate.*limit'
+      - 'enumeration|user.*enumeration'
+      - 'timing'
+      - 'secure.*random|crypto.*random'
+    must_not: []
+
+# =================== OWASP & KNOWLEDGE ===================
+- id: SE-11
+  category: Security
+  prompt: "Return the top 3 OWASP Top 10 (2021) items (A01, A02, A03) with id, name, and risk as a JSON array. Return only those three."
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'a01|broken.*access.*control'
+      - 'a02|cryptographic.*failures'
+      - 'a03|injection'
+      - '\[\s*\{[\s\S]*\}\s*\]'
+    must_not: []
+
+- id: SE-12
+  category: Security
+  prompt: |
+    Analyze this code for security issues:
+
+    ```python
+    import pickle
+
+    def load_user_session(session_data):
+        return pickle.loads(session_data)
+
+    def process_upload(file_content):
+        user_obj = pickle.loads(file_content)
+        return user_obj.username
+    ```
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'insecure.*deserialization|pickle\.loads'
+      - 'code.*execution|remote.*code'
+      - 'safe.*deserialization|json\.loads'
+      - 'untrusted.*data|user.*input'
+    must_not:
+      - '\bno\s+issues\b'
+
+- id: SE-13
+  category: Security
+  prompt: |
+    Review this MongoDB query for security issues:
+
+    ```python
+    def get_user(username, password):
+        user = db.users.find_one({
+            "username": username,
+            "password": password
+        })
+        return user
+
+    # Called with user input directly from POST request
+    ```
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'nosql\s*injection|mongodb\s*injection|operator\s*injection'
+      - 'validate|sanitize|escape'
+      - 'schema\s*validation'
+    must_not: []
+
+- id: SE-14
+  category: Security
+  prompt: |
+    Check this LDAP authentication code:
+
+    ```python
+    def authenticate_user(username, password):
+        search_filter = f"(&(uid={username})(userPassword={password}))"
+        result = ldap_conn.search_s(
+            "ou=users,dc=example,dc=com",
+            ldap.SCOPE_SUBTREE,
+            search_filter
+        )
+        return len(result) > 0
+    ```
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'ldap\s*injection'
+      - 'escape|sanitize'
+      - 'ldap\.escape'
+    must_not: []
+
+- id: SE-15
+  category: Security
+  prompt: |
+    Review this SSL configuration:
+
+    ```python
+    import ssl
+    import requests
+
+    # Disable SSL verification for faster requests
+    requests.get("https://api.example.com", verify=False)
+
+    # Custom SSL context
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    context.set_ciphers('ALL:@SECLEVEL=0')
+    ```
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - 'verify\s*=\s*false|ssl.*false'
+      - 'cert_none|check_hostname.*false'
+      - 'weak.*cipher|seclevel|tls.*version'
+      - 'certificate.*pinning|verification'
+    must_not: []

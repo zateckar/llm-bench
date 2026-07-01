@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}LLM Bench{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <script src="/static/vendor/tailwind.js"></script>
+    <script src="/static/vendor/htmx.js"></script>
+    <script src="/static/vendor/htmx-sse.js"></script>
+    <script defer src="/static/vendor/alpine.min.js"></script>
+    <script src="/static/vendor/chart.umd.min.js"></script>
+    <link href="/static/vendor/fonts/fonts.css" rel="stylesheet">
+    <style>
+        [x-cloak] { display: none !important; }
+        body { font-family: 'Inter', sans-serif; }
+        code, pre, .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .gradient-bg { background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%); }
+        .card { background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; }
+        .card-hover:hover { border-color: #60a5fa; box-shadow: 0 0 20px rgba(96, 165, 250, 0.1); }
+        .badge-pass { background: #065f46; color: #6ee7b7; }
+        .badge-fail { background: #7f1d1d; color: #fca5a5; }
+        .badge-running { background: #1e3a5f; color: #93c5fd; }
+        .badge-pending { background: #78350f; color: #fcd34d; }
+        .badge-admin { background: #4c1d95; color: #c4b5fd; }
+        .input-field { background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.5rem 0.75rem; color: #e2e8f0; width: 100%; }
+        .input-field:focus { outline: none; border-color: #60a5fa; box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2); }
+        .btn-primary { background: #2563eb; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: all 0.15s; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-danger { background: #dc2626; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: all 0.15s; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-ghost { color: #94a3b8; padding: 0.5rem 1rem; border-radius: 0.5rem; transition: all 0.15s; }
+        .btn-ghost:hover { background: #1e293b; color: #e2e8f0; }
+        .progress-bar { background: #1e293b; border-radius: 9999px; height: 8px; overflow: hidden; }
+        .progress-fill { background: linear-gradient(90deg, #2563eb, #60a5fa); height: 100%; transition: width 0.3s; border-radius: 9999px; }
+        table { border-collapse: separate; border-spacing: 0; }
+        th { background: #0f172a; color: #94a3b8; font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        td, th { padding: 0.75rem 1rem; border-bottom: 1px solid #1e293b; }
+        tr:hover td { background: #1e293b; }
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: #0f172a; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body class="h-full gradient-bg text-slate-200">
+    <div class="min-h-full flex">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-slate-900/50 border-r border-slate-700/50 flex flex-col" x-data="{ open: true }">
+            <div class="p-4 border-b border-slate-700/50">
+                <a href="/dashboard" class="flex items-center gap-2">
+                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                        </svg>
+                    </div>
+                    <span class="text-lg font-semibold text-white">LLM Bench</span>
+                </a>
+            </div>
+            <nav class="flex-1 p-3 space-y-1">
+                <a href="/dashboard" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors {% if request.url.path == '/dashboard' %}bg-slate-800 text-white{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                    Dashboard
+                </a>
+                <a href="/runs" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors {% if '/runs' in request.url.path %}bg-slate-800 text-white{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    Test Runs
+                </a>
+                <a href="/compare" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors {% if request.url.path == '/compare' %}bg-slate-800 text-white{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                    Compare
+                </a>
+                <a href="/tests" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors {% if request.url.path == '/tests' %}bg-slate-800 text-white{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    Test Browser
+                </a>
+
+                {% if user and user.role == 'admin' %}
+                <div class="pt-3 mt-3 border-t border-slate-700/50">
+                    <p class="px-3 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">Admin</p>
+                </div>
+                <a href="/admin/run" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors {% if request.url.path == '/admin/run' %}bg-slate-800 text-white{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    Run Benchmark
+                </a>
+                <a href="/admin/models" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors {% if '/admin/models' in request.url.path %}bg-slate-800 text-white{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg>
+                    Models
+                </a>
+                <a href="/admin/users" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors {% if '/admin/users' in request.url.path %}bg-slate-800 text-white{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                    Users
+                </a>
+                {% endif %}
+            </nav>
+            {% if user %}
+            <div class="p-3 border-t border-slate-700/50">
+                <div class="flex items-center gap-3 px-3 py-2">
+                    <div class="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center text-sm font-medium text-slate-300">
+                        {{ user.username[0]|upper }}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-slate-200 truncate">{{ user.username }}</p>
+                        <p class="text-xs text-slate-500">{{ user.role }}</p>
+                    </div>
+                    <a href="/logout" class="text-slate-500 hover:text-slate-300 transition-colors" title="Logout">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </aside>
+
+        <!-- Main content -->
+        <main class="flex-1 overflow-auto">
+            <div class="p-6 max-w-7xl mx-auto">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

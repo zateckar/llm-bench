@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Test Browser - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div>
+        <h1 class="text-2xl font-bold text-white">Test Browser</h1>
+        <p class="text-slate-400 mt-1">Browse test categories and individual tests</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Category sidebar -->
+        <div class="lg:col-span-1">
+            <div class="card p-4">
+                <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Categories</h3>
+                <div class="space-y-1">
+                    <a href="/tests"
+                       class="block px-3 py-2 rounded-lg text-sm transition-colors {% if not selected_category %}bg-blue-600/20 text-blue-400{% else %}text-slate-300 hover:bg-slate-800{% endif %}">
+                        All Categories
+                        <span class="text-xs text-slate-500 ml-1">({{ all_categories|length }})</span>
+                    </a>
+                    {% for cat, tests in all_categories|dictsort %}
+                    <a href="/tests?category={{ cat|urlencode }}"
+                       class="block px-3 py-2 rounded-lg text-sm transition-colors {% if selected_category == cat %}bg-blue-600/20 text-blue-400{% else %}text-slate-300 hover:bg-slate-800{% endif %}">
+                        {{ cat }}
+                        <span class="text-xs text-slate-500 ml-1">({{ tests|length }})</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="lg:col-span-3 space-y-4">
+            {% if selected_category %}
+                <!-- Category detail view -->
+                <div class="card p-5">
+                    <h2 class="text-xl font-bold text-white">{{ selected_category }}</h2>
+                    <p class="text-slate-400 mt-1">{{ category_descriptions.get(selected_category, 'No description available.') }}</p>
+                    <p class="text-sm text-slate-500 mt-2">{{ selected_tests|length }} tests</p>
+                </div>
+
+                <div class="space-y-3" x-data="{ expanded: {} }">
+                    {% for test in selected_tests %}
+                    <div class="card overflow-hidden">
+                        <button class="w-full flex items-center justify-between p-4 text-left hover:bg-slate-700/30 transition-colors"
+                                @click="expanded['{{ test.id }}'] = !expanded['{{ test.id }}']">
+                            <div class="flex items-center gap-3">
+                                <span class="font-mono text-xs text-slate-500 w-14">{{ test.id }}</span>
+                                <span class="text-sm text-slate-300">{{ test.prompt[:100] }}{% if test.prompt|length > 100 %}...{% endif %}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-0.5 rounded text-xs font-mono bg-slate-800 text-slate-400">{{ test.evaluator }}</span>
+                                <svg class="w-4 h-4 text-slate-500 transition-transform"
+                                     :class="expanded['{{ test.id }}'] ? 'rotate-180' : ''"
+                                     fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                            </div>
+                        </button>
+
+                        <div x-show="expanded['{{ test.id }}']" x-collapse>
+                            <div class="px-4 pb-4 space-y-4 border-t border-slate-700/50 pt-4">
+                                <!-- Full prompt -->
+                                <div>
+                                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Full Prompt</h4>
+                                    <div class="bg-slate-950 rounded-lg p-4 text-sm text-slate-300 whitespace-pre-wrap max-h-60 overflow-auto scrollbar-thin">{{ test.prompt }}</div>
+                                </div>
+
+                                <!-- System prompt -->
+                                {% if test.system_prompt %}
+                                <div>
+                                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">System Prompt</h4>
+                                    <div class="bg-slate-950 rounded-lg p-4 text-sm text-slate-300 whitespace-pre-wrap">{{ test.system_prompt }}</div>
+                                </div>
+                                {% endif %}
+
+                                <!-- Evaluator info -->
+                                <div>
+                                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Evaluator</h4>
+                                    <div class="bg-slate-950 rounded-lg p-4">
+                                        <p class="text-sm font-medium text-blue-400">{{ test.evaluator }}</p>
+                                        <p class="text-xs text-slate-400 mt-1">{{ evaluator_descriptions.get(test.evaluator, 'Custom evaluator.') }}</p>
+                                    </div>
+                                </div>
+
+                                <!-- Expected output -->
+                                <div>
+                                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Expected Output</h4>
+                                    <div class="bg-slate-950 rounded-lg p-4 text-sm text-slate-300 font-mono overflow-auto max-h-40 scrollbar-thin">{{ test.expected }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+            {% elif all_categories %}
+                <!-- All categories overview -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% for cat, tests in all_categories|dictsort %}
+                    <a href="/tests?category={{ cat|urlencode }}" class="card p-5 card-hover transition-all group">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h3 class="font-semibold text-white group-hover:text-blue-400 transition-colors">{{ cat }}</h3>
+                                <p class="text-sm text-slate-400 mt-1">{{ category_descriptions.get(cat, '') }}</p>
+                            </div>
+                            <span class="text-xs font-mono text-slate-500 bg-slate-800 px-2 py-1 rounded">{{ tests|length }} tests</span>
+                        </div>
+                        <div class="mt-3 flex flex-wrap gap-1">
+                            {% for test in tests[:3] %}
+                            <span class="text-xs text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded">{{ test.id }}</span>
+                            {% endfor %}
+                            {% if tests|length > 3 %}
+                            <span class="text-xs text-slate-600">+{{ tests|length - 3 }} more</span>
+                            {% endif %}
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="card p-12 text-center text-slate-500">
+                    <p>No test files found in the tests/ directory.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

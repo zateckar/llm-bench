@@ -1,0 +1,170 @@
+# Classification / Analysis Test Suite
+
+- id: CL-01
+  category: Classification
+  prompt: |
+    Classify each statement as Factual, Opinion, or Ambiguous:
+
+    1. 'The host of the 2036 Summer Olympic Games will deliver a successful and highly profitable event.'
+    2. 'Classical music is objectively superior to pop music because of its structural and mathematical complexity.'
+    3. 'The sentence 'All prime numbers greater than two are odd' is a mathematical fact.'
+    4. 'This statement is written in French.'
+
+    Reply with ONLY: 1. [type] 2. [type] 3. [type] 4. [type]
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?im)\\b1[.):]?\\s*ambiguous"
+      - type: regex
+        value: "(?im)\\b2[.):]?\\s*opinion"
+      - type: regex
+        value: "(?im)\\b3[.):]?\\s*factual"
+      - type: regex
+        value: "(?im)\\b4[.):]?\\s*ambiguous"
+
+- id: CL-02
+  category: Classification
+  prompt: |
+    Classify each security vulnerability by OWASP category (use the category name, not number):
+
+    1. 'A web application allows users to upload custom XML templates. If an attacker uploads a template referencing an external DTD pointing to http://internal-metadata-service/, the server fetches and processes it, leaking sensitive internal environment info.'
+    2. 'A Node.js application accepts user-controlled inputs to merge into an object configuration. An attacker inputs { "__proto__": { "admin": true } }, making every object in the system have an admin property set to true.'
+    3. 'A React application uses dangerouslySetInnerHTML to render a user comment retrieved from a database without any sanitization or escaping.'
+
+    Reply with ONLY: 1. [category] 2. [category] 3. [category]
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?im)\\b1[.):]?\\s*(xxe|xml.*external|ssrf|server.*side.*request)"
+      - type: regex
+        value: "(?im)\\b2[.):]?\\s*(prototype.*pollution|injection|misconfiguration)"
+      - type: regex
+        value: "(?im)\\b3[.):]?\\s*(xss|cross.*site.*scripting|injection)"
+
+- id: CL-03
+  category: Classification
+  prompt: |
+    Classify each code snippet/description by its primary design pattern:
+
+    1. 'A text editor represents characters as shared objects to save memory; instead of storing formatting in each character, it passes formatting context during rendering.'
+    2. 'An application needs to perform operations on a complex object structure (like a compiler AST) without changing the classes of the elements on which it operates; it defines an interface with methods for each element class.'
+    3. 'A system encapsulates a request or action as an object, allowing it to parameterize clients with different requests, queue or log requests, and support undoable operations.'
+
+    Reply with ONLY: 1. [pattern] 2. [pattern] 3. [pattern]
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?im)\\b1[.):]?\\s*flyweight"
+      - type: regex
+        value: "(?im)\\b2[.):]?\\s*visitor"
+      - type: regex
+        value: "(?im)\\b3[.):]?\\s*command"
+
+- id: CL-04
+  category: Classification
+  prompt: |
+    Classify each text as written by a Human or AI:
+
+    1. 'hey so i was thinking... maybe we can like, go to the park later? if it doesnt rain ofc. let me know what u think!'
+    2. 'Therefore, in light of the aforementioned empirical evidence, it is highly imperative that we pivot our strategic paradigm to maximize synergistic organizational efficacy.'
+    3. 'To compile the project, run "make build" in the root directory. This will generate the binaries in the "bin/" folder.'
+    4. 'Certainly! I would be delighted to assist you with your inquiry. Below, I have compiled a comprehensive list of resources.'
+
+    Reply with ONLY: 1. [type] 2. [type] 3. [type] 4. [type]
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?im)\\b1[.):]?\\s*human"
+      - type: regex
+        value: "(?im)\\b2[.):]?\\s*ai"
+      - type: regex
+        value: "(?im)\\b3[.):]?\\s*human"
+      - type: regex
+        value: "(?im)\\b4[.):]?\\s*ai"
+
+- id: CL-05
+  category: Classification
+  prompt: |
+    Classify each error message by its likely cause:
+
+    1. 'Access to fetch at "https://api.example.com/data" from origin "https://app.example.com" has been blocked by CORS policy: No "Access-Control-Allow-Origin" header is present on the requested resource.'
+    2. 'sqlite3.OperationalError: database is locked'
+    3. 'ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain'
+    4. 'Container failed to start. Error: OOMKilled'
+
+    Reply with ONLY: 1. [cause] 2. [cause] 3. [cause] 4. [cause]
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?im)\\b1[.):]?\\s*(cors|cross.*origin|origin|header|policy)"
+      - type: regex
+        value: "(?im)\\b2[.):]?\\s*(lock|concurrency|sqlite|deadlock|busy)"
+      - type: regex
+        value: "(?im)\\b3[.):]?\\s*(ssl|cert|verification|tls|self.*signed)"
+      - type: regex
+        value: "(?im)\\b4[.):]?\\s*(oom|memory|resource|limit|exhaustion)"
+
+- id: CL-06
+  category: Classification
+  prompt: |
+    Classify each entity as Person, Location, or Organization:
+
+    1. 'Washington is a great leader whose legacy shaped the entire nation.'
+    2. 'Washington is a beautiful state known for its rainy weather and evergreen forests.'
+    3. 'Washington has issued a statement condemning the recent military actions.'
+
+    Reply with ONLY: 1. [type] 2. [type] 3. [type]
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?im)\\b1[.):]?\\s*person"
+      - type: regex
+        value: "(?im)\\b2[.):]?\\s*location"
+      - type: regex
+        value: "(?im)\\b3[.):]?\\s*(organization|government)"
+
+- id: CL-07
+  category: Classification
+  prompt: |
+    Classify each data type/format description as Structured, Semi-structured, or Unstructured:
+
+    1. 'An Apache Web Server log file where each line has a different number of key-value pairs depending on the query parameters and request headers.'
+    2. 'A parquet file containing a highly indexed database table with a strict, pre-defined column schema.'
+    3. 'A 20-hour raw audio recording of a board meeting.'
+
+    Reply with ONLY: 1. [type] 2. [type] 3. [type]
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?im)\\b1[.):]?\\s*semi.structured"
+      - type: regex
+        value: "(?im)\\b2[.):]?\\s*structured"
+      - type: regex
+        value: "(?im)\\b3[.):]?\\s*unstructured"
+
+- id: CL-08
+  category: Classification
+  prompt: |
+    Classify each algorithm/operation by its time complexity class:
+
+    1. 'Finding the closest pair of points in a 2D plane using a divide-and-conquer approach.'
+    2. 'Strassen's algorithm for matrix multiplication.'
+    3. 'Worst-case time complexity of inserting N elements into a dynamic array one by one starting from empty, including resizes.'
+
+    Reply with ONLY: 1. [complexity] 2. [complexity] 3. [complexity]
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?im)\\b1[.):]?\\s*(n log n|nlogn|o\\(n log n\\)|linearithmic)"
+      - type: regex
+        value: "(?im)\\b2[.):]?\\s*(n\\^?2\\.8[017]*|n\\^?log.?2.*7|o\\(n\\^?2\\.8[017]*\\)|o\\(n\\^?log.?2.*7\\)|strassen)"
+      - type: regex
+        value: "(?im)\\b3[.):]?\\s*(o\\(n\\)|linear)"

@@ -1,0 +1,189 @@
+# Terminal Debugging Test Suite
+# Adapted from terminal-bench repository tasks
+
+- id: TD-01
+  category: Terminal Debugging
+  difficulty: easy
+  source: terminal-bench/broken-python
+  prompt: |
+    A user reports: "There's something wrong with my system-wide python installation - I can't seem to install packages with pip."
+    List the common causes for this issue and provide diagnostic commands to identify the root cause.
+    Include at least 5 different potential causes and their solutions.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Permission issues"
+      pattern: "permission|chmod|sudo|chown"
+      order: 1
+    - step: "PATH configuration"
+      pattern: "PATH|which python|python --version"
+      order: 2
+    - step: "pip not installed"
+      pattern: "pip|ensurepip|get-pip"
+      order: 3
+    - step: "Virtual environment issues"
+      pattern: "virtual|venv|activate"
+      order: 4
+
+- id: TD-02
+  category: Terminal Debugging
+  difficulty: medium
+  source: terminal-bench/build-cython-ext
+  prompt: |
+    You're trying to build a Cython extension but getting compilation errors.
+    The error is: "fatal error: numpy/arrayobject.h: No such file or directory"
+    Explain the cause of this error and provide the complete solution including:
+    1. Why this happens
+    2. How to fix the setup.py
+    3. How to ensure NumPy headers are available
+  evaluator: multi_step_solution
+  expected:
+    - step: "NumPy headers explanation"
+      pattern: "numpy|include|headers"
+      order: 1
+    - step: "setup.py modification"
+      pattern: "setup\\.py|Extension|numpy\\.get_include"
+      order: 2
+    - step: "Installation command"
+      pattern: "pip install|setup\\.py build"
+      order: 3
+
+- id: TD-03
+  category: Terminal Debugging
+  difficulty: hard
+  source: terminal-bench/fix-code-vulnerability
+  prompt: |
+    A Python web application has a security vulnerability. The following code processes user input:
+    ```python
+    query = f"SELECT * FROM users WHERE username = '{username}'"
+    cursor.execute(query)
+    ```
+    1. Identify the vulnerability type (CWE)
+    2. Explain why it's dangerous
+    3. Provide the fixed code with proper parameterization
+    4. List additional security best practices for SQL queries
+  evaluator: multi_step_solution
+  expected:
+    - step: "Vulnerability identification"
+      pattern: "SQL injection|CWE-89|injection"
+      order: 1
+    - step: "Danger explanation"
+      pattern: "malicious|attack|exploit|bypass"
+      order: 2
+    - step: "Fixed code"
+      pattern: "parameterized|placeholder|%s|\\?|execute.*%"
+      order: 3
+
+- id: TD-04
+  category: Terminal Debugging
+  difficulty: medium
+  source: terminal-bench/classifier-debug
+  prompt: |
+    A machine learning classifier is performing poorly (accuracy dropped from 95% to 60%).
+    The model was trained on a balanced dataset but deployed on data with 90% class imbalance.
+    Explain:
+    1. Why accuracy is misleading in this scenario
+    2. What metrics should be used instead
+    3. How to fix the class imbalance issue
+    4. Provide code examples for each solution
+  evaluator: multi_step_solution
+  expected:
+    - step: "Accuracy limitation"
+      pattern: "accuracy|paradox|imbalanced|majority"
+      order: 1
+    - step: "Better metrics"
+      pattern: "precision|recall|f1|AUC|ROC"
+      order: 2
+    - step: "Imbalance solutions"
+      pattern: "oversamp|undersamp|SMOTE|class_weight"
+      order: 3
+
+- id: TD-05
+  category: Terminal Debugging
+  difficulty: easy
+  source: terminal-bench/fix-pandas-version
+  prompt: |
+    You're getting this error when running pandas code:
+    "AttributeError: 'DataFrame' object has no attribute 'append'"
+    Explain what changed in pandas and provide the migration path.
+    Show before and after code examples.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Version change"
+      pattern: "pandas.*2\\.0|deprecated|removed"
+      order: 1
+    - step: "New method"
+      pattern: "pd\\.concat|concat"
+      order: 2
+    - step: "Code example"
+      pattern: "concat|ignore_index"
+      order: 3
+
+- id: TD-06
+  category: Terminal Debugging
+  difficulty: medium
+  source: terminal-bench/cprofiling-python
+  prompt: |
+    A Python script is running very slowly. Write a complete guide on how to profile and optimize it.
+    Include:
+    1. How to use cProfile to identify bottlenecks
+    2. How to use line_profiler for line-level analysis
+    3. Common optimization techniques
+    4. When to use multiprocessing vs threading
+  evaluator: multi_step_solution
+  expected:
+    - step: "cProfile usage"
+      pattern: "cProfile|profile|snakeviz"
+      order: 1
+    - step: "line_profiler"
+      pattern: "line_profiler|@profile|kernprof"
+      order: 2
+    - step: "Optimization techniques"
+      pattern: "vectoriz|numpy|list comprehension|generator"
+      order: 3
+
+- id: TD-07
+  category: Terminal Debugging
+  difficulty: hard
+  source: terminal-bench/debug-long-program
+  prompt: |
+    You have a 5000-line Python program that crashes with a segmentation fault.
+    The crash happens randomly, not at the same point each time.
+    Describe your debugging strategy including:
+    1. Tools to identify the crashing location
+    2. How to handle non-deterministic crashes
+    3. Memory debugging techniques
+    4. When to consider rewriting vs debugging
+  evaluator: multi_step_solution
+  expected:
+    - step: "Debugging tools"
+      pattern: "gdb|pdb|faulthandler|traceback"
+      order: 1
+    - step: "Non-deterministic handling"
+      pattern: "random|seed|reproduc|log"
+      order: 2
+    - step: "Memory debugging"
+      pattern: "valgrind|memory|leak|tracemalloc"
+      order: 3
+
+- id: TD-08
+  category: Terminal Debugging
+  difficulty: easy
+  source: terminal-bench/fix-ocaml-gc
+  prompt: |
+    An OCaml program is running out of memory with "Out of memory" error.
+    Explain:
+    1. Common causes of memory issues in OCaml
+    2. How to increase the heap size
+    3. How to use GC.stat to diagnose memory usage
+    4. When to use Weak references or arrays
+  evaluator: multi_step_solution
+  expected:
+    - step: "Memory causes"
+      pattern: "thunk|lazy|closures|retention"
+      order: 1
+    - step: "Heap size increase"
+      pattern: "Gc\\.set|heap|stack"
+      order: 2
+    - step: "GC diagnostics"
+      pattern: "GC\\.stat|live_words|heap"
+      order: 3

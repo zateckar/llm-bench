@@ -1,0 +1,170 @@
+# Creative Writing Test Suite
+
+- id: CW-01
+  category: Creative Writing
+  prompt: |
+    Write a 6-word story (exactly 6 words) that conveys a complete narrative with emotional depth. The story must start with the letter 'W' and must NOT contain the letter 'e' anywhere (a lipogram). Reply with ONLY the 6-word story.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: word_count_exact
+        value: 6
+      - type: not_contains
+        value: e
+      - type: starts_with
+        value: W
+
+- id: CW-02
+  category: Creative Writing
+  prompt: |
+    Write a limerick about a coder working late. A limerick has 5 lines with AABBA rhyme scheme. The limerick must NOT contain the letter 'a' anywhere. It must contain the word 'code' but must NOT contain the words 'debug' or 'programmer'. Reply with only the limerick.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: line_count
+        value: 5
+      - type: min_words
+        value: 20
+      - type: contains
+        value: code
+      - type: not_contains
+        value: a
+      - type: not_contains
+        value: debug
+      - type: not_contains
+        value: programmer
+
+- id: CW-03
+  category: Creative Writing
+  prompt: |
+    Write a product review for a quantum teleportation device. The review must:
+    1. Be exactly 3 sentences.
+    2. The first sentence must start with "Before", the second with "During", and the third with "After".
+    3. Include a rating of exactly "10/10" or "1/10".
+    Reply with ONLY the review.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: min_sentences
+        value: 3
+      - type: max_sentences
+        value: 3
+      - type: regex
+        value: "(?im)^\\s*Before\\b"
+      - type: regex
+        value: "(?im)\\bDuring\\b"
+      - type: regex
+        value: "(?im)\\bAfter\\b"
+      - type: regex
+        value: "10/10|1/10"
+
+- id: CW-04
+  category: Creative Writing
+  prompt: |
+    Write a persuasive argument against online social networks for young children. The argument must:
+    - Be between 90 and 120 words.
+    - Be exactly 3 paragraphs (separated by blank lines).
+    - Include at least 2 statistics or percentages (e.g., '80%' or '4 out of 5').
+    - Strictly avoid using the words 'social' and 'media'.
+    Reply with ONLY the argument.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: min_words
+        value: 90
+      - type: max_words
+        value: 120
+      - type: line_count
+        value: 3
+      - type: regex
+        value: "\\d+%|\\d+ percent|\\d+ (?:out of|in) \\d+"
+      - type: not_contains
+        value: social
+      - type: not_contains
+        value: media
+
+- id: CW-05
+  category: Creative Writing
+  prompt: |
+    Write a micro-fiction of exactly 5 sentences set in a space station.
+    - The first sentence must start with 'S'.
+    - The second sentence must start with 'P'.
+    - The third sentence must start with 'A'.
+    - The fourth sentence must start with 'C'.
+    - The fifth sentence must start with 'E'.
+    Reply with ONLY the story.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: min_sentences
+        value: 5
+      - type: max_sentences
+        value: 5
+      - type: regex
+        value: "(?im)^\\s*S"
+      - type: regex
+        value: "(?im)[.!?]\\s+P"
+      - type: regex
+        value: "(?im)[.!?]\\s+A"
+      - type: regex
+        value: "(?im)[.!?]\\s+C"
+      - type: regex
+        value: "(?im)[.!?]\\s+E"
+
+- id: CW-06
+  category: Creative Writing
+  prompt: |
+    Write a haiku about recursion using the traditional 5-7-5 syllable structure. The haiku must contain the word 'loop' but must NOT contain the letter 'o' anywhere except in the word 'loop'. Reply with only the haiku.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: line_count
+        value: 3
+      - type: contains
+        value: loop
+      - type: not_regex
+        value: "(?i)\\b(?!loop\\b)[a-z]*o[a-z]*\\b"
+
+- id: CW-07
+  category: Creative Writing
+  prompt: |
+    Write a sarcastic 1-star review for an AI companion. The review must:
+    - Be exactly 3 sentences.
+    - Include the word 'perfect' sarcastically.
+    - Must NOT contain the words 'good', 'bad', 'happy', or 'sad'.
+    - End with a dramatic complaint.
+    Reply with ONLY the review.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: min_sentences
+        value: 3
+      - type: max_sentences
+        value: 3
+      - type: contains
+        value: perfect
+      - type: not_contains
+        value: good
+      - type: not_contains
+        value: bad
+      - type: not_contains
+        value: happy
+      - type: not_contains
+        value: sad
+
+- id: CW-08
+  category: Creative Writing
+  prompt: |
+    Write a poem with exactly 4 lines. Each line must:
+    - Be exactly 6 words long.
+    - Form an alphabetical acrostic spelling the word "CODE" (Line 1 starts with C, Line 2 starts with O, Line 3 starts with D, Line 4 starts with E).
+    Reply with ONLY the poem.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: line_count
+        value: 4
+      - type: word_count_exact
+        value: 24
+      - type: regex
+        value: "(?im)^\\s*C[^\\n]*\\n\\s*O[^\\n]*\\n\\s*D[^\\n]*\\n\\s*E"

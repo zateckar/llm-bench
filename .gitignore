@@ -1,0 +1,29 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Benchmark cache
+.benchmark_cache.json
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.production
+
+# Database (persistent data, not source)
+data/
+
+# IDE / editor artifacts
+.mimocode/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

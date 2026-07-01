@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[oc]
+*.egg-info/
+*.egg
+.venv/
+venv/
+*.so
+dist/
+build/
+
+# Environment
+.env
+.env.example
+.benchmark_cache.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (persistent volume, not in image)
+data/bench.db
+
+# CI
+.github/
+
+# Logs
+*.log

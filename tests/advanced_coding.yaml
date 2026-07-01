@@ -1,0 +1,167 @@
+# Advanced Coding Test Suite
+
+- id: AC-01
+  category: Advanced Coding
+  prompt: |
+    Write a Python function `merge_intervals(intervals: list[list[int]]) -> list[list[int]]` that merges overlapping intervals. Each interval is a two-element list [start, end]. Example: [[1,3],[2,6],[8,10],[15,18]] -> [[1,6],[8,10],[15,18]]
+
+    Requirements:
+    - Handle empty input
+    - Handle single interval
+    - Handle fully overlapping intervals
+    - Handle touching intervals [[1,2],[2,3]] -> [[1,3]]
+    - O(n log n) time complexity
+    - Return each merged interval as a two-element list.
+
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: merge_intervals
+      args: [[[1, 3], [2, 6], [8, 10], [15, 18]]]
+      expected: [[1, 6], [8, 10], [15, 18]]
+    - function: merge_intervals
+      args: [[]]
+      expected: []
+    - function: merge_intervals
+      args: [[[1, 4], [4, 5]]]
+      expected: [[1, 5]]
+
+- id: AC-02
+  category: Advanced Coding
+  prompt: |
+    Write a Python function `lru_cache(capacity: int)` that implements an LRU cache with O(1) get and put operations.
+
+    Implement as a class LRUCache with:
+    - `__init__(self, capacity: int)`
+    - `get(self, key: int) -> int` (returns -1 if not found)
+    - `put(self, key: int, value: int) -> None`
+
+    Both operations must be O(1) time. Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: test_lru
+      args: []
+      expected: true
+
+- id: AC-03
+  category: Advanced Coding
+  prompt: |
+    This code has a bug. Find and fix it:
+
+    ```python
+    def find_median(nums: list[int]) -> float:
+        nums.sort()
+        n = len(nums)
+        if n % 2 == 0:
+            return nums[n // 2]
+        else:
+            return (nums[n // 2 - 1] + nums[n // 2]) / 2
+    ```
+
+    What is the bug? Reply with the corrected function.
+  evaluator: code_exec
+  expected:
+    - function: find_median
+      args: [[1, 2, 3]]
+      expected: 2.0
+    - function: find_median
+      args: [[1, 2, 3, 4]]
+      expected: 2.5
+
+- id: AC-04
+  category: Advanced Coding
+  prompt: |
+    Write a Python function `serialize_tree(root) -> str` and `deserialize_tree(data: str) -> TreeNode` for a binary tree.
+
+    class TreeNode:
+        def __init__(self, val=0, left=None, right=None):
+            self.val = val
+            self.left = left
+            self.right = right
+
+    Round-trip: deserialize(serialize(tree)) must produce an identical tree.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: test_serialize
+      args: []
+      expected: true
+
+- id: AC-05
+  category: Advanced Coding
+  prompt: |
+    Optimize this function for time complexity:
+
+    ```python
+    def two_sum(nums: list[int], target: int) -> list[int]:
+        for i in range(len(nums)):
+            for j in range(i + 1, len(nums)):
+                if nums[i] + nums[j] == target:
+                    return [i, j]
+        return [-1, -1]
+    ```
+
+    Current: O(n²). Rewrite to O(n), keeping the same return type (a list of two indices). Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: two_sum
+      args: [[2, 7, 11, 15], 9]
+      expected: [0, 1]
+    - function: two_sum
+      args: [[3, 2, 4], 6]
+      expected: [1, 2]
+
+- id: AC-06
+  category: Advanced Coding
+  prompt: |
+    Write a Python function `min_window(s: str, t: str) -> str` that finds the minimum window substring in s containing all characters of t.
+
+    Example: s='ADOBECODEBANC', t='ABC' -> 'BANC'
+    If no window exists, return empty string.
+
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: min_window
+      args: ["ADOBECODEBANC", "ABC"]
+      expected: "BANC"
+    - function: min_window
+      args: ["a", "a"]
+      expected: "a"
+    - function: min_window
+      args: ["a", "aa"]
+      expected: ""
+
+- id: AC-07
+  category: Advanced Coding
+  prompt: |
+    Write a Python function `dijkstra(graph, start, end)` that finds the shortest path in a weighted graph. graph is a dict of {node: [(neighbor, weight), ...]}.
+    Return the shortest distance (or -1 if unreachable).
+
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: dijkstra
+      args: [{"A": [["B", 1], ["C", 4]], "B": [["C", 2], ["D", 5]], "C": [["D", 1]], "D": []}, "A", "D"]
+      expected: 4
+    - function: dijkstra
+      args: [{"A": [["B", 1]], "B": []}, "A", "C"]
+      expected: -1
+
+- id: AC-08
+  category: Advanced Coding
+  prompt: |
+    Write a Python function `is_valid_bst(root: TreeNode) -> bool` that checks if a binary tree is a valid Binary Search Tree.
+
+    class TreeNode:
+        def __init__(self, val=0, left=None, right=None):
+            self.val = val
+            self.left = left
+            self.right = right
+
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: test_bst
+      args: []
+      expected: true

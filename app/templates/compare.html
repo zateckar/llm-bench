@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}Compare Runs - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="{ showResults: {{ 'true' if selected_runs|length >= 2 else 'false' }} }">
+    <div>
+        <h1 class="text-2xl font-bold text-white">Compare Runs</h1>
+        <p class="text-slate-400 mt-1">Select 2+ completed runs to compare side-by-side</p>
+    </div>
+
+    <!-- Run selector -->
+    <div class="card p-5">
+        <form method="GET" action="/compare" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Select runs to compare (hold Ctrl/Cmd to select multiple)</label>
+                <select name="runs" multiple size="6"
+                        class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
+                    {% for run in completed_runs %}
+                    <option value="{{ run.id }}" {% if run.id|string in selected_ids %}selected{% endif %}>
+                        #{{ run.id }} — {{ run.model_name }} ({{ run.model_id }}) — {{ "%.1f"|format(run.avg_score * 100) }}% — {{ run.passed_questions }}/{{ run.total_questions }}{% if run.test_suite_hash %} [{{ run.test_suite_hash }}]{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn-primary">Compare Selected</button>
+        </form>
+    </div>
+
+    {% if selected_runs|length >= 2 %}
+    <!-- Version mismatch warning -->
+    {% set hashes = [] %}
+    {% for run in selected_runs %}
+        {% if run.test_suite_hash and run.test_suite_hash not in hashes %}
+            {% if hashes.append(run.test_suite_hash) %}{% endif %}
+        {% endif %}
+    {% endfor %}
+    {% if hashes|length > 1 %}
+    <div class="card p-4 bg-amber-900/30 border border-amber-700/50">
+        <div class="flex items-center gap-3">
+            <svg class="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            <div>
+                <p class="text-amber-400 font-medium text-sm">Different test suite versions detected</p>
+                <p class="text-amber-500 text-xs mt-0.5">These runs used different versions of the test suite. Scores may not be directly comparable.</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Radar Chart Overlay -->
+    <div class="card p-5">
+        <h2 class="text-lg font-semibold text-white mb-4">Score Comparison</h2>
+        <div class="max-w-2xl mx-auto">
+            <div style="position: relative; height: 350px;"><canvas id="compareRadar"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Side-by-side table -->
+    <div class="card overflow-hidden">
+        <div class="p-5 border-b border-slate-700/50">
+            <h2 class="text-lg font-semibold text-white">Category Scores</h2>
+        </div>
+        <table class="w-full">
+            <thead>
+                <tr>
+                    <th class="text-left">Category</th>
+                    {% for run in selected_runs %}
+                    <th class="text-center">
+                        <div class="text-sm">#{{ run.id }}</div>
+                        <div class="text-xs font-normal normal-case text-slate-500">{{ run.model_name }}</div>
+                        {% if run.test_suite_hash %}
+                        <div class="text-xs font-mono text-slate-600">{{ run.test_suite_hash }}</div>
+                        {% endif %}
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% set all_cats = [] %}
+                {% for run in selected_runs %}
+                    {% for cat_name in run.categories %}
+                        {% if cat_name not in all_cats %}
+                            {% if all_cats.append(cat_name) %}{% endif %}
+                        {% endif %}
+                    {% endfor %}
+                {% endfor %}
+                {% for cat in all_cats|sort %}
+                <tr>
+                    <td class="font-medium text-slate-200">{{ cat }}</td>
+                    {% for run in selected_runs %}
+                    {% set cat_data = run.categories.get(cat, {}) %}
+                    <td class="text-center">
+                        {% if cat_data %}
+                        <span class="text-sm font-medium {% if cat_data.avg_score >= 0.7 %}text-emerald-400{% elif cat_data.avg_score >= 0.5 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                            {{ "%.1f"|format(cat_data.avg_score * 100) }}%
+                        </span>
+                        <span class="text-xs text-slate-500 ml-1">({{ cat_data.passed }}/{{ cat_data.total }})</span>
+                        {% else %}
+                        <span class="text-slate-600">-</span>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                <!-- Overall row -->
+                <tr class="border-t-2 border-slate-700">
+                    <td class="font-bold text-white">Overall</td>
+                    {% for run in selected_runs %}
+                    <td class="text-center">
+                        <span class="text-sm font-bold {% if run.avg_score >= 0.7 %}text-emerald-400{% elif run.avg_score >= 0.5 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                            {{ "%.1f"|format(run.avg_score * 100) }}%
+                        </span>
+                        <span class="text-xs text-slate-500 ml-1">({{ run.passed_questions }}/{{ run.total_questions }})</span>
+                    </td>
+                    {% endfor %}
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Per-question diff -->
+    {% if comparison_data %}
+    <div class="card p-5">
+        <h2 class="text-lg font-semibold text-white mb-4">Per-Question Differences</h2>
+        <div class="space-y-4">
+            {% for cat_data in comparison_data %}
+            <div x-data="{ open: false }">
+                <button @click="open = !open" class="w-full flex items-center justify-between p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                    <span class="font-medium text-slate-200">{{ cat_data.category }}</span>
+                    <svg class="w-4 h-4 text-slate-500 transition-transform" :class="open ? 'rotate-180' : ''"
+                         fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <div x-show="open" x-collapse>
+                    <div class="mt-2 space-y-1">
+                        {% for result in cat_data.results %}
+                        {% set has_diff = false %}
+                        {% for run in selected_runs %}
+                            {% set s1 = result.get('run_' + selected_runs[0].id|string + '_score', 0) %}
+                            {% set s2 = result.get('run_' + run.id|string + '_score', 0) %}
+                            {% if s1 != s2 %}{% set has_diff = true %}{% endif %}
+                        {% endfor %}
+                        <div class="flex items-center gap-3 px-3 py-2 rounded text-sm {% if has_diff %}bg-slate-800{% else %}bg-slate-900/30{% endif %}">
+                            <span class="font-mono text-xs text-slate-500 w-16">{{ result.test_id }}</span>
+                            {% for run in selected_runs %}
+                            {% set score = result.get('run_' + run.id|string + '_score', 0) %}
+                            <span class="flex-1 text-center">
+                                <span class="{% if score >= 0.5 %}text-emerald-400{% else %}text-red-400{% endif %}">
+                                    {{ "%.0f"|format(score * 100) }}%
+                                </span>
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% elif selected_runs|length == 1 %}
+    <div class="card p-8 text-center text-slate-500">
+        <p>Please select at least 2 runs to compare.</p>
+    </div>
+    {% elif not completed_runs %}
+    <div class="card p-8 text-center text-slate-500">
+        <p>No completed runs available for comparison.</p>
+    </div>
+    {% endif %}
+</div>
+
+{% if selected_runs|length >= 2 %}
+<script>
+    const ctx = document.getElementById('compareRadar').getContext('2d');
+    const colors = [
+        { bg: 'rgba(59, 130, 246, 0.2)', border: 'rgba(59, 130, 246, 0.8)' },
+        { bg: 'rgba(236, 72, 153, 0.2)', border: 'rgba(236, 72, 153, 0.8)' },
+        { bg: 'rgba(16, 185, 129, 0.2)', border: 'rgba(16, 185, 129, 0.8)' },
+        { bg: 'rgba(234, 179, 8, 0.2)', border: 'rgba(234, 179, 8, 0.8)' },
+        { bg: 'rgba(168, 85, 247, 0.2)', border: 'rgba(168, 85, 247, 0.8)' },
+    ];
+
+    // Collect all categories
+    const allCats = new Set();
+    const runsData = [
+        {% for run in selected_runs %}
+        {
+            name: "#{{ run.id }} — {{ run.model_name }}",
+            categories: {{ run.categories | tojson }}
+        },
+        {% endfor %}
+    ];
+    runsData.forEach(r => Object.keys(r.categories).forEach(c => allCats.add(c)));
+    const labels = [...allCats].sort();
+
+    const datasets = runsData.map((r, i) => ({
+        label: r.name,
+        data: labels.map(c => r.categories[c] ? r.categories[c].avg_score * 100 : 0),
+        backgroundColor: colors[i % colors.length].bg,
+        borderColor: colors[i % colors.length].border,
+        borderWidth: 2,
+        pointBackgroundColor: colors[i % colors.length].border,
+        pointBorderColor: '#fff',
+        pointBorderWidth: 1,
+        pointRadius: 4,
+    }));
+
+    new Chart(ctx, {
+        type: 'radar',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                r: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: { display: false },
+                    grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                    pointLabels: { color: '#94a3b8', font: { size: 11 } },
+                    angleLines: { color: 'rgba(148, 163, 184, 0.1)' },
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#94a3b8', padding: 20 }
+                }
+            }
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}

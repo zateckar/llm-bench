@@ -1,0 +1,269 @@
+# Terminal Algorithms Test Suite
+# Adapted from terminal-bench repository tasks
+
+- id: TA-01
+  category: Terminal Algorithms
+  difficulty: medium
+  source: terminal-bench/countdown-game
+  prompt: |
+    Solve the Countdown numbers game.
+    Given a target number and a set of available numbers, find a way to reach
+    the target using only +, -, *, / operations.
+    Each number can only be used once.
+
+    Example: Target = 952, Numbers = [75, 8, 3, 7, 2, 1]
+    One solution: 75 * (8 + 7 - 1) + 3 + 2 = 952
+
+    Write a Python function that finds solutions to this game.
+    The function should return a list of solutions as strings.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Generate number/operation combinations"
+      pattern: "permutation|combination|itertools|recursi|for .* in"
+      order: 1
+    - step: "Apply the four operations"
+      pattern: "[+].*[-].*[*]|operator|[+] [-] [*] [/]|eval"
+      order: 2
+    - step: "Match target and collect solutions"
+      pattern: "== target|target|append|return"
+      order: 3
+
+- id: TA-02
+  category: Terminal Algorithms
+  difficulty: medium
+  source: terminal-bench/chess-best-move
+  prompt: |
+    You are given an image of a chess board (FEN notation provided).
+    Write a function that finds the best move for white to play.
+    The function should:
+    1. Parse the FEN string
+    2. Implement minimax with alpha-beta pruning
+    3. Use a simple evaluation function
+    4. Return the best move
+
+    FEN: "6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1"
+    (White to move; the back-rank mate is the rook from e1 to e8, i.e. Re8# / e1e8.)
+  evaluator: multi_step_solution
+  expected:
+    - step: "Parse the FEN"
+      pattern: "fen|split|board|parse"
+      order: 1
+    - step: "Minimax with alpha-beta"
+      pattern: "minimax|alpha.?beta|alpha, beta|negamax"
+      order: 2
+    - step: "Identify the back-rank mate move"
+      pattern: "e8|Re8|e1e8|checkmate|mate"
+      order: 3
+
+- id: TA-03
+  category: Terminal Algorithms
+  difficulty: medium
+  source: terminal-bench/gomoku-planner
+  prompt: |
+    Write a Gomoku (Five in a Row) game AI.
+    The AI should:
+    1. Evaluate board positions
+    2. Use threat detection (live-4, dead-4, live-3, etc.)
+    3. Implement minimax or Monte Carlo Tree Search
+    4. Return the best move for a given board state
+
+    Provide the complete implementation with:
+    - Board representation
+    - Evaluation function
+    - Search algorithm
+  evaluator: multi_step_solution
+  expected:
+    - step: "Board representation"
+      pattern: "board|grid|\\[\\[|numpy|matrix"
+      order: 1
+    - step: "Evaluation / threat detection"
+      pattern: "evaluate|score|live.?[34]|open.?[34]|threat|pattern"
+      order: 2
+    - step: "Search algorithm"
+      pattern: "minimax|alpha.?beta|MCTS|Monte Carlo|negamax"
+      order: 3
+
+- id: TA-04
+  category: Terminal Algorithms
+  difficulty: medium
+  source: terminal-bench/ode-solver-rk4
+  prompt: |
+    Implement a 4th-order Runge-Kutta (RK4) ODE solver in Python.
+    The solver should:
+    1. Solve systems of first-order ODEs
+    2. Handle both scalar and vector-valued functions
+    3. Return time points and solution values
+    4. Include error estimation
+
+    Test it on the simple harmonic oscillator:
+    dy/dt = v
+    dv/dt = -y
+    with y(0) = 1, v(0) = 0
+  evaluator: multi_step_solution
+  expected:
+    - step: "RK4 stage coefficients"
+      pattern: "k1|k2|k3|k4"
+      order: 1
+    - step: "Weighted update"
+      pattern: "k1 \\+ 2|/6|/ 6|(k1.*2.*k2.*2.*k3.*k4)"
+      order: 2
+    - step: "Integration over time steps"
+      pattern: "for .* in|range|t \\+|dt|step"
+      order: 3
+
+- id: TA-05
+  category: Terminal Algorithms
+  difficulty: hard
+  source: terminal-bench/feal-differential-cryptanalysis
+  prompt: |
+    Explain differential cryptanalysis applied to the FEAL block cipher.
+    Include:
+    1. What is differential cryptanalysis
+    2. How to construct differential characteristics
+    3. How to recover key bits using chosen plaintexts
+    4. The specific differentials used against FEAL-4
+    5. Implementation approach for the attack
+  evaluator: multi_step_solution
+  expected:
+    - step: "Differential cryptanalysis explanation"
+      pattern: "differential|XOR|probability|characteristic"
+      order: 1
+    - step: "FEAL specifics"
+      pattern: "FEAL|round|G-function|F-function"
+      order: 2
+    - step: "Attack method"
+      pattern: "chosen plaintext|key recovery|decrypt"
+      order: 3
+
+- id: TA-06
+  category: Terminal Algorithms
+  difficulty: hard
+  source: terminal-bench/feal-linear-cryptanalysis
+  prompt: |
+    Explain linear cryptanalysis applied to the FEAL block cipher.
+    Include:
+    1. What is linear cryptanalysis
+    2. How to find linear approximations
+    3. How to use linear hulls
+    4. The specific linear approximations for FEAL
+    5. Comparison with differential cryptanalysis
+  evaluator: multi_step_solution
+  expected:
+    - step: "Linear cryptanalysis"
+      pattern: "linear|approximation|parity|bias"
+      order: 1
+    - step: "Linear hulls"
+      pattern: "hull|correlation|piling-up|lemma"
+      order: 2
+    - step: "FEAL linear attack"
+      pattern: "FEAL|round function|key bits"
+      order: 3
+
+- id: TA-07
+  category: Terminal Algorithms
+  difficulty: medium
+  source: terminal-bench/cross-entropy-method
+  prompt: |
+    Implement the Cross-Entropy Method for optimization.
+    The algorithm should:
+    1. Sample solutions from a parameterized distribution
+    2. Evaluate fitness of samples
+    3. Update distribution parameters based on top performers
+    4. Converge to optimal solution
+
+    Test it on the function: f(x,y) = -(x^2 + y^2) (find maximum at origin)
+    Provide complete Python implementation.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Sample from a distribution"
+      pattern: "normal|gauss|sample|random|mean.*std|mu.*sigma"
+      order: 1
+    - step: "Select elite/top performers"
+      pattern: "elite|top|sort|percentile|argsort|best"
+      order: 2
+    - step: "Update distribution parameters"
+      pattern: "update|mean =|std =|mu =|sigma =|fit"
+      order: 3
+
+- id: TA-08
+  category: Terminal Algorithms
+  difficulty: hard
+  source: terminal-bench/adaptive-rejection-sampler
+  prompt: |
+    Implement an Adaptive Rejection Sampler (ARS) for log-concave distributions.
+    Explain:
+    1. What is rejection sampling
+    2. Why adaptive rejection works for log-concave densities
+    3. How to construct and update the piecewise linear upper hull
+    4. How to compute intersection points
+    5. Provide complete Python implementation
+  evaluator: multi_step_solution
+  expected:
+    - step: "Rejection sampling basis"
+      pattern: "reject|envelope|proposal|accept"
+      order: 1
+    - step: "Log-concave upper hull"
+      pattern: "log.concave|upper hull|tangent|piecewise|concav"
+      order: 2
+    - step: "Update hull / intersections"
+      pattern: "intersection|abscissa|update|add point|squeeze"
+      order: 3
+
+- id: TA-09
+  category: Terminal Algorithms
+  difficulty: easy
+  source: terminal-bench/enemy-grid-escape
+  prompt: |
+    You are on a grid with enemies that move towards you each turn.
+    Write a function that finds the shortest path to escape the grid
+    while avoiding enemies.
+
+    Rules:
+    - Grid is NxN with obstacles
+    - You start at (0,0), exit is at (N-1,N-1)
+    - Enemies move 1 step closer to you each turn
+    - If an enemy reaches you, you lose
+    - You can move up, down, left, or right
+
+    Return the path as a list of coordinates, or empty list if impossible.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Graph/grid search"
+      pattern: "BFS|DFS|A\\*|queue|deque|visited|shortest"
+      order: 1
+    - step: "Enemy movement modeling"
+      pattern: "enemy|enemies|distance|manhattan|move.*toward"
+      order: 2
+    - step: "Return path or empty list"
+      pattern: "path|return \\[\\]|append|return path"
+      order: 3
+
+- id: TA-10
+  category: Terminal Algorithms
+  difficulty: medium
+  source: terminal-bench/constraints-scheduling
+  prompt: |
+    Solve a job scheduling problem with constraints.
+    Given N jobs with:
+    - Duration
+    - Deadline
+    - Dependencies (other jobs that must complete first)
+
+    Find a schedule that:
+    1. Minimizes total tardiness
+    2. Respects all dependencies
+    3. Uses the minimum number of machines
+
+    Implement using constraint programming or heuristics.
+    Provide complete Python solution.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Resolve dependencies (topological order)"
+      pattern: "topolog|dependen|in.?degree|prerequisite|DAG"
+      order: 1
+    - step: "Order by deadline / minimize tardiness"
+      pattern: "deadline|tardiness|sort|EDF|earliest"
+      order: 2
+    - step: "Assign to machines and return schedule"
+      pattern: "machine|assign|schedule|return"
+      order: 3

@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div>
+        <h1 class="text-2xl font-bold text-white">Dashboard</h1>
+        <p class="text-slate-400 mt-1">Overview of your LLM benchmarks</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="card p-5">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-white">{{ total_runs }}</p>
+                    <p class="text-sm text-slate-400">Total Runs</p>
+                </div>
+            </div>
+        </div>
+        <div class="card p-5">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-emerald-600/20 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-white">{{ completed_runs }}</p>
+                    <p class="text-sm text-slate-400">Completed</p>
+                </div>
+            </div>
+        </div>
+        <div class="card p-5">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-purple-600/20 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-white">{{ total_models }}</p>
+                    <p class="text-sm text-slate-400">Models</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if active_runs %}
+    <!-- Active Benchmarks -->
+    <div class="card p-5 bg-blue-900/20 border border-blue-800/50">
+        <h2 class="text-lg font-semibold text-blue-400 mb-3">Active Benchmarks</h2>
+        <div class="space-y-2">
+            {% for run in active_runs %}
+            <a href="/admin/run/{{ run.id }}/progress" class="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 hover:bg-slate-800 transition-colors group">
+                <div class="flex items-center gap-3">
+                    <div class="w-2 h-2 rounded-full {% if run.status == 'running' %}bg-blue-400 animate-pulse{% else %}bg-yellow-400{% endif %}"></div>
+                    <div>
+                        <p class="text-sm font-medium text-slate-200 group-hover:text-white">{{ run.model_name }} — Run #{{ run.id }}</p>
+                        <p class="text-xs text-slate-500">{{ run.model_id }}</p>
+                    </div>
+                </div>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {% if run.status == 'running' %}badge-running{% else %}badge-pending{% endif %}">
+                    {% if run.status == 'running' %}Running{% else %}Pending{% endif %}
+                </span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Radar Chart -->
+        <div class="card p-5 lg:col-span-1">
+            <h2 class="text-lg font-semibold text-white mb-4">Last Run Scores</h2>
+            {% if last_run_categories %}
+            <div style="position: relative; height: 280px;"><canvas id="radarChart"></canvas></div>
+            {% else %}
+            <div class="flex items-center justify-center h-64 text-slate-500 text-sm">
+                No completed runs yet
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Recent Runs -->
+        <div class="card p-5 lg:col-span-2">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-white">Recent Runs</h2>
+                <a href="/runs" class="text-sm text-blue-400 hover:text-blue-300">View all</a>
+            </div>
+            {% if recent_runs %}
+            <div class="space-y-2">
+                {% for run in recent_runs %}
+                <a href="/runs/{{ run.id }}" class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-2 h-2 rounded-full {% if run.status == 'completed' %}bg-emerald-400{% elif run.status == 'running' %}bg-blue-400 animate-pulse{% elif run.status == 'failed' %}bg-red-400{% else %}bg-yellow-400{% endif %}"></div>
+                        <div>
+                            <p class="text-sm font-medium text-slate-200 group-hover:text-white">{{ run.model_name }}</p>
+                            <p class="text-xs text-slate-500">{{ run.model_id }}{% if run.test_suite_hash %} &middot; <span class="font-mono">{{ run.test_suite_hash }}</span>{% endif %}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        {% if run.status == 'completed' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-pass">
+                            {{ run.passed_questions }}/{{ run.total_questions }} ({{ "%.0f"|format(run.avg_score * 100) }}%)
+                        </span>
+                        {% elif run.status == 'running' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-running">Running</span>
+                        {% elif run.status == 'failed' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-fail">Failed</span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-pending">Pending</span>
+                        {% endif %}
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="flex flex-col items-center justify-center py-12 text-slate-500">
+                <svg class="w-12 h-12 mb-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <p class="text-sm">No runs yet. Start a benchmark to see results here.</p>
+                {% if user and user.role == 'admin' %}
+                <a href="/admin/run" class="mt-3 text-sm text-blue-400 hover:text-blue-300">Run a benchmark</a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if last_run_categories %}
+<script>
+    const ctx = document.getElementById('radarChart').getContext('2d');
+    const labels = {{ last_run_categories | map(attribute='category') | list | tojson }};
+    const scoresRaw = {{ last_run_categories | map(attribute='avg_score') | list | tojson }};
+    const scores = scoresRaw.map(s => s * 100);
+
+    new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Score %',
+                data: scores,
+                backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                borderColor: 'rgba(59, 130, 246, 0.8)',
+                borderWidth: 2,
+                pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 1,
+                pointRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                r: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: { display: false },
+                    grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                    pointLabels: {
+                        color: '#94a3b8',
+                        font: { size: 10 },
+                    },
+                    angleLines: { color: 'rgba(148, 163, 184, 0.1)' },
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}

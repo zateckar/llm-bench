@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Manage Users - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div>
+        <h1 class="text-2xl font-bold text-white">Manage Users</h1>
+        <p class="text-slate-400 mt-1">Create and manage user accounts</p>
+    </div>
+
+    <!-- User list -->
+    <div class="space-y-3">
+        {% for u in users %}
+        <div class="card" x-data="{ editing: false }">
+            <!-- User row -->
+            <div class="flex items-center justify-between p-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 bg-slate-700 rounded-full flex items-center justify-center text-sm font-medium text-slate-300">
+                        {{ u.username[0]|upper }}
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-semibold text-white">{{ u.username }}</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                                {% if u.role == 'admin' %}badge-admin{% else %}bg-slate-800 text-slate-300{% endif %}">
+                                {{ u.role }}
+                            </span>
+                            {% if u.oidc_sub %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-sky-900/50 text-sky-300">OIDC</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex items-center gap-3 mt-0.5">
+                            <span class="text-xs text-slate-500">{{ u.email or 'No email' }}</span>
+                            <span class="text-xs text-slate-600">Created {{ u.created_at[:10] if u.created_at else '-' }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="editing = !editing"
+                            class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors
+                                   {% if editing %}bg-slate-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white{% endif %}">
+                        <span x-text="editing ? 'Cancel' : 'Edit'"></span>
+                    </button>
+                    {% if u.id != user.id %}
+                    <form method="POST" action="/admin/users/{{ u.id }}/delete" class="inline"
+                          x-data x-on:submit.prevent="if(confirm('Delete user {{ u.username }}?')) $el.submit()">
+                        <button type="submit"
+                                class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 text-red-400 hover:bg-red-900/50 hover:text-red-300 transition-colors">
+                            Delete
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Edit form (hidden by default) -->
+            <div x-show="editing" x-transition:enter="transition ease-out duration-150"
+                 x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="transition ease-in duration-100"
+                 x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+                 class="border-t border-slate-700/50 px-4 py-4 bg-slate-900/50">
+                <form method="POST" action="/admin/users/{{ u.id }}/update" class="flex items-end gap-4 flex-wrap">
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-xs text-slate-500 mb-1">Email</label>
+                        <input type="email" name="email" value="{{ u.email or '' }}" class="input-field text-sm">
+                    </div>
+                    <div class="w-36">
+                        <label class="block text-xs text-slate-500 mb-1">Role</label>
+                        <select name="role" class="input-field text-sm">
+                            <option value="user" {% if u.role == 'user' %}selected{% endif %}>User</option>
+                            <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Admin</option>
+                        </select>
+                    </div>
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-xs text-slate-500 mb-1">New Password (blank = keep)</label>
+                        <input type="password" name="password" placeholder="New password" class="input-field text-sm">
+                    </div>
+                    <button type="submit" class="btn-primary text-sm">Save</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if not users %}
+    <div class="card p-8 text-center text-slate-500">No users found.</div>
+    {% endif %}
+
+    <!-- Add new user -->
+    <div class="card p-5">
+        <h2 class="text-lg font-semibold text-white mb-4">Add User</h2>
+        <form method="POST" action="/admin/users" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Username</label>
+                <input type="text" name="username" required class="input-field">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Email</label>
+                <input type="email" name="email" class="input-field">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                <input type="password" name="password" required class="input-field">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Role</label>
+                <select name="role" class="input-field">
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <div class="md:col-span-2">
+                <button type="submit" class="btn-primary">Create User</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

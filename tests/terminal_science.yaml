@@ -1,0 +1,201 @@
+# Terminal Scientific Computing Test Suite
+# Adapted from terminal-bench repository tasks
+
+- id: TN-01
+  category: Terminal Science
+  difficulty: hard
+  source: terminal-bench/cartpole-rl-training
+  prompt: |
+    You need to train a reinforcement learning agent on the CartPole-v1 environment.
+    The agent should achieve a mean reward of over 300 over 100 episodes.
+    Provide:
+    1. The complete training code using PyTorch
+    2. The Agent class with select_action, save, and load methods
+    3. Explanation of the algorithm choice
+    4. How to verify the trained model works
+  evaluator: multi_step_solution
+  expected:
+    - step: "Algorithm and environment"
+      pattern: "CartPole|policy gradient|REINFORCE|DQN|actor.critic|PPO"
+      order: 1
+    - step: "Agent class with required methods"
+      pattern: "select_action|class .*Agent|def save|def load"
+      order: 2
+    - step: "Training loop"
+      pattern: "episode|reward|optimizer|backward|loss"
+      order: 3
+
+- id: TN-02
+  category: Terminal Science
+  difficulty: hard
+  source: terminal-bench/dna-assembly
+  prompt: |
+    Design primers for Golden Gate assembly using BsaI-HF v2 enzyme.
+    Given these sequences:
+    - input: circular plasmid
+    - egfp: linear DNA encoding EGFP protein
+    - flag: linear DNA encoding FLAG protein with GS linkers
+    - snap: linear DNA encoding SNAP protein
+    - output: desired circular plasmid
+
+    The primers must:
+    - Have annealing regions 15-45 nucleotides long
+    - Melting temperature between 58-72°C
+    - Forward/reverse pairs within 5°C of each other
+    - Include BsaI cut sites for Golden Gate assembly
+
+    Explain the primer design process and provide example primers.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Melting temperature calculation"
+      pattern: "melting|Tm|tm|primer3"
+      order: 1
+    - step: "BsaI cut sites"
+      pattern: "BsaI|GAGACC|GGTCTC|cut site"
+      order: 2
+    - step: "Primer design"
+      pattern: "forward|reverse|anneal|5'|3'"
+      order: 3
+
+- id: TN-03
+  category: Terminal Science
+  difficulty: medium
+  source: terminal-bench/chem-property-targeting
+  prompt: |
+    You're optimizing a molecule for better binding affinity to a target protein.
+    Describe the computational chemistry approach including:
+    1. How to calculate binding free energy
+    2. Methods for lead optimization
+    3. How to balance potency with ADMET properties
+    4. Tools and software commonly used
+  evaluator: multi_step_solution
+  expected:
+    - step: "Binding free energy"
+      pattern: "free energy|docking|scoring|MM-PBSA|MM-GBSA"
+      order: 1
+    - step: "Lead optimization"
+      pattern: "SAR|structure.activity|QSAR|pharmacophore"
+      order: 2
+    - step: "ADMET"
+      pattern: "ADMET|absorption|metabolism|toxicity|Lipinski"
+      order: 3
+
+- id: TN-04
+  category: Terminal Science
+  difficulty: medium
+  source: terminal-bench/attention-mil
+  prompt: |
+    Explain Attention-based Multiple Instance Learning (Attention-MIL) for histopathology image analysis.
+    Include:
+    1. The problem it solves (bag-level classification)
+    2. How attention mechanism works in this context
+    3. Mathematical formulation of the attention layer
+    4. Advantages over simple mean-pooling
+    5. Python implementation outline using PyTorch
+  evaluator: multi_step_solution
+  expected:
+    - step: "MIL explanation"
+      pattern: "multiple instance|bag|instance|histopatholog"
+      order: 1
+    - step: "Attention mechanism"
+      pattern: "attention|weight|softmax|query|key"
+      order: 2
+    - step: "Mathematical formulation"
+      pattern: "alpha|z_i|h_i|sum|aggregate"
+      order: 3
+
+- id: TN-05
+  category: Terminal Science
+  difficulty: medium
+  source: terminal-bench/causal-inference-r
+  prompt: |
+    Explain causal inference methods for observational studies in R.
+    Cover:
+    1. The difference between correlation and causation
+    2. Propensity score matching
+    3. Instrumental variables
+    4. Difference-in-differences
+    5. Provide R code examples for each method
+  evaluator: multi_step_solution
+  expected:
+    - step: "Causation vs correlation"
+      pattern: "causation|correlation|confound|bias"
+      order: 1
+    - step: "Propensity score"
+      pattern: "propensity|matching|pscore|MatchIt"
+      order: 2
+    - step: "Instrumental variables"
+      pattern: "instrument|IV|2SLS|ivreg"
+      order: 3
+
+- id: TN-06
+  category: Terminal Science
+  difficulty: hard
+  source: terminal-bench/fmri-encoding-r
+  prompt: |
+    Explain fMRI encoding models for predicting brain responses.
+    Include:
+    1. What is encoding vs decoding in neuroimaging
+    2. How to build a voxel-wise encoding model
+    3. Feature extraction from stimuli (visual, auditory)
+    4. Model evaluation using cross-validation
+    5. Python/R implementation considerations
+  evaluator: multi_step_solution
+  expected:
+    - step: "Encoding vs decoding"
+      pattern: "encoding|decoding|stimulus|brain response"
+      order: 1
+    - step: "Voxel-wise model"
+      pattern: "voxel|GLM|regress|design matrix"
+      order: 2
+    - step: "Feature extraction"
+      pattern: "feature|HOG|Gabor|spectrogram|MFCC"
+      order: 3
+
+- id: TN-07
+  category: Terminal Science
+  difficulty: medium
+  source: terminal-bench/chem-rf
+  prompt: |
+    Build a Random Forest model for predicting chemical properties.
+    Explain:
+    1. How to represent molecules as features (fingerprints, descriptors)
+    2. Feature selection techniques for chemical data
+    3. Model training and hyperparameter tuning
+    4. How to interpret feature importance in chemical context
+    Provide Python code using scikit-learn and RDKit.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Molecular features/fingerprints"
+      pattern: "fingerprint|descriptor|Morgan|RDKit|MolFromSmiles"
+      order: 1
+    - step: "Random Forest training"
+      pattern: "RandomForest|n_estimators|fit\\(|sklearn"
+      order: 2
+    - step: "Tuning and feature importance"
+      pattern: "feature_importances|GridSearch|cross_val|hyperparameter"
+      order: 3
+
+- id: TN-08
+  category: Terminal Science
+  difficulty: medium
+  source: terminal-bench/bn-fit-modify
+  prompt: |
+    Explain how to fit and modify Bayesian Networks for causal reasoning.
+    Include:
+    1. Structure learning algorithms (constraint-based, score-based)
+    2. Parameter learning (MLE, Bayesian estimation)
+    3. How to modify network structure based on domain knowledge
+    4. Inference and prediction
+    Provide Python examples using pgmpy or pomegranate.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Structure learning"
+      pattern: "PC algorithm|BIC|MDL|structure|DAG"
+      order: 1
+    - step: "Parameter learning"
+      pattern: "MLE|Bayesian|conditional|probability"
+      order: 2
+    - step: "Inference"
+      pattern: "inference|query|evidence|predict"
+      order: 3

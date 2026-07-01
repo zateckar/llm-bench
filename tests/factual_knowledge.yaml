@@ -1,0 +1,91 @@
+# Factual Knowledge Test Suite
+
+- id: FK-01
+  category: Factual Knowledge
+  prompt: "What is the chemical formula of the mineral that is the primary source of fluorine, which crystallizes in the isometric system?"
+  evaluator: contains_keywords
+  expected: ["caf2", "caf₂", "fluorite"]
+
+- id: FK-02
+  category: Factual Knowledge
+  prompt: "Multiply the atomic number of Silicon by the number of valence electrons in a neutral Carbon atom, then subtract the atomic number of Neon. What is the resulting number?"
+  evaluator: numeric_match
+  expected: 46.0
+
+- id: FK-03
+  category: Factual Knowledge
+  prompt: "What is the smallest prime number that is also a Sophie Germain prime greater than 100?"
+  evaluator: contains_keywords
+  expected: ["113"]
+
+- id: FK-04
+  category: Factual Knowledge
+  prompt: "What is the half-life of Uranium-235 in millions of years? Round to the nearest integer."
+  evaluator: numeric_match
+  expected: 704.0
+
+- id: FK-05
+  category: Factual Knowledge
+  prompt: "What is the only country in the world whose flag depicts a modern firearm (specifically an AK-47 assault rifle)? Name the country and the weapon."
+  evaluator: contains_keywords
+  expected: ["mozambique", "ak"]
+
+- id: FK-06
+  category: Factual Knowledge
+  prompt: "What is the name of the deepest submarine trench in the Atlantic Ocean, and what is the name of its deepest point?"
+  evaluator: contains_keywords
+  expected: ["puerto rico", "milwaukee"]
+
+- id: FK-07
+  category: Factual Knowledge
+  prompt: "What is the heaviest stable (non-radioactive) chemical element in the periodic table? Name the element and its atomic number."
+  evaluator: contains_keywords
+  expected: ["lead", "82"]
+
+- id: FK-08
+  category: Factual Knowledge
+  prompt: "In what year did the first human spaceflight occur?"
+  evaluator: contains_keywords
+  expected: ["1961"]
+
+- id: FK-09
+  category: Factual Knowledge
+  prompt: "What is the name of the conjecture in number theory that states there are infinitely many primes p such that p + 2 is also prime?"
+  evaluator: contains_keywords
+  expected: ["twin prime"]
+
+- id: FK-10
+  category: Factual Knowledge
+  prompt: "Which moon in our solar system is the only one known to have a dense atmosphere and liquid lakes on its surface?"
+  evaluator: contains_keywords
+  expected: ["titan"]
+
+- id: FK-11
+  category: Factual Knowledge
+  prompt: "What is the name of the constant defined as the limiting difference between the harmonic series and the natural logarithm, approximately 0.5772?"
+  evaluator: contains_keywords
+  expected: ["euler", "mascheroni"]
+
+- id: FK-12
+  category: Factual Knowledge
+  prompt: "What is the approximate distance from the Earth to the Moon in kilometers at its farthest point (apogee)? Reply with the distance in kilometers rounded to the nearest thousand (e.g., 407000)."
+  evaluator: numeric_match
+  expected: 407000.0
+
+- id: FK-13
+  category: Factual Knowledge
+  prompt: "What is the name of the pathfinding algorithm that extends Dijkstra's algorithm by using heuristics to guide its search?"
+  evaluator: contains_keywords
+  expected: ["a*", "heuristic"]
+
+- id: FK-14
+  category: Factual Knowledge
+  prompt: "What is the name of the theorem in geometry which states that any simple closed curve in the plane divides the plane into exactly two regions?"
+  evaluator: contains_keywords
+  expected: ["jordan", "curve"]
+
+- id: FK-15
+  category: Factual Knowledge
+  prompt: "What is the name of the famous unsolved mathematical problem concerning the non-trivial zeroes of the Riemann zeta function?"
+  evaluator: contains_keywords
+  expected: ["riemann", "hypothesis"]

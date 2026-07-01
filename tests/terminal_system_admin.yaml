@@ -1,0 +1,171 @@
+# Terminal System Administration Test Suite
+# Adapted from terminal-bench repository tasks
+
+- id: TS-01
+  category: Terminal System Admin
+  difficulty: medium
+  source: terminal-bench/broken-networking
+  prompt: |
+    A Linux server has lost network connectivity. The server was working yesterday but today
+    it cannot reach external websites. The server can ping localhost and 127.0.0.1.
+    Provide a complete troubleshooting guide with:
+    1. Diagnostic commands to run in order
+    2. Common causes and their solutions
+    3. How to verify each fix worked
+  evaluator: multi_step_solution
+  expected:
+    - step: "Check interface status"
+      pattern: "ip link|ifconfig|interface"
+      order: 1
+    - step: "Check routing"
+      pattern: "ip route|route|gateway|default"
+      order: 2
+    - step: "Check DNS"
+      pattern: "dig|nslookup|/etc/resolv.conf|nameserver"
+      order: 3
+    - step: "Check firewall"
+      pattern: "iptables|firewall|ufw|nftables"
+      order: 4
+
+- id: TS-02
+  category: Terminal System Admin
+  difficulty: medium
+  source: terminal-bench/home-server-https
+  prompt: |
+    You need to set up HTTPS for a home web server using Let's Encrypt.
+    The server is running nginx on Ubuntu and serves content on port 80.
+    Provide:
+    1. Complete setup steps from start to finish
+    2. How to obtain and install the SSL certificate
+    3. How to configure nginx for HTTPS
+    4. How to set up auto-renewal
+  evaluator: multi_step_solution
+  expected:
+    - step: "Install certbot"
+      pattern: "certbot|apt install|snap"
+      order: 1
+    - step: "Obtain certificate"
+      pattern: "certbot.*nginx|certonly|--nginx"
+      order: 2
+    - step: "Configure nginx"
+      pattern: "ssl_certificate|443|listen.*ssl"
+      order: 3
+    - step: "Auto-renewal"
+      pattern: "renew|cron|timer|systemd"
+      order: 4
+
+- id: TS-03
+  category: Terminal System Admin
+  difficulty: medium
+  source: terminal-bench/acl-permissions-inheritance
+  prompt: |
+    You have a directory structure where subdirectories are not inheriting
+    the ACL permissions set on the parent directory.
+    Explain:
+    1. How Linux ACLs work
+    2. The difference between default ACLs and access ACLs
+    3. How to set up proper ACL inheritance
+    4. Provide commands to fix the inheritance issue
+  evaluator: multi_step_solution
+  expected:
+    - step: "ACL explanation"
+      pattern: "ACL|access control|setfacl|getfacl"
+      order: 1
+    - step: "Default vs access ACLs"
+      pattern: "default|inherit|d:"
+      order: 2
+    - step: "Fix commands"
+      pattern: "setfacl.*-d|default.*mask|recursive"
+      order: 3
+
+- id: TS-04
+  category: Terminal System Admin
+  difficulty: easy
+  source: terminal-bench/cron-broken-network
+  prompt: |
+    A cron job that runs a backup script is failing silently.
+    The script works when run manually from the command line.
+    Explain why cron jobs might fail and how to debug them.
+    Include specific examples of common issues.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Environment differences"
+      pattern: "PATH|environment|env|variables"
+      order: 1
+    - step: "Log checking"
+      pattern: "mail|/var/log|syslog|cron.log"
+      order: 2
+    - step: "Debugging techniques"
+      pattern: "output|redirect|2>&1|MAILTO"
+      order: 3
+
+- id: TS-05
+  category: Terminal System Admin
+  difficulty: hard
+  source: terminal-bench/hdfs-deployment
+  prompt: |
+    You need to deploy a 3-node Hadoop HDFS cluster.
+    Provide:
+    1. Prerequisites and system requirements
+    2. Step-by-step configuration files (core-site.xml, hdfs-site.xml)
+    3. How to format the namenode
+    4. How to verify the cluster is working
+    5. Common issues and troubleshooting steps
+  evaluator: multi_step_solution
+  expected:
+    - step: "Prerequisites"
+      pattern: "java|JDK|ssh|hosts"
+      order: 1
+    - step: "Configuration files"
+      pattern: "core-site|hdfs-site|fs\\.defaultFS"
+      order: 2
+    - step: "Format namenode"
+      pattern: "hdfs namenode -format|namenode"
+      order: 3
+    - step: "Verification"
+      pattern: "hdfs dfs|jps|dfsadmin"
+      order: 4
+
+- id: TS-06
+  category: Terminal System Admin
+  difficulty: easy
+  source: terminal-bench/configure-git-webserver
+  prompt: |
+    Set up a simple static file web server using Python for a Git repository.
+    The server should:
+    - Serve files from the current directory on port 8080
+    - Support directory listing
+    - Handle common MIME types correctly
+    Provide the complete command or script to set this up.
+  evaluator: command_correctness
+  expected:
+    - pattern: "python.*-m.*http\\.server|SimpleHTTPServer"
+      description: "Python HTTP server command"
+      required: true
+    - pattern: "\\b8080\\b"
+      description: "Port specification (8080)"
+      required: true
+
+- id: TS-07
+  category: Terminal System Admin
+  difficulty: medium
+  source: terminal-bench/decommissioning-service-with-sensitive-data
+  prompt: |
+    You need to decommission a service that handles sensitive data.
+    List all the steps required to safely decommission the service,
+    including data handling, access revocation, and cleanup procedures.
+    Follow GDPR and security best practices.
+  evaluator: multi_step_solution
+  expected:
+    - step: "Data backup/archival"
+      pattern: "backup|archive|encrypt|export"
+      order: 1
+    - step: "Access revocation"
+      pattern: "revoke|disable|delete.*user|remove.*access"
+      order: 2
+    - step: "Data deletion"
+      pattern: "delete|destroy|wipe|shred|sanitiz"
+      order: 3
+    - step: "Documentation"
+      pattern: "document|audit|log|certificate"
+      order: 4

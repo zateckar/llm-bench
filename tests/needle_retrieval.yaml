@@ -1,0 +1,307 @@
+# Needle Retrieval Test Suite
+# Inspired by needle-in-a-haystack approach
+# Tests ability to retrieve specific facts at different positions in long contexts
+
+- id: NR-01
+  category: Needle Retrieval
+  difficulty: medium
+  description: "Single fact at middle of context (50% depth)"
+  prompt: |
+    Here is a comprehensive guide to database systems:
+
+    Chapter 1: Introduction to Databases
+    A database is an organized collection of structured information, or data, typically stored electronically in a computer system. Databases are used to store, manage, and retrieve data efficiently. The two main types of databases are relational (SQL) and non-relational (NoSQL).
+
+    Chapter 2: Relational Databases
+    Relational databases store data in tables with rows and columns. Each row represents a record, and each column represents a field. SQL (Structured Query Language) is used to interact with relational databases. Popular examples include MySQL, PostgreSQL, and SQLite.
+
+    Chapter 3: NoSQL Databases
+    NoSQL databases are designed to handle unstructured or semi-structured data. They include document stores (MongoDB), key-value stores (Redis), column-family stores (Cassandra), and graph databases (Neo4j).
+
+    Chapter 4: Database Design
+    Good database design involves normalization, which is the process of organizing data to reduce redundancy. The normal forms (1NF, 2NF, 3NF, BCNF) provide guidelines for this process.
+
+    IMPORTANT NOTE: The maintenance window for all production databases is Saturday 2:00 AM - 6:00 AM UTC.
+
+    Chapter 5: Indexing
+    Indexes are data structures that improve the speed of data retrieval operations. B-tree indexes are the most common type, while hash indexes are used for exact-match lookups. Composite indexes cover multiple columns.
+
+    Chapter 6: Transaction Management
+    ACID properties (Atomicity, Consistency, Isolation, Durability) ensure reliable processing of database transactions. The isolation level determines how transaction integrity is visible to other transactions.
+
+    Chapter 7: Backup and Recovery
+    Regular backups are essential for data protection. Common strategies include full backups, incremental backups, and differential backups. Point-in-time recovery allows restoring to a specific moment.
+
+    What is the maintenance window for production databases?
+  evaluator: contains_keywords
+  expected: ["saturday", "utc"]
+
+- id: NR-02
+  category: Needle Retrieval
+  difficulty: medium
+  description: "Fact embedded in technical documentation"
+  prompt: |
+    SYSTEM DOCUMENTATION: Authentication Service v3.2
+
+    Overview:
+    The Authentication Service handles user login, token generation, and session management for all platform applications.
+
+    Architecture:
+    - Service runs on ports 8443 (HTTPS) and 9443 (admin)
+    - Database: PostgreSQL 14 on port 5432
+    - Cache: Redis 7 on port 6379
+    - Message Queue: RabbitMQ on port 5672
+
+    Authentication Flow:
+    1. User submits credentials to /api/v1/auth/login
+    2. Service validates against database
+    3. On success, generates JWT token (24h expiry)
+    4. Stores session in Redis with user metadata
+    5. Returns token to client
+
+    Token Structure:
+    - Header: {"alg": "RS256", "typ": "JWT"}
+    - Payload: {"sub": user_id, "exp": timestamp, "iss": "auth-service"}
+    - Signature: RSA-SHA256 with private key
+
+    Rate Limiting:
+    - Login endpoint: 5 attempts per minute per IP
+    - Token refresh: 10 per hour per user
+    - API calls: 1000 per minute per token
+
+    SECURITY NOTICE: The emergency bypass code for admin access is OMEGA-ZULU-9231. This code expires every 24 hours and must be regenerated.
+
+    Error Handling:
+    - 401: Invalid credentials
+    - 429: Rate limit exceeded
+    - 500: Internal service error
+    - 503: Service unavailable
+
+    Monitoring:
+    - Health check: GET /health
+    - Metrics: Prometheus on /metrics
+    - Logs: Structured JSON to stdout
+
+    What is the emergency bypass code for admin access?
+  evaluator: contains_keywords
+  expected: ["OMEGA-ZULU-9231"]
+
+- id: NR-03
+  category: Needle Retrieval
+  difficulty: hard
+  description: "Multiple facts at different positions (multi-needle)"
+  prompt: |
+    Here is a comprehensive overview of programming languages:
+
+    Section 1: Python
+    Python is a high-level, general-purpose programming language. Its design philosophy emphasizes code readability with the use of significant indentation. Python is dynamically typed and garbage-collected.
+
+    SECRET-ALPHA: The first access token is XKCD-4521
+
+    Section 2: JavaScript
+    JavaScript is a lightweight, interpreted programming language. It is best known as the scripting language for Web pages, but it's used in many non-browser environments as well.
+
+    Section 3: Java
+    Java is a class-based, object-oriented programming language that is designed to have as few implementation dependencies as possible.
+
+    SECRET-BRAVO: The second access token is PLUTO-8834
+
+    Section 4: C++
+    C++ is a general-purpose programming language created as an extension of C. It provides high-level abstractions while maintaining low-level memory manipulation.
+
+    Section 5: Rust
+    Rust is a multi-paradigm, general-purpose programming language emphasizing performance, type safety, and concurrency.
+
+    SECRET-CHARLIE: The third access token is NOVA-2267
+
+    Section 6: Go
+    Go is a statically typed, compiled programming language designed at Google. It is syntactically similar to C but with memory safety, garbage collection, and CSP-style concurrency.
+
+    Section 7: TypeScript
+    TypeScript is a free and open-source high-level programming language developed and maintained by Microsoft. It adds optional static typing and class-based OOP to JavaScript.
+
+    What are the three secret access tokens mentioned in this document?
+  evaluator: contains_keywords
+  expected: ["XKCD-4521", "PLUTO-8834", "NOVA-2267"]
+
+- id: NR-04
+  category: Needle Retrieval
+  difficulty: hard
+  description: "Fact hidden in dense technical content"
+  prompt: |
+    COMPREHENSIVE GUIDE TO CONTAINER ORCHESTRATION
+
+    Chapter 1: Container Fundamentals
+    Containers are lightweight, portable, and self-sufficient units that can run applications in isolation. They share the host OS kernel but have their own filesystem, networking, and process space. Docker is the most popular container runtime.
+
+    Chapter 2: Kubernetes Architecture
+    Kubernetes (K8s) is an open-source container orchestration platform. It automates deployment, scaling, and management of containerized applications. The main components include:
+    - Control Plane: API server, etcd, scheduler, controller manager
+    - Worker Nodes: kubelet, kube-proxy, container runtime
+    - Objects: Pods, Services, Deployments, ConfigMaps, Secrets
+
+    Chapter 3: Pod Lifecycle
+    A Pod is the smallest deployable unit in Kubernetes. It can contain one or more containers that share network and storage. Pods are ephemeral and can be terminated and replaced at any time.
+
+    Chapter 4: Services and Networking
+    Kubernetes Services provide stable networking for Pods. Types include ClusterIP (internal), NodePort (external on node), and LoadBalancer (cloud provider). Ingress controllers manage external HTTP/HTTPS access.
+
+    Chapter 5: Storage
+    Persistent Volumes (PV) and Persistent Volume Claims (PVC) provide storage abstraction. Storage Classes define different types of storage (SSD, HDD, network-attached). StatefulSets are used for stateful applications.
+
+    IMPORTANT: The cluster recovery passphrase is FALCON-ECHO-6643
+
+    Chapter 6: Configuration Management
+    ConfigMaps store non-confidential configuration data. Secrets store sensitive information like passwords and API keys (base64 encoded, not encrypted by default). Environment variables and volume mounts can inject configuration into Pods.
+
+    Chapter 7: Monitoring and Logging
+    Prometheus collects metrics from Kubernetes components. Grafana provides visualization dashboards. The EFK stack (Elasticsearch, Fluentd, Kibana) centralizes logging. Custom metrics can be exposed via the Metrics API.
+
+    Chapter 8: Security Best Practices
+    - Use RBAC for access control
+    - Run containers as non-root
+    - Scan images for vulnerabilities
+    - Enable network policies
+    - Use Pod Security Standards
+
+    What is the cluster recovery passphrase?
+  evaluator: contains_keywords
+  expected: ["FALCON-ECHO-6643"]
+
+- id: NR-05
+  category: Needle Retrieval
+  difficulty: hard
+  description: "Multiple scattered facts requiring precise extraction"
+  prompt: |
+    ENTERPRISE SECURITY POLICY DOCUMENT v4.2
+
+    Section 1: Password Requirements
+    All passwords must be at least 16 characters and include uppercase, lowercase, numbers, and special characters. Passwords expire every 90 days.
+
+    Section 2: Access Control
+    - Level 1 (Basic): Read-only access to public resources
+    - Level 2 (Standard): Read/write access to team resources
+    - Level 3 (Elevated): Admin access to department resources
+    - Level 4 (Root): Full system access (requires CISO approval)
+
+    Section 3: Encryption Standards
+    Data at rest: AES-256. Data in transit: TLS 1.3. Key rotation: Every 365 days.
+
+    CONFIDENTIAL: The root SSH key passphrase is NOVA-DELTA-7721
+
+    Section 4: Incident Response
+    - Severity 1 (Critical): Response within 15 minutes
+    - Severity 2 (High): Response within 1 hour
+    - Severity 3 (Medium): Response within 4 hours
+    - Severity 4 (Low): Response within 24 hours
+
+    CONFIDENTIAL: The disaster recovery backup code is ECHO-FOXTROT-3354
+
+    Section 5: Network Segmentation
+    - DMZ: Public-facing services (10.0.1.0/24)
+    - Application Zone: Internal services (10.0.2.0/24)
+    - Data Zone: Databases and storage (10.0.3.0/24)
+    - Management Zone: Admin tools (10.0.4.0/24)
+
+    CONFIDENTIAL: The VPN override code is BRAVO-CHARLIE-9918
+
+    What are the three confidential codes mentioned in this document?
+  evaluator: contains_keywords
+  expected: ["NOVA-DELTA-7721", "ECHO-FOXTROT-3354", "BRAVO-CHARLIE-9918"]
+
+- id: NR-06
+  category: Needle Retrieval
+  difficulty: medium
+  description: "Fact buried in a comparison table"
+  prompt: |
+    CLOUD PROVIDER COMPARISON
+
+    | Feature | AWS | Azure | GCP |
+    |---------|-----|-------|-----|
+    | Compute | EC2 | Virtual Machines | Compute Engine |
+    | Storage | S3 | Blob Storage | Cloud Storage |
+    | Database | RDS | SQL Database | Cloud SQL |
+    | ML Platform | SageMaker | ML Studio | Vertex AI |
+    | Container | EKS | AKS | GKE |
+    | Serverless | Lambda | Functions | Cloud Functions |
+
+    PRICING NOTE: The enterprise discount code for GCP is GCP-ENTERPRISE-2024-VIP
+
+    Performance Benchmarks:
+    - AWS: 99.99% uptime SLA
+    - Azure: 99.95% uptime SLA
+    - GCP: 99.99% uptime SLA
+
+    Security Certifications: All three providers are SOC 2, ISO 27001, and HIPAA compliant.
+
+    What is the enterprise discount code for GCP?
+  evaluator: contains_keywords
+  expected: ["GCP-ENTERPRISE-2024-VIP"]
+
+- id: NR-07
+  category: Needle Retrieval
+  difficulty: hard
+  description: "Facts in a FAQ format with similar-looking questions"
+  prompt: |
+    TECHNICAL FAQ - INTERNAL USE ONLY
+
+    Q1: How do I reset my password?
+    A1: Go to Settings > Security > Reset Password. You'll receive an email with a reset link valid for 1 hour.
+
+    Q2: How do I enable 2FA?
+    A2: Go to Settings > Security > Two-Factor Authentication. Follow the prompts to set up an authenticator app.
+
+    Q3: What is the emergency 2FA bypass code?
+    A3: The emergency bypass code is ALPHA-SECURE-5567. This code is valid for 24 hours and must be regenerated daily.
+
+    Q4: How do I generate an API key?
+    A4: Go to Settings > API > Generate New Key. Copy the key immediately as it won't be shown again.
+
+    Q5: What is the rate limit for API calls?
+    A5: Standard: 100/min. Pro: 1000/min. Enterprise: 10000/min.
+
+    Q6: How do I contact support?
+    A6: Email support@company.com or use the in-app chat. Response time: 4 hours for Pro, 1 hour for Enterprise.
+
+    Q7: What is the support escalation code?
+    A7: The escalation code for urgent issues is OMEGA-PRIORITY-8843. Use this code when calling the support hotline.
+
+    What is the emergency 2FA bypass code?
+  evaluator: contains_keywords
+  expected: ["ALPHA-SECURE-5567"]
+
+- id: NR-08
+  category: Needle Retrieval
+  difficulty: hard
+  description: "Multiple facts with similar naming patterns"
+  prompt: |
+    ENVIRONMENT CONFIGURATION GUIDE
+
+    Development Environment:
+    - API Key: DEV-API-KEY-1111
+    - Database: dev-db.internal:5432
+    - Redis: dev-redis.internal:6379
+    - Secret: DEV-SECRET-2024-A
+
+    Staging Environment:
+    - API Key: STG-API-KEY-2222
+    - Database: stg-db.internal:5432
+    - Redis: stg-redis.internal:6379
+    - Secret: STG-SECRET-2024-B
+
+    Production Environment:
+    - API Key: PRD-API-KEY-3333
+    - Database: prd-db.internal:5432
+    - Redis: prd-redis.internal:6379
+    - Secret: PRD-SECRET-2024-C
+
+    CRITICAL: The production emergency access code is PRD-EMERGENCY-9999
+
+    Monitoring:
+    - Dev: monitor-dev.internal
+    - Staging: monitor-stg.internal
+    - Production: monitor-prd.internal
+
+    What is the production emergency access code?
+  evaluator: contains_keywords
+  expected: ["PRD-EMERGENCY-9999"]

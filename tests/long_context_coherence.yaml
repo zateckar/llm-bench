@@ -1,0 +1,212 @@
+# Long Context Coherence Test Suite
+
+- id: LC-01
+  category: Long Context Coherence
+  prompt: |
+    Read this document carefully and answer the question.
+
+    PROJECT NEXUS - Technical Specification v2.3
+
+    1. Overview: Project Nexus is a real-time analytics platform. The system processes 10M events/second. Primary language: Rust. Secondary: Python for ML pipelines.
+
+    2. Architecture: Three-tier design. Frontend uses React 18 with TypeScript. Backend is Rust with Actix-web 4.0. Database: PostgreSQL 15 with TimescaleDB extension. Cache layer: Redis 7.0 with 64GB allocation.
+
+    3. Team: Project lead is Maria Chen (joined March 2024). Backend team: 4 engineers (Alex, Jordan, Sam, Riley). Frontend: 2 engineers (Casey, Morgan). DevOps: 1 engineer (Taylor). ML team: 2 engineers (Quinn, Avery).
+
+    4. Timeline: Phase 1 (Q1): Core ingestion pipeline. Phase 2 (Q2): Dashboard UI. Phase 3 (Q3): ML anomaly detection. Phase 4 (Q4): Mobile SDK.
+
+    5. Budget: Total $2.4M. Infrastructure: $800K. Salaries: $1.2M. Tools/licenses: $200K. Contingency: $200K.
+
+    6. Technical Debt: The auth module uses bcrypt with cost factor 12 (should be 14). The event parser has a known O(n²) bug for payloads >10MB. Redis eviction policy is set to 'volatile-lru' but should be 'allkeys-lru'.
+
+    7. Decisions Log: Switched from MongoDB to PostgreSQL (May 2024). Adopted Actix-web over Axum (June 2024). Chose TimescaleDB over InfluxDB (July 2024).
+
+    Question: Who is responsible for the ML anomaly detection work in Phase 3, and what database change was made that supports time-series data for this feature?
+  evaluator: contains_keywords
+  expected: ["quinn", "avery", "timescaledb"]
+
+- id: LC-02
+  category: Long Context Coherence
+  prompt: |
+    Read this contract excerpt and answer.
+
+    SERVICE AGREEMENT between TechCorp Inc. (Provider) and DataFlow Ltd. (Client)
+    Effective Date: January 15, 2024
+
+    Section 1: Scope
+    Provider shall deliver cloud infrastructure management services including:
+    - 24/7 monitoring of production systems
+    - Incident response within 15 minutes (Priority 1)
+    - Monthly security audits
+    - Quarterly capacity planning reviews
+
+    Section 2: Pricing
+    - Base fee: $25,000/month
+    - On-call premium: $5,000/month
+    - Additional incidents beyond 10/month: $500 each
+    - Holiday coverage: 150% of base rate
+
+    Section 3: SLA Terms
+    - Uptime guarantee: 99.95%
+    - Response time SLA: 15 minutes for P1, 4 hours for P2
+    - Resolution time SLA: 4 hours for P1, 24 hours for P2
+    - SLA credit: 10% of monthly fee per 0.1% below 99.95% uptime
+
+    Section 4: Termination
+    - Either party may terminate with 60 days written notice
+    - Early termination fee: 3 months of base fees
+    - Provider retains data for 30 days after termination
+
+    Question: If DataFlow wants to terminate the contract immediately on March 1, 2024, how much would they owe in early termination fees, and what happens to their data?
+  evaluator: contains_keywords
+  expected: ["75,000", "30 days"]
+
+- id: LC-03
+  category: Long Context Coherence
+  prompt: |
+    Analyze this codebase description:
+
+    Repository: payment-service (monorepo)
+
+    Module Structure:
+    - /src/core: Payment processing engine (Rust, v3.2.1)
+    - /src/gateway: Bank gateway integrations (Rust, v3.2.1)
+    - /src/api: REST API layer (Python FastAPI, v2.1.0)
+    - /src/webhooks: Event delivery system (Go, v1.0.3)
+    - /src/ml: Fraud detection model (Python, v0.9.4-beta)
+
+    Recent Changes (git log):
+    - 2024-03-15: 'fix: resolve race condition in webhook delivery' (author: @chen)
+    - 2024-03-14: 'feat: add Stripe Connect support' (author: @patel)
+    - 2024-03-12: 'refactor: extract common validation logic' (author: @silva)
+    - 2024-03-10: 'fix: handle duplicate idempotency keys' (author: @chen)
+    - 2024-03-08: 'feat: implement 3D Secure v2' (author: @patel)
+    - 2024-03-05: 'chore: update ML model to v0.9.4-beta' (author: @kim)
+    - 2024-03-01: 'fix: correct currency conversion rounding' (author: @silva)
+
+    Known Issues:
+    - ISSUE-1042: ML model accuracy dropped 2% after v0.9.4-beta update
+    - ISSUE-1039: Webhook retry logic doesn't respect backoff
+    - ISSUE-1035: Stripe Connect payments fail for JPY currency
+
+    Question: Based on the commit history and known issues, which developer likely introduced ISSUE-1042, and what module is affected by ISSUE-1039?
+  evaluator: contains_keywords
+  expected: ["kim", "webhooks", "ml"]
+
+- id: LC-04
+  category: Long Context Coherence
+  prompt: |
+    Read this meeting transcript and answer.
+
+    MEETING: Q1 Retrospective - Platform Team
+    Date: March 28, 2024
+    Attendees: Maria (PM), Alex (Backend), Casey (Frontend), Taylor (DevOps)
+
+    Maria: Let's review Q1. We shipped the new dashboard but missed the mobile SDK. What went well?
+
+    Casey: The React migration went smoother than expected. We cut bundle size by 40%.
+
+    Alex: Backend performance improved 3x after the Rust rewrite. But we introduced a regression in the payment validation that took 2 weeks to fix.
+
+    Taylor: Infrastructure costs dropped 25% with the new auto-scaling. However, we had 3 production incidents - all related to database connection pooling.
+
+    Maria: What about the ML pipeline?
+
+    Alex: Quinn's anomaly detection model is ready but we can't deploy it because the feature flags system isn't complete. That's blocking Q2.
+
+    Casey: Also, Morgan left the team last month. We're down to 1 frontend engineer.
+
+    Maria: Action items: 1) Alex to fix payment validation regression by April 5. 2) Taylor to implement connection pooling limits. 3) We need to hire 2 frontend engineers. 4) Unblock ML deployment.
+
+    Question: What was the root cause of all 3 production incidents in Q1, and what two items are blocking the Q2 ML deployment?
+  evaluator: contains_keywords
+  expected: ["connection pooling", "feature flags", "quinn"]
+
+- id: LC-05
+  category: Long Context Coherence
+  prompt: |
+    Read this customer support conversation and identify the issue.
+
+    Ticket #4521: Premium subscription billing issue
+    Customer: Sarah Mitchell
+    Plan: Premium ($49/month)
+
+    [Mar 15, 10:30] Sarah: I was charged $98 today but I only have one subscription.
+    [Mar 15, 11:15] Agent (Tom): I see your account. You have Premium plan active. Let me check the billing history.
+    [Mar 15, 11:45] Tom: I see charges on Mar 1 and Mar 15. Were you on the Trial plan before?
+    [Mar 15, 12:00] Sarah: Yes, I started with Trial on Feb 15, upgraded to Basic on Feb 28, then to Premium on Mar 1.
+    [Mar 15, 12:30] Tom: I see the issue. When you upgraded from Basic to Premium, the prorated credit wasn't applied. You should have been charged $32, not $49.
+    [Mar 15, 13:00] Sarah: So I'm owed $17 back?
+    [Mar 15, 13:15] Tom: Actually, looking at the Trial-to-Basic upgrade on Feb 28, there was a $15 credit that wasn't applied either. Total credit owed: $32.
+    [Mar 15, 13:45] Tom: I've processed a refund of $32 to your Visa ending in 4242. It will appear in 3-5 business days.
+    [Mar 15, 14:00] Sarah: Thank you!
+
+    Question: What was the total refund amount, which card was it refunded to, and how many plan changes did the customer make before the billing issue occurred?
+  evaluator: format_check
+  expected:
+    checks:
+      - type: contains
+        value: "32"
+      - type: contains
+        value: "4242"
+      - type: regex
+        value: "(?i)(\\b2\\b|two)[^.\\n]*(plan\\s*change)|plan\\s*change[^.\\n]*(\\b2\\b|two)"
+
+- id: LC-06
+  category: Long Context Coherence
+  prompt: |
+    Read this technical document and answer.
+
+    INCIDENT REPORT: INC-2024-0892
+    Date: 2024-03-15 14:32 UTC
+    Severity: P1
+
+    Timeline:
+    - 14:30: Normal traffic patterns on payment-service
+    - 14:32: P99 latency spiked from 200ms to 5.2s
+    - 14:33: Alert fired on PagerDuty
+    - 14:35: On-call engineer Taylor acknowledged
+    - 14:38: Taylor identified Redis connection pool exhaustion
+    - 14:40: Redis cluster node-3 was OOM killed at 14:28
+    - 14:42: Taylor restarted node-3 and increased pool size
+    - 14:45: Latency returned to normal
+    - 15:00: Post-mortem initiated
+
+    Root Cause: Redis node-3 ran out of memory due to a memory leak in the session cache (BUG-4521). The leak was introduced in v2.3.1 (deployed 2024-03-14). Sessions were not being expired properly.
+
+    Fix: Hotfix v2.3.2 deployed 2024-03-16. Added TTL to session cache entries. Implemented Redis memory alerts at 80% threshold.
+
+    Question: How many minutes elapsed between the root cause event (Redis OOM at 14:28) and the fix being applied (restart + pool increase)? Answer in the form "N minutes".
+  evaluator: contains_keywords
+  expected: ["14 minutes"]
+
+- id: LC-07
+  category: Long Context Coherence
+  prompt: |
+    Read this research abstract and answer.
+
+    Title: Effects of Sleep Deprivation on Cognitive Performance
+
+    Study Design: 120 participants divided into 4 groups (30 each).
+    - Group A: Full sleep (8 hours) - Control
+    - Group B: Mild deprivation (6 hours)
+    - Group C: Moderate deprivation (4 hours)
+    - Group D: Severe deprivation (2 hours)
+
+    Tests administered at 9 AM, 12 PM, 3 PM, and 6 PM.
+
+    Results (cognitive test scores, 0-100):
+               9AM  12PM  3PM  6PM
+    Group A:   92   90   88   87
+    Group B:   88   82   78   75
+    Group C:   82   71   62   55
+    Group D:   75   58   42   30
+
+    Conclusion: Sleep deprivation has a cumulative effect throughout the day. Severe deprivation (Group D) showed a 60% decline from morning to evening.
+
+    Question: At what time of day did Group B first score below 80?
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: "(?i)3\\s*pm|3:00|afternoon|15:00"

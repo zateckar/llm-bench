@@ -1,0 +1,91 @@
+# Mathematical Reasoning Test Suite
+
+- id: MR-01
+  category: Mathematical Reasoning
+  prompt: "A retailer offers a 'Triple Tier' discount: first 25% off the original price, then an additional 15% off that discounted price, and finally a loyalty coupon of 10% off the second discounted price. However, there is a sales tax of 8% applied to the final checkout price. What is the net percentage discount from the original price, including the sales tax? Reply with just the number rounded to two decimal places (e.g., 35.12 for 35.12%)."
+  evaluator: numeric_match
+  expected: 38.04
+
+- id: MR-02
+  category: Mathematical Reasoning
+  prompt: "A train travels from Station A to B at 90 km/h, but stops for 15 minutes due to a signal delay. It then returns from B to A at 120 km/h with no delays. If the distance between A and B is 180 km, what is the average speed of the train for the entire round trip in km/h? Reply with just the number, rounded to two decimal places."
+  evaluator: numeric_match
+  expected: 96.0
+
+- id: MR-03
+  category: Mathematical Reasoning
+  prompt: "How many distinct ways can you arrange the letters in the word 'PROBABILITY' such that the two 'I's are never adjacent? Reply with just the number."
+  evaluator: numeric_match
+  expected: 8164800.0
+
+- id: MR-04
+  category: Mathematical Reasoning
+  prompt: "A biased coin has a probability of 0.6 of landing heads. If you flip this coin 5 times, what is the probability of getting exactly 3 heads? Express as a decimal, rounded to four decimal places."
+  evaluator: numeric_match
+  expected: 0.3456
+
+- id: MR-05
+  category: Mathematical Reasoning
+  prompt: "A hemispherical bowl of radius 6 cm is filled with water to a depth of 3 cm. What is the volume of the water in cubic centimeters? Use pi = 3.14159. Reply with just the number, rounded to two decimal places."
+  evaluator: numeric_match
+  expected: 141.37
+
+- id: MR-06
+  category: Mathematical Reasoning
+  prompt: "If you invest $8,000 in an account with an annual interest rate of 5.5% compounded monthly, how much money will be in the account after 4 years? Round to the nearest cent. Reply with just the number."
+  evaluator: numeric_match
+  expected: 9963.58
+
+- id: MR-07
+  category: Mathematical Reasoning
+  prompt: "A bag contains 5 red, 4 blue, and 3 green marbles. If you draw 3 marbles without replacement, what is the probability of drawing exactly 1 of each color? Express as a fraction in lowest terms (e.g. 3/11)."
+  evaluator: contains_keywords
+  expected: ["3/11", "3}{11"]
+
+- id: MR-08
+  category: Mathematical Reasoning
+  prompt: "If tan(x) = -3/4 and x is in the second quadrant, what is sin(2x)? Express as a decimal, reply with just the number."
+  evaluator: numeric_match
+  expected: -0.96
+
+- id: MR-09
+  category: Mathematical Reasoning
+  prompt: "An infinite geometric series has a first term of 12 and a sum of 16. What is the sum of the first 4 terms of this series? Express as a decimal, reply with just the number."
+  evaluator: numeric_match
+  expected: 15.9375
+
+- id: MR-10
+  category: Mathematical Reasoning
+  prompt: "How many diagonals does a regular 20-gon (icosagon) have? Reply with just the number."
+  evaluator: numeric_match
+  expected: 170.0
+
+- id: MR-11
+  category: Mathematical Reasoning
+  prompt: "What is the value of the second derivative of f(x) = ln(x^2 + 1) evaluated at x = 2? Express as a decimal, reply with just the number."
+  evaluator: numeric_match
+  expected: -0.24
+
+- id: MR-12
+  category: Mathematical Reasoning
+  prompt: "A ladder of length 13 meters stands vertically against a wall. The base of the ladder is pulled away from the wall at a constant rate of 2 meters per second. How fast is the top of the ladder sliding down the wall (in meters per second) when the base is 5 meters from the wall? Reply with the absolute speed in m/s, rounded to two decimal places."
+  evaluator: numeric_match
+  expected: 0.83
+
+- id: MR-13
+  category: Mathematical Reasoning
+  prompt: "What is the determinant of the 3x3 matrix [[3, 2, 4], [1, 0, 2], [-1, 1, 2]]? Reply with just the number."
+  evaluator: numeric_match
+  expected: -10.0
+
+- id: MR-14
+  category: Mathematical Reasoning
+  prompt: "What is the sum of the squares of all integers from 1 to 50? Reply with just the number."
+  evaluator: numeric_match
+  expected: 42925.0
+
+- id: MR-15
+  category: Mathematical Reasoning
+  prompt: "An acute triangle has sides of length 7, 8, and 10. What is the area of this triangle? Reply with just the number, rounded to two decimal places."
+  evaluator: numeric_match
+  expected: 27.81

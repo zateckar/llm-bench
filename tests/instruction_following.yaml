@@ -1,0 +1,187 @@
+# Instruction Following Test Suite
+
+- id: IF-01
+  category: Instruction Following
+  prompt: |
+    Write a response that follows ALL of these rules:
+    1. Exactly 4 sentences.
+    2. Each sentence must start with a different letter of the word "WEST" (W, E, S, T) in that exact order (first starts with W, second with E, etc.).
+    3. No sentence may contain the letter 'o' anywhere (a lipogram).
+    4. Total word count must be between 25 and 35 words.
+    Reply with ONLY the response.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: min_sentences
+        value: 4
+      - type: max_sentences
+        value: 4
+      - type: min_words
+        value: 25
+      - type: max_words
+        value: 35
+      - type: not_contains
+        value: o
+      - type: starts_with
+        value: W
+      - type: regex
+        value: "(?im)^\\s*W"
+      - type: regex
+        value: "(?im)[.!?]\\s+E"
+      - type: regex
+        value: "(?im)[.!?]\\s+S"
+      - type: regex
+        value: "(?im)[.!?]\\s+T"
+
+- id: IF-02
+  category: Instruction Following
+  prompt: |
+    Return a JSON object with exactly this structure:
+    {
+      "developer": "John Doe",
+      "skills": ["Python", "Rust", "TypeScript"],
+      "experience_years": 8,
+      "is_active": true,
+      "stats": {
+        "total_skills": 3,
+        "experience_squared": 64
+      }
+    }
+    Reply with ONLY the JSON. Do not use any markdown formatting.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: json
+      - type: contains
+        value: experience_squared
+      - type: contains
+        value: TypeScript
+      - type: contains
+        value: Rust
+
+- id: IF-03
+  category: Instruction Following
+  prompt: |
+    Write a poem with exactly 4 lines. Each line must:
+    - Be exactly 6 words long.
+    - Start with a capital letter.
+    - End with a period.
+    - Contain NO occurrences of the letter 't' (a lipogram).
+    Reply with ONLY the poem.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: line_count
+        value: 4
+      - type: word_count_exact
+        value: 24
+      - type: not_contains
+        value: t
+
+- id: IF-04
+  category: Instruction Following
+  prompt: |
+    Create a markdown table with exactly 4 rows (excluding the header row) and exactly 4 columns.
+    The header columns must be: Book, Author, Year, Pages
+    The rows must show books with Years sorted in ascending order, and Pages must all be greater than 300.
+    Reply with ONLY the table.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: contains
+        value: "| Book | Author | Year | Pages |"
+      - type: regex
+        value: "\\|.*\\|.*\\|.*\\|.*\\|"
+      - type: min_sentences
+        value: 5
+
+- id: IF-05
+  category: Instruction Following
+  prompt: |
+    Write a response that:
+    - Starts with the word "Alpha"
+    - Ends with the word "Omega"
+    - Contains the word "Sigma" exactly twice
+    - Contains no other Greek letter names (e.g. beta, gamma, delta, theta, pi, mu, lambda)
+    - Is between 20 and 30 words long
+    Reply with ONLY the response.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: starts_with
+        value: Alpha
+      - type: min_words
+        value: 20
+      - type: max_words
+        value: 30
+      - type: regex
+        value: "(?i)\\bSigma\\b.*\\bSigma\\b"
+      - type: not_regex
+        value: "(?i)\\b(beta|gamma|delta|theta|pi|mu|lambda)\\b"
+
+- id: IF-06
+  category: Instruction Following
+  prompt: |
+    Write a numbered list with exactly 8 items. Each item must be a single word of exactly 5 letters. All 8 words must start with the letter 'C'. Reply with ONLY the list.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: numbered_list
+      - type: line_count
+        value: 8
+      - type: regex
+        value: "(?im)^\\s*\\d+[.):]\\s*C[a-zA-Z]{4}\\s*$"
+
+- id: IF-07
+  category: Instruction Following
+  prompt: |
+    Return a JSON array containing exactly 6 elements. Each element must be an object with:
+    - "index": an integer from 0 to 5 in order
+    - "uuid": a random valid UUIDv4 string
+    - "status": alternating "pending" / "completed" starting with "pending" for index 0
+    Reply with ONLY the JSON array.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: json
+      - type: contains
+        value: pending
+      - type: contains
+        value: completed
+      - type: regex
+        value: "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+
+- id: IF-08
+  category: Instruction Following
+  prompt: "Write a short paragraph about functional programming in Haskell. It must contain the word 'monad' and must NOT mention the words 'imperative', 'loop', or 'python'. Reply with the paragraph only."
+  evaluator: format_check
+  expected:
+    checks:
+      - type: contains
+        value: monad
+      - type: not_regex
+        value: "(?i)\\b(imperative|loop|python)\\b"
+
+- id: IF-09
+  category: Instruction Following
+  prompt: "Write a paragraph that starts with 'Yesterday' and ends with 'tomorrow'. Do not use the letters 'a' or 'i' anywhere in the paragraph."
+  evaluator: format_check
+  expected:
+    checks:
+      - type: starts_with
+        value: Yesterday
+      - type: not_contains
+        value: a
+      - type: not_contains
+        value: i
+
+- id: IF-10
+  category: Instruction Following
+  prompt: "Write a response using ONLY the words: rust, is, safe, fast, fun. Each word can appear at most once. Maximum 10 words total. Reply with only those words."
+  evaluator: format_check
+  expected:
+    checks:
+      - type: max_words
+        value: 10
+      - type: regex
+        value: "(?i)^[\\s]*(?:(?:rust|is|safe|fast|fun)[\\s.,!]*)+$"
