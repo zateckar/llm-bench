@@ -6,12 +6,12 @@ FROM python:3.13-slim AS builder
 # Install UV for fast dependency resolution
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-WORKDIR /build
+WORKDIR /app
 
 # Copy only dependency metadata for layer caching
 COPY pyproject.toml uv.lock* ./
 
-# Install production dependencies into a venv under /build/.venv
+# Install production dependencies into a venv under /app/.venv
 RUN uv sync --frozen --no-dev --no-editable
 
 # =============================================================================
@@ -31,7 +31,7 @@ RUN groupadd -r llmbench && useradd -r -g llmbench -d /app -s /sbin/nologin llmb
 WORKDIR /app
 
 # Copy the pre-built venv from the builder stage
-COPY --from=builder --chown=llmbench:llmbench /build/.venv /app/.venv
+COPY --from=builder --chown=llmbench:llmbench /app/.venv /app/.venv
 
 # Copy application code (owned by non-root user)
 COPY --chown=llmbench:llmbench . .
@@ -56,4 +56,4 @@ EXPOSE 8000
 # Drop privileges before starting the server
 USER llmbench
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
