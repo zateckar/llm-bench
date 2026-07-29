@@ -290,3 +290,97 @@
     - function: run_length_encode
       args: ["zzzzzzzzzzzz"]
       expected: "z12"
+
+- id: CG-13
+  category: Code Generation
+  difficulty: expert
+  description: "Manacher / expand-around-centre; must return the longest, not just its length"
+  prompt: |
+    Write a Python function `longest_palindrome(s: str) -> str` returning the longest palindromic substring of s. If several substrings tie for the longest length, return the one that appears first in s. Return the empty string for empty input.
+    Must run in O(n^2) or better; a brute-force O(n^3) will be too slow.
+    Reply with only the code in a Python code block.
+  evaluator: code_exec
+  expected:
+    - function: longest_palindrome
+      args: ["babad"]
+      expected: "bab"
+    - function: longest_palindrome
+      args: ["cbbd"]
+      expected: "bb"
+    - function: longest_palindrome
+      args: ["a"]
+      expected: "a"
+    - function: longest_palindrome
+      args: ["ac"]
+      expected: "a"
+    - function: longest_palindrome
+      args: [""]
+      expected: ""
+    - function: longest_palindrome
+      args: ["forgeeksskeegfor"]
+      expected: "geeksskeeg"
+
+- id: CG-14
+  category: Code Generation
+  difficulty: expert
+  description: "Requires a monotonic stack, not nested loops"
+  prompt: |
+    Write a Python function `largest_rectangle(heights: list[int]) -> int` returning the area of the largest axis-aligned rectangle contained entirely within the histogram given by `heights` (bar widths are 1). Return 0 for empty input.
+    Reply with only the code in a Python code block.
+  evaluator: code_exec
+  expected:
+    - function: largest_rectangle
+      args: [[2, 1, 5, 6, 2, 3]]
+      expected: 10
+    - function: largest_rectangle
+      args: [[2, 4]]
+      expected: 4
+    - function: largest_rectangle
+      args: [[]]
+      expected: 0
+    - function: largest_rectangle
+      args: [[5]]
+      expected: 5
+    - function: largest_rectangle
+      args: [[1, 1, 1, 1]]
+      expected: 4
+    - function: largest_rectangle
+      args: [[0, 0]]
+      expected: 0
+    - function: largest_rectangle
+      args: [[6, 2, 5, 4, 5, 1, 6]]
+      expected: 12
+
+- id: CG-15
+  category: Code Generation
+  difficulty: expert
+  description: "Regular-expression backtracking with memoisation; '.' and '*' semantics"
+  prompt: |
+    Write a Python function `regex_match(s: str, p: str) -> bool` implementing a simplified regular-expression matcher with full-string anchoring. Support only:
+      - `'.'` matching any single character
+      - `'*'` matching zero or more of the preceding element
+    The entire string s must match the entire pattern p (no partial matching). Return True/False. Both inputs consist of lowercase letters plus '.' and '*'.
+    Reply with only the code in a Python code block.
+  evaluator: code_exec
+  expected:
+    - function: regex_match
+      args: ["aa", "a"]
+      expected: false
+    - function: regex_match
+      args: ["aa", "a*"]
+      expected: true
+    - function: regex_match
+      args: ["ab", ".*"]
+      expected: true
+    - function: regex_match
+      args: ["aab", "c*a*b"]
+      expected: true
+    - function: regex_match
+      args: ["mississippi", "mis*is*p*."]
+      expected: false
+    - function: regex_match
+      args: ["", "a*b*"]
+      expected: true
+    - function: regex_match
+      args: ["ab", ".*c"]
+      expected: false

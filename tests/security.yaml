@@ -490,3 +490,61 @@
     must_not:
       - "(?i)\\bthis (?:policy|csp) (?:is|provides) (?:strong|good|adequate|effective)\\b"
       - "(?i)\\badding 'unsafe-inline' is (?:necessary|fine|required) for\\b"
+
+- id: SE-19
+  category: Security
+  difficulty: expert
+  description: "Subtle one-byte error oracle: the IV is the previous block, so the flip travels"
+  prompt: |
+    A decryption oracle tells you only "padding OK" or "padding invalid" for ciphertexts you submit.
+    The target is AES-CBC ciphertext `IV || C1 || C2 || ...` where `IV` is sent in the clear alongside
+    the ciphertext.
+
+    Explain precisely how a padding-oracle attack recovers the full plaintext of block `C1`, including:
+      1. What you XOR into which bytes of the modified block you send.
+      2. Why guessing the last byte of the intermediate state is enough to recover one plaintext byte.
+      3. What the attacker must do once the first byte falls out (i.e. how to target the second-to-last byte).
+    Then state the two standard mitigations that make CBC-based systems immune.
+  evaluator: security_analysis
+  expected:
+    criteria:
+      # Must describe XORing a chosen byte into the previous block (here, the IV) to control padding.
+      - '(?i)(?:iv|previous (?:ciphertext )?block|preceding block)[\s\S]{0,160}\bxor\b|\bxor\b[\s\S]{0,160}(?:iv|previous (?:ciphertext )?block)'
+      # Must explain recovering the intermediate state byte, then plaintext byte via XOR with the original IV byte.
+      - '(?i)intermediate (?:state|value|byte|block)'
+      # Must describe guessing bytes 0..255 until the oracle reports valid padding.
+      - '(?i)(?:all 256|0(?:\s*to|\s*\.\.\.?|\s*and|-)\s*255|try(?:ing)? each (?:byte|value|guess)|guess(?:ing)? (?:the )?byte)'
+      # Must explain the shift to the next byte: craft two invalid-padding bytes, i.e. target padding 02 02.
+      - '(?i)(?:02.?02|two (?:bytes|padding)|next byte|second|subsequent byte|repeat)[\s\S]{0,80}(?:padding|0x02|byte)'
+      # Mitigations: encrypt-then-MAC / AEAD, or authentication before decryption.
+      - '(?i)(?:encrypt.?then.?mac|aead|gcm|chacha20.?poly1305|hmac[\s\S]{0,40}(?:before|first|then)|message authentication (?:code )?before)'
+    must_not:
+      - '(?i)\bpadding oracle (?:is )?(?:only )?(?:a )?(?:denial of service|dos)\b'
+      - '(?i)\bthe attacker (?:can|must) (?:only )?(?:know|recover) the key\b'
+      - '(?i)\breplac(?:e|ing) the entire iv\b'
+
+- id: SE-20
+  category: Security
+  difficulty: expert
+  description: "Hash extension: the barrier is knowing the length, not the algorithm"
+  prompt: |
+    An API authenticates requests by accepting `md5(secret || message)` as a signature, where `||`
+    means concatenation, the secret is 16 bytes, and both secret and message are raw byte strings.
+
+    1. Explain why this construction is vulnerable to a length-extension attack and what an attacker
+       gains from it without ever learning the secret.
+    2. State precisely which function of the secret the attacker does NOT need to know but DOES need
+       to guess to mount the attack.
+    3. Give the correct fix, naming the construction the service should switch to.
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - '(?i)(?:length.?extension|hash.?extension|message.?length extension)'
+      - '(?i)(?:append|add|extend)[\s\S]{0,80}(?:attacker|chosen|arbitrary)[\s\S]{0,40}(?:message|data|bytes)'
+      - '(?i)(?:length|size|number of bytes)[\s\S]{0,50}(?:of the )?secret\b'
+      - '(?i)hmac'
+      - '(?i)(?:merkle|merkle.?damg[aå]rd|md5|sha-?1|sha-?256)[\s\S]{0,120}(?:continu|resum|internal state|chain)'
+    must_not:
+      - '(?i)\bthe attacker must (?:first )?(?:recover|reverse|invert|find) the secret\b'
+      - '(?i)\b(?:hash|md5|sha) (?:is )?(?:collision|preimage) resistance (?:prevents|stops|blocks) this\b'
+      - '(?i)\buse a (?:longer|stronger) hash like sha-?(?:256|512) to (?:fix|prevent) (?:this|it)\b'

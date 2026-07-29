@@ -336,3 +336,77 @@
         order: 5
     must_not:
       - '(?i)\baccuracy is (?:the |a )?(?:good|appropriate|reliable|best) metric\b'
+
+- id: TD-11
+  category: Terminal Debugging
+  difficulty: expert
+  description: "Concurrent cache misattribution: the fix is snapshotting, not a bigger lock"
+  prompt: |
+    This memoisation cache is used from several threads and sometimes returns the value computed for a
+    DIFFERENT key, never crashing and never raising. Explain the exact interleaving that produces the
+    wrong result, and give a correct minimal fix without replacing the whole scheme.
+
+    ```python
+    import threading
+
+    _cache = {}
+    _lock = threading.Lock()
+
+    def memoized(fn, *args):
+        key = (fn.__name__, args)
+        if key in _cache:            # check
+            return _cache[key]
+        result = fn(*args)           # compute outside the lock
+        with _lock:
+            _cache[key] = result     # set
+        return result
+    ```
+  evaluator: security_analysis
+  expected:
+    min_criteria: 4
+    criteria:
+      - '(?i)(?:check.?then.?act|time.?of.?check|double[- ]checked|check-then-set|toctou)'
+      - '(?i)(?:second|second caller|two threads)[\s\S]{0,120}(?:same|same key)'
+      - '(?i)(?:stale|overwrit|last writer wins|race)[\s\S]{0,80}(?:value|result|entry)'
+      - '(?i)(?:dict\.setdefault|setdefault[\s\S]{0,60}(?:under|inside|with) (?:the )?lock)'
+      - '(?i)(?:per[- ]key (?:lock|event|future)|a lock per key|once|future)'
+    must_not:
+      - '(?i)\bthe lock (?:already )?protects (?:the whole|all of) (?:the )?(?:function|operation)\b'
+      - '(?i)\bjust (?:wrap|move) (?:everything|the whole function) (?:under|in) the lock\b'
+
+- id: TD-12
+  category: Terminal Debugging
+  difficulty: expert
+  description: "Floating-point boundary: dead/live junction is not where the naive formula says"
+  prompt: |
+    A packet simulator accumulates a round-trip time using `float32`:
+
+    ```python
+    import numpy as np
+    rtt = np.float32(0.0)
+    for sample in samples:            # ~50,000 tight loop
+        rtt = np.float32(rtt) + np.float32(sample)
+    ```
+
+    The running sum grows to ~1.6e7, then begins returning the same value repeatedly for consecutive
+    calls even though new samples keep arriving; after enough samples it sometimes jumps backwards by
+    a few units. Explain what limits the representable step size at that magnitude and why the sum
+    freezes, and then give the one-line change that eliminates the behaviour for a loop of this length.
+  evaluator: multi_step_solution
+  expected:
+    steps:
+      - step: "Identifies float32's ~7 decimal digits / 2^24 precision"
+        pattern: '(?:2\^24|16777216|2 to the (?:power )?24|23[- ]bit|24[- ]bit|machine epsilon|\bepsilon\b)'
+        order: 1
+      - step: "Explains that adding a small increment rounds back to the same value"
+        pattern: '(?:round(?:ing|s)? (?:back|off|to zero)|absorbed|swallowed|no(?:t)? representable|ulp|unit in the last place)'
+        order: 2
+      - step: "Explains the backward jump as a cast between float64 and float32"
+        pattern: '(?:float64|double|64[- ]bit)[\s\S]{0,100}(?:cast|truncat|narrow|float32)'
+        order: 3
+      - step: "Recommends accumulating in float64 (or Kahan / Neumaier)"
+        pattern: '(?:accumulat\w*[\s\S]{0,40}(?:float64|double)|np\.float64|bincount|math\.fsum|kahan|neumaier)'
+        order: 4
+    must_not:
+      - '(?i)\b(?:switch to|use) (?:python . int|arbitrary precision) (?:to fix|solves)\b'
+      - '(?i)\bthe bug is (?:an? )?(?:off[- ]by[- ]one|indexing error)\b'

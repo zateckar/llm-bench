@@ -281,3 +281,30 @@
         order: 6
     must_not:
       - '(?i)\bACL\s*=\s*[''"]public-read'
+
+- id: TF-09
+  category: Terminal File Operations
+  difficulty: expert
+  description: "tar size field: octal-ASCII plus the obscure GNU base-256 extension"
+  prompt: |
+    A tar header stores the file size at offset 124 as an 11-byte field. POSIX stores it as an
+    octal ASCII string padded with NUL or space characters. GNU tar switches to a base-256
+    encoding when the first byte has its high bit set: the remaining bytes are the file size as
+    a big-endian binary integer (used for sizes that overflow the octal field).
+    Write `parse_tar_size(field: bytes) -> int` that decodes BOTH encodings. `field` is always
+    exactly 11 bytes.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: parse_tar_size
+      args: [[48, 48, 48, 48, 48, 48, 48, 49, 49, 51, 48]]
+      expected: 600
+    - function: parse_tar_size
+      args: [[48, 48, 48, 48, 48, 48, 49, 49, 51, 48, 32]]
+      expected: 600
+    - function: parse_tar_size
+      args: [[48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48]]
+      expected: 0
+    - function: parse_tar_size
+      args: [[128, 0, 0, 0, 0, 0, 0, 0, 0, 2, 88]]
+      expected: 600

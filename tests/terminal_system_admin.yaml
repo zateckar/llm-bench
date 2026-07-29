@@ -316,3 +316,55 @@
       description: "Runs as root"
       required: false
       forbidden: true
+
+- id: TS-11
+  category: Terminal System Admin
+  difficulty: expert
+  description: "eBPF tracepoint must probe the right kernel function, or nothing logs"
+  prompt: |
+    Write a one-line bpftrace (or equivalent bcc/bpftrace script) command that prints, every time any
+    process on the system opens the file /etc/shadow for reading, the accessing process's name and PID
+    and the filename it tried. It must use kprobe/tracepoint instrumentation of the VFS open path, not
+    polling of /proc or lsof.
+    Reply with ONLY the single command.
+  evaluator: command_correctness
+  expected:
+    - pattern: '(?:bpftrace|bpftrace\s+-e|bcc)'
+      description: "Uses bpftrace or bcc"
+      required: true
+    - pattern: '(?:tracepoint:syscalls:sys_enter_open|tracepoint:syscalls:sys_enter_openat|kprobe:do_sys_open|kprobe:__x64_sys_open|kfunc:do_sys_open|do_sys_openat2)'
+      description: "Instruments the kernel open path"
+      required: true
+    - pattern: '/etc/shadow'
+      description: "Filters on /etc/shadow"
+      required: true
+    - pattern: '(?:comm|pid)'
+      description: "Prints the process name or PID"
+      required: true
+    - pattern: '(?:/proc|lsof|inotify|auditd|strace)'
+      description: "Relies on /proc polling, lsof or auditd instead of eBPF"
+      required: false
+      forbidden: true
+
+- id: TS-12
+  category: Terminal System Admin
+  difficulty: expert
+  description: "cgroup v2 PSI: the pressure stall signal precedes the OOM kill"
+  prompt: |
+    A Linux cgroup v2 memory controller shows these PSI values:
+      memory.pressure: some avg10=42.31 avg60=29.15 avg300=12.03 total=8472103
+      memory.events: low 0 high 12 max 47 oom 0 oom_kill 0
+      memory.current = 3.9 GiB, memory.max = 4 GiB.
+
+    Answer both, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>`
+    (a) Is the workload currently suffering memory pressure stalls (yes/no)?
+    (b) Has the OOM killer ever fired within this cgroup (yes/no)?
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*yes\s*,\s*no\s*\.?\s*$'
+    must_not:
+      # A reply that conflates 'max exceeded' with 'OOM kill fired' fairs the trap.
+      - '(?i)\boom killer (?:has been )?(?:fired|invoked|triggered|killed processes)\b'
+      - '(?i)\byes\s*,\s*yes\b'

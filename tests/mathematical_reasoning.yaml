@@ -178,3 +178,67 @@
   expected:
     patterns:
       - '(?im)^\s*ANSWERS:\s*84\s*,\s*31\s*,\s*1023\s*\.?\s*$'
+
+- id: MR-24
+  category: Mathematical Reasoning
+  difficulty: expert
+  description: "Steinmetz solid: volume of the intersection of two perpendicular cylinders"
+  prompt: "Two solid cylinders of radius 1 have axes that intersect perpendicularly. What is the volume of the region common to both? Reply with just the number rounded to four decimal places."
+  evaluator: numeric_match
+  expected: 5.3333
+
+- id: MR-25
+  category: Mathematical Reasoning
+  difficulty: expert
+  description: "Requires the derivative trick or a generating-function argument"
+  prompt: "Evaluate the infinite sum of n/2^n for n = 0, 1, 2, ... Reply with just the number."
+  evaluator: numeric_match
+  expected: 2.0
+
+- id: MR-26
+  category: Mathematical Reasoning
+  difficulty: expert
+  description: "Basel problem; the value is irrational-adjacent, not 1.5"
+  prompt: "What is the value of the infinite sum 1/1^2 + 1/2^2 + 1/3^2 + 1/4^2 + ... rounded to four decimal places? Reply with just the number."
+  evaluator: numeric_match
+  expected: 1.6449
+
+- id: MR-27
+  category: Mathematical Reasoning
+  difficulty: expert
+  description: "Repeated integration by parts; sign errors are the usual failure"
+  prompt: "Evaluate the definite integral of x^3 * e^x from x = 0 to x = 1. Reply with just the number rounded to four decimal places."
+  evaluator: numeric_match
+  expected: 0.5634
+
+- id: MR-28
+  category: Mathematical Reasoning
+  difficulty: expert
+  description: "Onto functions need Stirling numbers or inclusion-exclusion, not 3^5"
+  prompt: "How many surjective (onto) functions are there from a set of 5 elements to a set of 3 elements? Reply with just the number."
+  evaluator: numeric_match
+  expected: 150.0
+
+- id: MR-29
+  category: Mathematical Reasoning
+  difficulty: expert
+  description: "Euler's totient of a highly composite number"
+  prompt: "How many integers in the range 1 to 360 inclusive are coprime to 360? Reply with just the number."
+  evaluator: numeric_match
+  expected: 96.0
+
+- id: MR-30
+  category: Mathematical Reasoning
+  difficulty: expert
+  description: "Large power digit sum; must compute 2^100 exactly, not approximate"
+  prompt: "What is the sum of the decimal digits of 2^100? Reply with just the number."
+  evaluator: numeric_match
+  expected: 115.0
+
+- id: MR-31
+  category: Mathematical Reasoning
+  difficulty: expert
+  description: "Legendre's formula; the answer is not simply 5*5 or 10"
+  prompt: "What is the smallest positive integer n such that n! is divisible by 10^5? Reply with just the number."
+  evaluator: numeric_match
+  expected: 25.0

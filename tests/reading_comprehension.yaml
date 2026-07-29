@@ -170,3 +170,32 @@
   expected:
     patterns:
       - '(?im)^\s*ANSWERS:\s*14\s*,\s*26\s*,\s*13\s*\.?\s*$'
+
+- id: RC-13
+  category: Reading Comprehension
+  difficulty: expert
+  description: "Conditional probability over a two-step process; the answer is 0.640, not the naive 40%"
+  prompt: |
+    Passage: A clinical study enrolled patients over two years. In Year 1, 60% of the cohort received Treatment X and 40% received Treatment Y. In Year 2, 30% of the Year-1 X group was switched to Y, and 20% of the Year-1 Y group was switched to X. No patients entered or left the study in Year 2.
+
+    Question: Among the patients who were on Treatment Y at the end of Year 2, what fraction had been on Treatment Y since Year 1 (i.e. were never switched)? Express it as a decimal rounded to three places. Reply with just the number.
+  evaluator: numeric_match
+  expected: 0.64
+
+- id: RC-14
+  category: Reading Comprehension
+  difficulty: expert
+  description: "Must combine the per-week rates with the two silent weeks to get the uncounted total"
+  prompt: |
+    Passage: A legal review team examined exactly 4,800 contracts over 12 weeks, exactly 400 contracts every week. Senior reviewers averaged 120 of those 400 contracts each week, junior reviewers the rest. Management's quarterly report, however, counted only the first 10 weeks of work.
+
+    Question: How many contracts reviewed by the team were left out of the quarterly report, and which group contributed more to that uncounted work? Give the number and then the group adjective, in the form `N / Group`.
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?i)\b800\b\s*/\s*juniors?\b|\b800 contracts?\b.{0,60}juniors?'
+      - '(?i)\bjuniors?\b'
+      - '(?i)\b800\b\x20'
+    must_not:
+      # The passage gives a 400/week average, so 'to compute this exactly we need to know how work varied week to week' is a hallucinated hedge - the passage fixes it at 400/week.
+      - '(?i)\bcannot (?:be )?determined\b|\binsufficient information\b|\bnot enough (?:data|information)\b'

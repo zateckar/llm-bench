@@ -1,3 +1,8 @@
+# Development setup: builds from source and bind-mounts ./tests so new YAML
+# test files show up without a rebuild. Do NOT use this file in production:
+# the ./tests mount shadows the suite baked into the image, so the running
+# container would serve whatever (possibly stale) files sit next to this
+# file on the host. Use docker-compose.prod.yml for production instead.
 services:
   app:
     build:
@@ -10,7 +15,7 @@ services:
       # Mount tests as read-only so new YAML test files can be added without
       # rebuilding the image. This is a development convenience; for production
       # pin the tests in the image or use a separate versioned volume.
-      - ./tests:/app/tests:ro
+      # - ./tests:/app/tests:ro
     environment:
       # --- Mode ---------------------------------------------------------------
       - ENVIRONMENT=${ENVIRONMENT:-production}

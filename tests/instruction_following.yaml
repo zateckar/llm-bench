@@ -303,3 +303,91 @@
         value: '(?i)\b(python|java|javascript)\b'
         description: "excluded languages absent"
       - type: unique_lines
+
+- id: IF-13
+  category: Instruction Following
+  difficulty: expert
+  description: "Chained numeric constraint: sum must equal exactly, and every line must be a valid JSON value"
+  prompt: |
+    Produce a JSON array containing exactly 6 integers such that all of the following hold simultaneously:
+      1. They sum to exactly 100.
+      2. Every value is a different prime number.
+      3. They appear in strictly increasing order.
+    Output ONLY the JSON array (a single line of valid JSON). No code fence, no commentary.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: json
+        root: array
+        length: 6
+        no_markdown: true
+      - type: regex
+        value: '\[\s*\d+\s*(?:,\s*\d+\s*){5}\]\s*$'
+        description: "single-line array of six integers"
+      - type: regex
+        value: '^\[\s*(?:2|3|5|7|11|13|17|19|23|29|31|37|41|43|47|53|59|61|67|71)\s*,'
+        description: "first element is prime"
+      - type: regex
+        value: '(?:\b(?:2|3|5|7|11|13|17|19|23|29|31|37|41|43|47|53|59|61|67|71|73|79|83|89|97)\b[\s,]*){6}'
+        description: "every element is a small prime"
+
+- id: IF-14
+  category: Instruction Following
+  difficulty: expert
+  description: "Reciprocal lipogram + word-count + structural shape all at once"
+  prompt: |
+    Write a product-review paragraph for a fictional keyboard. It must satisfy ALL of these:
+      1. Exactly 3 sentences.
+      2. Total word count between 40 and 55 words.
+      3. The letter 'e' must appear exactly 14 times (case-insensitive).
+      4. No word may contain the letter 'e' more than twice.
+      5. The third sentence must begin with the word "Overall".
+    Reply with ONLY the paragraph.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: sentence_count_exact
+        value: 3
+      - type: min_words
+        value: 40
+      - type: max_words
+        value: 55
+      - type: count_occurrences
+        pattern: e
+        count: 14
+      - type: not_regex
+        value: '(?i)\w*e\w*e\w*e' 
+        description: "no word has three or more 'e's"
+      - type: regex
+        value: '[.!?]\s+["'']?Overall\b'
+        description: "third sentence starts with 'Overall'"
+
+- id: IF-15
+  category: Instruction Following
+  difficulty: expert
+  description: "Deterministic arithmetic chain: each step depends on the previous, so one slip below breaks line 4"
+  prompt: |
+    Perform these four steps strictly in order, and output exactly one line per step in the form
+    `N. <number>` (step number, period, space, integer result; no units, no prose, no markdown):
+      1. Start with the number of letters in the English word "hierarchical".
+      2. Multiply step 1's result by the number of distinct prime factors of 84.
+      3. Add the smallest two-digit prime to step 2's result.
+      4. Report the remainder when step 3's result is divided by 5.
+    Reply with ONLY those four lines.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: line_count
+        value: 4
+      - type: regex
+        value: '(?m)^1\.\s*12\s*$'
+        description: "step 1 = 12 (letters in hierarchical)"
+      - type: regex
+        value: '(?m)^2\.\s*36\s*$'
+        description: "step 2 = 36 (12 * 3 distinct prime factors of 84)"
+      - type: regex
+        value: '(?m)^3\.\s*47\s*$'
+        description: "step 3 = 47 (36 + 11)"
+      - type: regex
+        value: '(?m)^4\.\s*2\s*$'
+        description: "step 4 = 2 (47 mod 5)"

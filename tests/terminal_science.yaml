@@ -289,3 +289,65 @@
     - function: markov_blanket
       args: [{"X": []}, "X"]
       expected: []
+
+- id: TN-09
+  category: Terminal Science
+  difficulty: expert
+  description: "Multiple-testing correction: only genes with p < 5e-6 survive Bonferroni, not all 'significant' ones"
+  prompt: |
+    A genomics study performs exactly 10,000 independent two-sided hypothesis tests, one per gene, and
+    obtains this p-value distribution:
+      - 5 genes with p < 1e-6
+      - 35 further genes with p in [1e-6, 5e-6)
+      - 60 further genes with p in [5e-6, 5e-5)
+
+    Answer both, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>`
+    (a) Using a Bonferroni correction to control the family-wise error rate at alpha = 0.05, how many
+        genes are called significant?
+    (b) Using the naive per-test threshold alpha = 0.05 with no correction, and assuming null genes
+        produce uniformly distributed p-values and the 100 listed genes are all true alternatives,
+        how many false positives would you expect at that threshold, in addition to the 100 true ones?
+  evaluator: regex_all
+  expected:
+    patterns:
+      # (a) threshold = 0.05/10000 = 5e-6, so 5 + 35 = 40 genes have p < 5e-6
+      - '(?im)^\s*ANSWERS:\s*40\s*,\s*495\s*\.?\s*$'
+    must_not:
+      # (a) accepting all 100 'statistically significant at alpha' genes is the classic error
+      - '(?i)^.*ANSWERS:\s*100'
+      # (b) 500 false positives (0.05 * 9900) is the naive error; correct is 495 or ~495
+      - '(?im)^\s*ANSWERS:\s*40\s*,\s*500\s*\.?\s*$'
+
+- id: TN-10
+  category: Terminal Science
+  difficulty: expert
+  description: "Rank-correlation subtleties: ties must be handled, and sign must be preserved"
+  prompt: |
+    Write a Python function `spearman_rho(x: list[float], y: list[float]) -> float` computing
+    Spearman's rank correlation coefficient between two equal-length sequences. It must handle tied
+    values by assigning them their average (mid-)rank, return the signed Pearson coefficient of those
+    ranks (0 when a sequence is constant), and not use scipy or numpy. Assume len(x) == len(y) >= 2.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: spearman_rho
+      args: [[1, 2, 3, 4, 5], [2, 4, 6, 8, 10]]
+      expected: 1.0
+      tolerance: 1.0e-9
+    - function: spearman_rho
+      args: [[1, 2, 3, 4, 5], [5, 4, 3, 2, 1]]
+      expected: -1.0
+      tolerance: 1.0e-9
+    - function: spearman_rho
+      args: [[1, 1, 2, 2, 3], [1, 2, 3, 4, 5]]
+      expected: 0.9486832980505138
+      tolerance: 1.0e-6
+    - function: spearman_rho
+      args: [[1, 2, 3], [3, 2, 1]]
+      expected: -1.0
+      tolerance: 1.0e-9
+    - function: spearman_rho
+      args: [[1, 1, 1], [2, 3, 4]]
+      expected: 0.0
+      tolerance: 1.0e-9

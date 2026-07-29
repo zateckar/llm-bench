@@ -196,3 +196,66 @@
   expected:
     patterns:
       - '(?im)^\s*ANSWERS:\s*1936\s*,\s*Enceladus\s*,\s*[Ww]eber\s*\.?\s*$'
+
+- id: FK-23
+  category: Factual Knowledge
+  difficulty: expert
+  description: "Named, obscure physical constant; models often guess Planck or Avogadro"
+  prompt: "What is the numerical value of the Rydberg constant (R-infinity), in inverse metres, rounded to the nearest whole number? Reply with just the number."
+  evaluator: numeric_match
+  expected: 10973731.0
+
+- id: FK-24
+  category: Factual Knowledge
+  difficulty: expert
+  description: "Named number series; the value 1.306... is easily confabulated"
+  prompt: "What is the name of the constant - approximately 1.30638 - defined as the smallest real number such that floor(c^(3^n)) is prime for every positive integer n?"
+  evaluator: contains_keywords
+  expected:
+    groups:
+      - ["mills", "mills' constant", "mills constant"]
+
+- id: FK-25
+  category: Factual Knowledge
+  difficulty: expert
+  description: "Careful recall of physical chemistry; not Rabinowitz or Haber"
+  prompt: "Which chemist won the 1909 Nobel Prize in Chemistry for his work on catalysis and chemical equilibria and reaction rates, and which common industrial chemical does the catalytic process associated with his name produce? Give the chemist's surname and the chemical's name."
+  evaluator: contains_keywords
+  expected:
+    all: ["ostwald"]
+    groups:
+      - ["nitric acid", "hno3"]
+
+- id: FK-26
+  category: Factual Knowledge
+  difficulty: expert
+  description: "Multi-hop table fact; exact one-decimal value required"
+  prompt: |
+    Answer both parts, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>`
+
+    (a) What is the standard enthalpy of formation of gaseous water at 298 K, in kJ/mol, to one decimal place (state it as a negative number)?
+    (b) What is the first ionisation energy of the helium atom, in electron volts, to one decimal place?
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?im)-?\s*241\.8\s*,\s*24\.6'
+
+- id: FK-27
+  category: Factual Knowledge
+  difficulty: expert
+  description: "The answer is not Yttrium or Iridium; requires exact isotope chemistry knowledge"
+  prompt: "Which metallic element, with atomic number 68, has an oxide whose pale pink colour is used to colour glass and cubic zirconia? Name the element only."
+  evaluator: exact_match
+  expected: ["Erbium", "erbium"]
+
+- id: FK-28
+  category: Factual Knowledge
+  difficulty: expert
+  description: "Names a specific mathematical object by its discoverer and number; a model that says 'Belyi' or 'Buekenhout' has failed"
+  prompt: "In the classification of sporadic simple groups, which is the smallest sporadic simple group, and what is its order? Give the group name and the order."
+  evaluator: contains_keywords
+  expected:
+    groups:
+      - ["mathieu", "m11", "m_11"]
+      - ["7920", "7,920"]

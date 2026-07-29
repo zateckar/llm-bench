@@ -267,3 +267,61 @@
   expected:
     patterns:
       - '(?im)^\s*ANSWERS:\s*5\s*,\s*5\s*,\s*47\s*\.?\s*$'
+
+- id: LR-21
+  category: Logical Reasoning
+  difficulty: expert
+  description: "Misère Nim is different from normal Nim; the winning strategy flips"
+  prompt: |
+    Two players play a game with a single pile of 12 stones. They take turns removing 1, 2 or 3 stones. The player forced to take the LAST stone LOSES (misère rule). Both play optimally. You move first.
+    If you play a winning move, how many stones should you take? If the first player cannot force a win, answer 0.
+    Reply with just the number.
+  evaluator: numeric_match
+  expected: 3.0
+
+- id: LR-22
+  category: Logical Reasoning
+  difficulty: expert
+  description: "Maximum over worst case; binary info lower bound plus the strategy to achieve it"
+  prompt: |
+    One of 16 coins is counterfeit and is either heavier or lighter than the rest (you do not know which). You have a balance scale and must determine which coin is counterfeit AND whether it is heavy or light.
+    What is the minimum number of weighings that guarantees success?
+    Reply with just the number.
+  evaluator: numeric_match
+  expected: 4.0
+
+- id: LR-23
+  category: Logical Reasoning
+  difficulty: expert
+  description: "Expected value with recollection: must set up the recursion, not just one round"
+  prompt: |
+    You repeatedly flip a fair coin until you get two consecutive heads for the first time, then stop.
+    What is the expected number of flips? Reply with just the number.
+  evaluator: numeric_match
+  expected: 6.0
+
+- id: LR-24
+  category: Logical Reasoning
+  difficulty: expert
+  description: "Blue-eyed islanders: common knowledge and the induction base both matter"
+  prompt: |
+    On an island there are exactly 100 perfect logicians with blue eyes and 100 with brown eyes. Each can see everyone else's eye colour but never learns their own. If any islander ever deduces their own eye colour, they leave the island at midnight that day. One day a foreigner makes a public announcement, heard by everyone at once: "At least one islander has blue eyes."
+    How many days pass before any islander leaves, counting the announcement day as day 1 (so an islander deducing immediately would leave at midnight after 1 day has passed)?
+    Reply with just the number of days that pass before anyone leaves.
+  evaluator: numeric_match
+  expected: 100.0
+
+- id: LR-25
+  category: Logical Reasoning
+  difficulty: expert
+  description: "Hidden invariant; the parity argument is the whole solution"
+  prompt: |
+    The numbers 1 through 10 are written on a board. You repeatedly perform this operation: erase any two numbers a and b, and write down |a - b|. After 9 operations one number remains.
+    What is the value of the final number, and can it be even? Answer in the form: <final value or 'variable'>, <'can' or 'cannot'> be even. Use exactly that two-part comma format.
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?i)variable'
+      - '(?i)\bcan(not)?\b.{0,20}\beven\b|\bcannot be even\b|\bcan be even\b'
+    must_not:
+      - '(?i)final (number |value )?(is|=)\s*\d+'

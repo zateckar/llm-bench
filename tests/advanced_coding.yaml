@@ -345,3 +345,69 @@
     - function: spiral_order
       args: [[[1, 2, 3]]]
       expected: [1, 2, 3]
+
+- id: AC-15
+  category: Advanced Coding
+  difficulty: expert
+  description: "Topological sort over inferred character constraints; lexicographic tie-breaking is the hard part"
+  prompt: |
+    Write a Python function `alien_order(words: list[str]) -> str` for the "alien dictionary" problem. Given a list of words from an alien language, sorted lexicographically according to that language's unknown character order, derive a valid character ordering.
+
+    Rules:
+      - Return the characters of the alphabet in a valid order as a single string.
+      - Among all valid orders, returned the lexicographically SMALLEST one.
+      - If the ordering is inconsistent (the words could not have been produced by any single order), return the empty string.
+      - Lowercase English letters only.
+
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: alien_order
+      args: [["wrt", "wrf", "er", "ett", "rftt"]]
+      expected: "wertf"
+    - function: alien_order
+      args: [["z", "x"]]
+      expected: "zx"
+    - function: alien_order
+      args: [["z", "x", "z"]]
+      expected: ""
+    - function: alien_order
+      args: [["a"]]
+      expected: "a"
+    - function: alien_order
+      args: [["abc", "ab"]]
+      expected: ""
+    - function: alien_order
+      args: [["baa", "abcd", "abca", "cab", "cad"]]
+      expected: "badc"
+
+- id: AC-16
+  category: Advanced Coding
+  difficulty: expert
+  description: "Optimal-bST / word-break hybrid requires memoisation; brute force times out"
+  prompt: |
+    Write a Python function `min_extra_char(s: str, dictionary: list[str]) -> int` returning the minimum number of characters of `s` left over after breaking off as many dictionary words as possible from left to right. Each position of `s` can be used at most once and a word may only be used at a position if it matches exactly. You may skip characters (each skip costs 1 leftover character).
+
+    Example: s = "leetscode", dictionary = ["leet","code","leetcode"] -> 1 (break "leet" then "code", the 's' is left over).
+    Constraints: len(s) up to 50, dictionary up to 1000 words, each word up to 10 chars. Must run in well under a second.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: min_extra_char
+      args: ["leetscode", ["leet", "code", "leetcode"]]
+      expected: 1
+    - function: min_extra_char
+      args: ["sayhelloworld", ["hello", "world"]]
+      expected: 3
+    - function: min_extra_char
+      args: ["abcd", ["ab", "cd"]]
+      expected: 0
+    - function: min_extra_char
+      args: ["xyz", ["a", "b"]]
+      expected: 3
+    - function: min_extra_char
+      args: ["aaaaaaaa", ["aa", "aaa"]]
+      expected: 0
+    - function: min_extra_char
+      args: ["", ["a"]]
+      expected: 0

@@ -205,11 +205,23 @@ SECRET_KEY=generate-a-strong-random-key-here
 ADMIN_PASSWORD=generate-a-strong-unique-password-here
 ```
 
-### 2. Build and start
+### 2. Pull and start
+
+Use the production compose file, which pulls the pre-built CI image and does
+not bind-mount a host `tests/` directory:
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
+
+The test suite ships inside the image, so deploying a newer image is all it
+takes to update the questions — repeat the two commands above.
+
+> **Note:** the default `docker-compose.yml` is for development. It bind-mounts
+> `./tests` over the suite baked into the image, so in production it would keep
+> serving whatever (possibly stale) files sit next to the compose file on the
+> host, even after pulling a newer image.
 
 ### Security architecture
 
