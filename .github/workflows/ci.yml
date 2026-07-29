@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: CI
 
 on:
   push:
@@ -16,7 +16,37 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # The suite and the evaluators are the benchmark's source of truth, so they are
+  # gated before anything is published. validate_suite catches fixtures that
+  # cannot behave correctly (regexes that match everything, keyword lists that are
+  # really alternatives, mismatched expected types); selftest_evaluators asserts
+  # that each evaluator rejects a plausible-but-wrong answer and accepts a correct
+  # one, including awkward-but-valid forms.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Validate the test suite
+        run: uv run python validate_suite.py --strict
+
+      - name: Self-test the evaluators
+        run: uv run python selftest_evaluators.py
+
+      - name: Lint
+        run: uvx ruff check .
+
   build-and-push:
+    needs: validate
     runs-on: ubuntu-latest
     permissions:
       contents: read

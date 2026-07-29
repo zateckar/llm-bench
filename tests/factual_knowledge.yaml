@@ -1,91 +1,198 @@
 # Factual Knowledge Test Suite
+#
+# Keyword lists are now strict: a bare list means EVERY entry must appear, and
+# alternative spellings are expressed with `groups` (any-of inside a group, all
+# groups required). Previously a two-keyword list scored 0.5 for one hit, which
+# cleared the old 0.5 pass bar - so naming half the answer counted as correct.
 
 - id: FK-01
   category: Factual Knowledge
-  prompt: "What is the chemical formula of the mineral that is the primary source of fluorine, which crystallizes in the isometric system?"
+  difficulty: medium
+  prompt: "Name the mineral that is the primary commercial source of fluorine and crystallises in the isometric (cubic) system, and give its chemical formula."
   evaluator: contains_keywords
-  expected: ["caf2", "caf₂", "fluorite"]
+  expected:
+    groups:
+      - ["fluorite", "fluorspar"]
+      - ["caf2", "caf₂", "ca f2"]
 
 - id: FK-02
   category: Factual Knowledge
-  prompt: "Multiply the atomic number of Silicon by the number of valence electrons in a neutral Carbon atom, then subtract the atomic number of Neon. What is the resulting number?"
+  difficulty: hard
+  description: "Multi-hop arithmetic over four separate facts"
+  prompt: "Multiply the number of protons in a gold nucleus by the oxidation state of chromium in potassium dichromate, then subtract the mass number of the most abundant carbon isotope. What is the result? Reply with just the number."
   evaluator: numeric_match
-  expected: 46.0
+  expected: 462.0
 
 - id: FK-03
   category: Factual Knowledge
-  prompt: "What is the smallest prime number that is also a Sophie Germain prime greater than 100?"
-  evaluator: contains_keywords
-  expected: ["113"]
+  difficulty: hard
+  prompt: "What is the smallest Sophie Germain prime greater than 100? Reply with just the number."
+  evaluator: numeric_match
+  expected: 113.0
 
 - id: FK-04
   category: Factual Knowledge
-  prompt: "What is the half-life of Uranium-235 in millions of years? Round to the nearest integer."
+  difficulty: hard
+  prompt: "What is the half-life of Uranium-235, expressed in millions of years and rounded to the nearest integer? Reply with just the number."
   evaluator: numeric_match
   expected: 704.0
 
 - id: FK-05
   category: Factual Knowledge
-  prompt: "What is the only country in the world whose flag depicts a modern firearm (specifically an AK-47 assault rifle)? Name the country and the weapon."
+  difficulty: medium
+  prompt: "One country's national flag depicts a modern firearm. Name the country and the specific weapon shown."
   evaluator: contains_keywords
-  expected: ["mozambique", "ak"]
+  expected:
+    all: ["mozambique"]
+    groups:
+      - ["ak-47", "ak47", "kalashnikov"]
 
 - id: FK-06
   category: Factual Knowledge
-  prompt: "What is the name of the deepest submarine trench in the Atlantic Ocean, and what is the name of its deepest point?"
+  difficulty: hard
+  prompt: "Name the deepest oceanic trench in the Atlantic Ocean and the name of its deepest point."
   evaluator: contains_keywords
-  expected: ["puerto rico", "milwaukee"]
+  expected:
+    all: ["puerto rico", "milwaukee"]
 
 - id: FK-07
   category: Factual Knowledge
-  prompt: "What is the heaviest stable (non-radioactive) chemical element in the periodic table? Name the element and its atomic number."
+  difficulty: hard
+  prompt: "Which is the heaviest element with at least one observationally stable (non-radioactive) isotope? Name the element and give its atomic number."
   evaluator: contains_keywords
-  expected: ["lead", "82"]
+  expected:
+    all: ["lead", "82"]
 
 - id: FK-08
   category: Factual Knowledge
-  prompt: "In what year did the first human spaceflight occur?"
+  difficulty: hard
+  prompt: "Two chemical elements are liquid at 25 degrees Celsius and 1 atmosphere. Name both."
   evaluator: contains_keywords
-  expected: ["1961"]
+  expected:
+    all: ["mercury", "bromine"]
 
 - id: FK-09
   category: Factual Knowledge
-  prompt: "What is the name of the conjecture in number theory that states there are infinitely many primes p such that p + 2 is also prime?"
+  difficulty: hard
+  prompt: "What is the name of the smallest non-abelian simple group, and what is its order? Give both."
   evaluator: contains_keywords
-  expected: ["twin prime"]
+  expected:
+    all: ["60"]
+    groups:
+      - ["a5", "a_5", "alternating group", "icosahedral"]
 
 - id: FK-10
   category: Factual Knowledge
-  prompt: "Which moon in our solar system is the only one known to have a dense atmosphere and liquid lakes on its surface?"
+  difficulty: medium
+  prompt: "Which moon in the Solar System is the only one known to have both a dense atmosphere and stable liquid lakes on its surface? Name the moon and the main liquid in those lakes."
   evaluator: contains_keywords
-  expected: ["titan"]
+  expected:
+    all: ["titan"]
+    groups:
+      - ["methane", "ethane", "hydrocarbon"]
 
 - id: FK-11
   category: Factual Knowledge
+  difficulty: medium
   prompt: "What is the name of the constant defined as the limiting difference between the harmonic series and the natural logarithm, approximately 0.5772?"
   evaluator: contains_keywords
-  expected: ["euler", "mascheroni"]
+  expected:
+    groups:
+      - ["euler-mascheroni", "euler mascheroni", "euler's constant", "eulers constant", "mascheroni"]
 
 - id: FK-12
   category: Factual Knowledge
-  prompt: "What is the approximate distance from the Earth to the Moon in kilometers at its farthest point (apogee)? Reply with the distance in kilometers rounded to the nearest thousand (e.g., 407000)."
+  difficulty: hard
+  prompt: "What is the reciprocal of the fine-structure constant, rounded to the nearest integer? Reply with just the number."
   evaluator: numeric_match
-  expected: 407000.0
+  expected: 137.0
 
 - id: FK-13
   category: Factual Knowledge
-  prompt: "What is the name of the pathfinding algorithm that extends Dijkstra's algorithm by using heuristics to guide its search?"
-  evaluator: contains_keywords
-  expected: ["a*", "heuristic"]
+  difficulty: hard
+  prompt: "What is the Chandrasekhar limit, in solar masses, rounded to one decimal place? Reply with just the number."
+  evaluator: numeric_match
+  expected: 1.4
 
 - id: FK-14
   category: Factual Knowledge
-  prompt: "What is the name of the theorem in geometry which states that any simple closed curve in the plane divides the plane into exactly two regions?"
+  difficulty: medium
+  prompt: "What is the name of the theorem in topology stating that any simple closed curve in the plane divides the plane into exactly two connected regions?"
   evaluator: contains_keywords
-  expected: ["jordan", "curve"]
+  expected:
+    all: ["jordan"]
+    groups:
+      - ["curve theorem", "curve"]
 
 - id: FK-15
   category: Factual Knowledge
-  prompt: "What is the name of the famous unsolved mathematical problem concerning the non-trivial zeroes of the Riemann zeta function?"
+  difficulty: hard
+  prompt: "Give the exact closed-form value of the Riemann zeta function at s = 2."
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?i)(pi\s*\^?\s*2\s*/\s*6|π\s*\^?\s*2\s*/\s*6|\\frac\{\\?pi\^?2?\}\{6\}|\\pi\^2\s*/\s*6|π²\s*/\s*6|pi squared (?:divided by|over) six)'
+
+- id: FK-16
+  category: Factual Knowledge
+  difficulty: hard
+  description: "Requires the number, not just the mechanism"
+  prompt: "How many code points does the Unicode codespace contain in total? Reply with just the number."
+  evaluator: numeric_match
+  expected: 1114112.0
+
+- id: FK-17
+  category: Factual Knowledge
+  difficulty: hard
+  prompt: "Which thermostable DNA polymerase, isolated from the bacterium Thermus aquaticus, made the polymerase chain reaction practical? Name the enzyme."
   evaluator: contains_keywords
-  expected: ["riemann", "hypothesis"]
+  expected:
+    groups:
+      - ["taq polymerase", "taq dna polymerase", "taq"]
+
+- id: FK-18
+  category: Factual Knowledge
+  difficulty: hard
+  prompt: "What is the maximum value the TCP receive-window field can hold without the window-scale option, in bytes? Reply with just the number."
+  evaluator: numeric_match
+  expected: 65535.0
+
+- id: FK-19
+  category: Factual Knowledge
+  difficulty: hard
+  prompt: "What is the value of the Feigenbaum constant delta, rounded to four decimal places? Reply with just the number."
+  evaluator: numeric_match
+  expected: 4.6692
+
+- id: FK-20
+  category: Factual Knowledge
+  difficulty: medium
+  prompt: "Which single letter of the English alphabet does not appear in the name of any U.S. state? Reply with the letter only."
+  evaluator: exact_match
+  expected: ["Q", "q"]
+
+- id: FK-21
+  category: Factual Knowledge
+  difficulty: hard
+  prompt: "Name the metal with the highest melting point of any metallic element, and give that melting point in degrees Celsius rounded to the nearest 10."
+  evaluator: contains_keywords
+  expected:
+    all: ["tungsten"]
+    groups:
+      - ["3420", "3422", "3410", "3430"]
+
+- id: FK-22
+  category: Factual Knowledge
+  difficulty: hard
+  description: "Multi-part factual recall; all three sub-answers required"
+  prompt: |
+    Answer all three, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>, <c>`
+
+    (a) In which year did Alan Turing publish the paper proving the halting problem undecidable?
+    (b) Which moon of Saturn vents plumes of water ice from its south polar region?
+    (c) What is the SI derived unit of magnetic flux?
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*1936\s*,\s*Enceladus\s*,\s*[Ww]eber\s*\.?\s*$'

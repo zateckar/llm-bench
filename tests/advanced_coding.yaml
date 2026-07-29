@@ -1,18 +1,16 @@
 # Advanced Coding Test Suite
+#
+# The class-based problems are graded by harnesses in evaluators.TEST_HELPERS.
+# Those harnesses were rewritten to assert the properties that actually define
+# the data structure - LRU recency on both get and overwrite, trie prefixes that
+# are not words, BST ancestor bounds rather than parent-only comparisons - and to
+# report which assertion failed instead of swallowing the exception.
 
 - id: AC-01
   category: Advanced Coding
+  difficulty: medium
   prompt: |
-    Write a Python function `merge_intervals(intervals: list[list[int]]) -> list[list[int]]` that merges overlapping intervals. Each interval is a two-element list [start, end]. Example: [[1,3],[2,6],[8,10],[15,18]] -> [[1,6],[8,10],[15,18]]
-
-    Requirements:
-    - Handle empty input
-    - Handle single interval
-    - Handle fully overlapping intervals
-    - Handle touching intervals [[1,2],[2,3]] -> [[1,3]]
-    - O(n log n) time complexity
-    - Return each merged interval as a two-element list.
-
+    Write a Python function `merge_intervals(intervals: list[list[int]]) -> list[list[int]]` that merges overlapping intervals. Each interval is a two-element list [start, end]. Input is not necessarily sorted. Touching intervals merge: [[1,2],[2,3]] -> [[1,3]]. Return each merged interval as a two-element list, sorted by start. Handle empty input. Time complexity must be O(n log n).
     Reply with ONLY the Python code in a code block.
   evaluator: code_exec
   expected:
@@ -25,18 +23,27 @@
     - function: merge_intervals
       args: [[[1, 4], [4, 5]]]
       expected: [[1, 5]]
+    - function: merge_intervals
+      args: [[[5, 6], [1, 3], [2, 4]]]
+      expected: [[1, 4], [5, 6]]
+    - function: merge_intervals
+      args: [[[1, 10], [2, 3], [4, 5]]]
+      expected: [[1, 10]]
+    - function: merge_intervals
+      args: [[[1, 2]]]
+      expected: [[1, 2]]
 
 - id: AC-02
   category: Advanced Coding
+  difficulty: hard
+  description: "Harness checks recency on get() and on overwriting an existing key"
   prompt: |
-    Write a Python function `lru_cache(capacity: int)` that implements an LRU cache with O(1) get and put operations.
-
-    Implement as a class LRUCache with:
-    - `__init__(self, capacity: int)`
-    - `get(self, key: int) -> int` (returns -1 if not found)
-    - `put(self, key: int, value: int) -> None`
-
-    Both operations must be O(1) time. Reply with ONLY the Python code in a code block.
+    Implement a class `LRUCache` with O(1) get and put:
+      - `__init__(self, capacity: int)`
+      - `get(self, key: int) -> int`  (returns -1 when the key is absent)
+      - `put(self, key: int, value: int) -> None`
+    Both reading a key and overwriting an existing key must count as a use of that key for eviction purposes.
+    Reply with ONLY the Python code in a code block.
   evaluator: code_exec
   expected:
     - function: test_lru
@@ -45,8 +52,10 @@
 
 - id: AC-03
   category: Advanced Coding
+  difficulty: medium
+  description: "The even/odd branches are swapped; a correct fix must not mutate the caller's list"
   prompt: |
-    This code has a bug. Find and fix it:
+    This function is wrong. Identify the bug and reply with the corrected function.
 
     ```python
     def find_median(nums: list[int]) -> float:
@@ -58,28 +67,40 @@
             return (nums[n // 2 - 1] + nums[n // 2]) / 2
     ```
 
-    What is the bug? Reply with the corrected function.
+    The corrected function must also leave the caller's list unmodified.
+    Reply with ONLY the corrected Python code in a code block.
   evaluator: code_exec
   expected:
     - function: find_median
       args: [[1, 2, 3]]
-      expected: 2.0
+      expected: 2
     - function: find_median
       args: [[1, 2, 3, 4]]
+      expected: 2.5
+    - function: find_median
+      args: [[3, 1, 2]]
+      expected: 2
+    - function: find_median
+      args: [[5]]
+      expected: 5
+    - function: find_median
+      args: [[4, 1, 3, 2]]
       expected: 2.5
 
 - id: AC-04
   category: Advanced Coding
+  difficulty: hard
+  description: "Round-trip over skewed trees, negatives, zero, and duplicate values"
   prompt: |
-    Write a Python function `serialize_tree(root) -> str` and `deserialize_tree(data: str) -> TreeNode` for a binary tree.
+    Write `serialize_tree(root) -> str` and `deserialize_tree(data: str)` for a binary tree, plus the TreeNode class:
 
-    class TreeNode:
-        def __init__(self, val=0, left=None, right=None):
-            self.val = val
-            self.left = left
-            self.right = right
+        class TreeNode:
+            def __init__(self, val=0, left=None, right=None):
+                self.val = val
+                self.left = left
+                self.right = right
 
-    Round-trip: deserialize(serialize(tree)) must produce an identical tree.
+    `deserialize_tree(serialize_tree(t))` must reproduce a structurally identical tree for any tree, including the empty tree, left-skewed chains, negative values and duplicate values. `serialize_tree` must return a string.
     Reply with ONLY the Python code in a code block.
   evaluator: code_exec
   expected:
@@ -89,8 +110,9 @@
 
 - id: AC-05
   category: Advanced Coding
+  difficulty: medium
   prompt: |
-    Optimize this function for time complexity:
+    Rewrite this O(n^2) function to run in O(n), keeping the same signature and return type (a list of two indices, ascending, or [-1, -1] when no pair sums to the target).
 
     ```python
     def two_sum(nums: list[int], target: int) -> list[int]:
@@ -101,7 +123,7 @@
         return [-1, -1]
     ```
 
-    Current: O(n²). Rewrite to O(n), keeping the same return type (a list of two indices). Reply with ONLY the Python code in a code block.
+    Reply with ONLY the Python code in a code block.
   evaluator: code_exec
   expected:
     - function: two_sum
@@ -110,15 +132,26 @@
     - function: two_sum
       args: [[3, 2, 4], 6]
       expected: [1, 2]
+    - function: two_sum
+      args: [[3, 3], 6]
+      expected: [0, 1]
+    - function: two_sum
+      args: [[1, 2, 3], 7]
+      expected: [-1, -1]
+    - function: two_sum
+      args: [[0, 4, 3, 0], 0]
+      expected: [0, 3]
+    - function: two_sum
+      args: [[-3, 4, 3, 90], 0]
+      expected: [0, 2]
 
 - id: AC-06
   category: Advanced Coding
+  difficulty: hard
+  description: "Duplicate characters in t must be counted, not just present"
   prompt: |
-    Write a Python function `min_window(s: str, t: str) -> str` that finds the minimum window substring in s containing all characters of t.
-
+    Write a Python function `min_window(s: str, t: str) -> str` returning the shortest substring of s containing every character of t including duplicates. Return the empty string when no such window exists. If several windows tie in length, return the leftmost.
     Example: s='ADOBECODEBANC', t='ABC' -> 'BANC'
-    If no window exists, return empty string.
-
     Reply with ONLY the Python code in a code block.
   evaluator: code_exec
   expected:
@@ -131,13 +164,21 @@
     - function: min_window
       args: ["a", "aa"]
       expected: ""
+    - function: min_window
+      args: ["aa", "aa"]
+      expected: "aa"
+    - function: min_window
+      args: ["", "a"]
+      expected: ""
+    - function: min_window
+      args: ["bba", "ab"]
+      expected: "ba"
 
 - id: AC-07
   category: Advanced Coding
+  difficulty: hard
   prompt: |
-    Write a Python function `dijkstra(graph, start, end)` that finds the shortest path in a weighted graph. graph is a dict of {node: [(neighbor, weight), ...]}.
-    Return the shortest distance (or -1 if unreachable).
-
+    Write a Python function `dijkstra(graph, start, end)` returning the shortest total weight from start to end, or -1 when end is unreachable. `graph` is a dict mapping each node to a list of (neighbour, weight) pairs; all weights are non-negative. The distance from a node to itself is 0.
     Reply with ONLY the Python code in a code block.
   evaluator: code_exec
   expected:
@@ -147,17 +188,28 @@
     - function: dijkstra
       args: [{"A": [["B", 1]], "B": []}, "A", "C"]
       expected: -1
+    - function: dijkstra
+      args: [{"A": [["B", 1]], "B": []}, "A", "A"]
+      expected: 0
+    - function: dijkstra
+      args: [{"A": [["B", 10], ["C", 1]], "B": [], "C": [["B", 1]]}, "A", "B"]
+      expected: 2
+    - function: dijkstra
+      args: [{"A": [], "B": []}, "A", "B"]
+      expected: -1
 
 - id: AC-08
   category: Advanced Coding
+  difficulty: hard
+  description: "Harness includes the ancestor-bound case that parent-only comparison gets wrong"
   prompt: |
-    Write a Python function `is_valid_bst(root: TreeNode) -> bool` that checks if a binary tree is a valid Binary Search Tree.
+    Write a Python function `is_valid_bst(root) -> bool` that returns True only if the binary tree is a valid binary search tree: every value in a node's left subtree is strictly less than the node, and every value in its right subtree is strictly greater. Duplicates make a tree invalid. The empty tree is valid. Assume the TreeNode class:
 
-    class TreeNode:
-        def __init__(self, val=0, left=None, right=None):
-            self.val = val
-            self.left = left
-            self.right = right
+        class TreeNode:
+            def __init__(self, val=0, left=None, right=None):
+                self.val = val
+                self.left = left
+                self.right = right
 
     Reply with ONLY the Python code in a code block.
   evaluator: code_exec
@@ -165,3 +217,131 @@
     - function: test_bst
       args: []
       expected: true
+
+- id: AC-09
+  category: Advanced Coding
+  difficulty: hard
+  description: "Sliding-window rate limiter with per-key state and injected time"
+  prompt: |
+    Implement a class `RateLimiter` enforcing a sliding-window limit per key:
+      - `__init__(self, max_requests: int, window_seconds: int)`
+      - `allow(self, key: str, now: float) -> bool`
+    `allow` returns True and records the request if fewer than `max_requests` requests for that key fall within the window ending at `now` (a request at time t counts while now - t < window_seconds); otherwise it returns False and records nothing. Each key has an independent budget. Time is supplied by the caller, never read from the clock.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: test_rate_limiter
+      args: []
+      expected: true
+
+- id: AC-10
+  category: Advanced Coding
+  difficulty: expert
+  description: "Time-travel reads, including writes that arrive out of order"
+  prompt: |
+    Implement a class `VersionedStore` supporting point-in-time reads:
+      - `set(self, key: str, value, timestamp: int) -> None`
+      - `get(self, key: str, timestamp: int)` returns the value written at the greatest timestamp less than or equal to `timestamp`, or None if the key had no value at that time.
+    Writes may arrive with timestamps out of order and must still be read back in timestamp order. `get` should be O(log n) in the number of writes for a key.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: test_versioned_store
+      args: []
+      expected: true
+
+- id: AC-11
+  category: Advanced Coding
+  difficulty: hard
+  description: "Deterministic tie-breaking plus cycle detection"
+  prompt: |
+    Write a Python function `topological_sort(graph)` where `graph` maps each node to a list of nodes it must precede. Return a list of all nodes in a valid topological order, breaking ties by choosing the lexicographically smallest available node. Return an empty list if the graph contains a cycle.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: topological_sort
+      args: [{"a": ["b", "c"], "b": ["d"], "c": ["d"], "d": []}]
+      expected: ["a", "b", "c", "d"]
+    - function: topological_sort
+      args: [{"a": ["b"], "b": ["a"]}]
+      expected: []
+    - function: topological_sort
+      args: [{}]
+      expected: []
+    - function: topological_sort
+      args: [{"z": [], "a": [], "m": []}]
+      expected: ["a", "m", "z"]
+    - function: topological_sort
+      args: [{"b": ["a"], "a": []}]
+      expected: ["b", "a"]
+
+- id: AC-12
+  category: Advanced Coding
+  difficulty: hard
+  prompt: "Write a Python function `edit_distance(a, b)` returning the Levenshtein distance between two strings (minimum number of single-character insertions, deletions or substitutions). Reply with ONLY the Python code in a code block."
+  evaluator: code_exec
+  expected:
+    - function: edit_distance
+      args: ["kitten", "sitting"]
+      expected: 3
+    - function: edit_distance
+      args: ["", "abc"]
+      expected: 3
+    - function: edit_distance
+      args: ["abc", "abc"]
+      expected: 0
+    - function: edit_distance
+      args: ["intention", "execution"]
+      expected: 5
+    - function: edit_distance
+      args: ["", ""]
+      expected: 0
+    - function: edit_distance
+      args: ["flaw", "lawn"]
+      expected: 2
+
+- id: AC-13
+  category: Advanced Coding
+  difficulty: hard
+  prompt: "Write a Python function `lis_length(nums)` returning the length of the longest strictly increasing subsequence of a list of integers. It must run in O(n log n) time. Reply with ONLY the Python code in a code block."
+  evaluator: code_exec
+  expected:
+    - function: lis_length
+      args: [[10, 9, 2, 5, 3, 7, 101, 18]]
+      expected: 4
+    - function: lis_length
+      args: [[]]
+      expected: 0
+    - function: lis_length
+      args: [[7, 7, 7, 7]]
+      expected: 1
+    - function: lis_length
+      args: [[1, 3, 6, 7, 9, 4, 10, 5, 6]]
+      expected: 6
+    - function: lis_length
+      args: [[5, 4, 3, 2, 1]]
+      expected: 1
+
+- id: AC-14
+  category: Advanced Coding
+  difficulty: hard
+  prompt: |
+    Write a Python function `spiral_order(matrix)` returning all elements of a rectangular matrix in clockwise spiral order starting at the top-left. Handle empty input, single rows and single columns.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
+  expected:
+    - function: spiral_order
+      args: [[[1, 2, 3], [4, 5, 6], [7, 8, 9]]]
+      expected: [1, 2, 3, 6, 9, 8, 7, 4, 5]
+    - function: spiral_order
+      args: [[[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]]]
+      expected: [1, 2, 3, 4, 8, 12, 11, 10, 9, 5, 6, 7]
+    - function: spiral_order
+      args: [[]]
+      expected: []
+    - function: spiral_order
+      args: [[[1], [2], [3]]]
+      expected: [1, 2, 3]
+    - function: spiral_order
+      args: [[[1, 2, 3]]]
+      expected: [1, 2, 3]

@@ -1,269 +1,306 @@
 # Terminal Algorithms Test Suite
-# Adapted from terminal-bench repository tasks
+#
+# The previous version graded these with `multi_step_solution` against patterns
+# like "target|append|return" and "path|return \[\]|append". Any plausible-looking
+# Python matched, and a step found out of order still earned half credit, so the
+# category passed on prose alone. Every item here now runs the model's code
+# against fixtures with a known correct answer.
 
 - id: TA-01
   category: Terminal Algorithms
-  difficulty: medium
+  difficulty: hard
   source: terminal-bench/countdown-game
   prompt: |
-    Solve the Countdown numbers game.
-    Given a target number and a set of available numbers, find a way to reach
-    the target using only +, -, *, / operations.
-    Each number can only be used once.
-
-    Example: Target = 952, Numbers = [75, 8, 3, 7, 2, 1]
-    One solution: 75 * (8 + 7 - 1) + 3 + 2 = 952
-
-    Write a Python function that finds solutions to this game.
-    The function should return a list of solutions as strings.
-  evaluator: multi_step_solution
+    Solve the Countdown numbers game. Write a Python function
+    `countdown_reachable(target: int, numbers: list[int]) -> bool`
+    that returns True if and only if `target` can be produced from a subset of `numbers`
+    using the operators +, -, * and / (each number used at most once). Division is only
+    permitted when it divides exactly, and intermediate values must stay positive integers.
+    A single number on its own counts as an expression.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Generate number/operation combinations"
-      pattern: "permutation|combination|itertools|recursi|for .* in"
-      order: 1
-    - step: "Apply the four operations"
-      pattern: "[+].*[-].*[*]|operator|[+] [-] [*] [/]|eval"
-      order: 2
-    - step: "Match target and collect solutions"
-      pattern: "== target|target|append|return"
-      order: 3
+    - function: countdown_reachable
+      args: [952, [75, 8, 3, 7, 2, 1]]
+      expected: true
+    - function: countdown_reachable
+      args: [11, [1, 1]]
+      expected: false
+    - function: countdown_reachable
+      args: [100, [10, 10]]
+      expected: true
+    - function: countdown_reachable
+      args: [1, [2]]
+      expected: false
+    - function: countdown_reachable
+      args: [24, [4, 6]]
+      expected: true
+    - function: countdown_reachable
+      args: [7, [3, 7, 5]]
+      expected: true
 
 - id: TA-02
   category: Terminal Algorithms
-  difficulty: medium
+  difficulty: hard
   source: terminal-bench/chess-best-move
   prompt: |
-    You are given an image of a chess board (FEN notation provided).
-    Write a function that finds the best move for white to play.
-    The function should:
-    1. Parse the FEN string
-    2. Implement minimax with alpha-beta pruning
-    3. Use a simple evaluation function
-    4. Return the best move
-
-    FEN: "6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1"
-    (White to move; the back-rank mate is the rook from e1 to e8, i.e. Re8# / e1e8.)
-  evaluator: multi_step_solution
+    Write a Python function `knight_moves(start: str, end: str) -> int` returning the minimum
+    number of knight moves needed to travel between two squares of a standard 8x8 chessboard.
+    Squares are given in algebraic notation such as "a1" or "h8". Return 0 when start equals end.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Parse the FEN"
-      pattern: "fen|split|board|parse"
-      order: 1
-    - step: "Minimax with alpha-beta"
-      pattern: "minimax|alpha.?beta|alpha, beta|negamax"
-      order: 2
-    - step: "Identify the back-rank mate move"
-      pattern: "e8|Re8|e1e8|checkmate|mate"
-      order: 3
+    - function: knight_moves
+      args: ["a1", "a1"]
+      expected: 0
+    - function: knight_moves
+      args: ["a1", "b3"]
+      expected: 1
+    - function: knight_moves
+      args: ["a1", "c2"]
+      expected: 1
+    - function: knight_moves
+      args: ["a1", "b2"]
+      expected: 4
+    - function: knight_moves
+      args: ["a1", "d4"]
+      expected: 2
+    - function: knight_moves
+      args: ["a1", "h8"]
+      expected: 6
 
 - id: TA-03
   category: Terminal Algorithms
-  difficulty: medium
+  difficulty: hard
   source: terminal-bench/gomoku-planner
   prompt: |
-    Write a Gomoku (Five in a Row) game AI.
-    The AI should:
-    1. Evaluate board positions
-    2. Use threat detection (live-4, dead-4, live-3, etc.)
-    3. Implement minimax or Monte Carlo Tree Search
-    4. Return the best move for a given board state
-
-    Provide the complete implementation with:
-    - Board representation
-    - Evaluation function
-    - Search algorithm
-  evaluator: multi_step_solution
+    Write a Python function `n_queens_count(n: int) -> int` returning the number of distinct
+    solutions to the n-queens problem (placements of n queens on an n x n board with no two
+    attacking each other). Return 0 when no solution exists.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Board representation"
-      pattern: "board|grid|\\[\\[|numpy|matrix"
-      order: 1
-    - step: "Evaluation / threat detection"
-      pattern: "evaluate|score|live.?[34]|open.?[34]|threat|pattern"
-      order: 2
-    - step: "Search algorithm"
-      pattern: "minimax|alpha.?beta|MCTS|Monte Carlo|negamax"
-      order: 3
+    - function: n_queens_count
+      args: [1]
+      expected: 1
+    - function: n_queens_count
+      args: [2]
+      expected: 0
+    - function: n_queens_count
+      args: [4]
+      expected: 2
+    - function: n_queens_count
+      args: [5]
+      expected: 10
+    - function: n_queens_count
+      args: [6]
+      expected: 4
+    - function: n_queens_count
+      args: [8]
+      expected: 92
 
 - id: TA-04
   category: Terminal Algorithms
-  difficulty: medium
+  difficulty: hard
   source: terminal-bench/ode-solver-rk4
+  description: "A wrong RK4 weighting still looks like RK4 but misses the tolerance"
   prompt: |
-    Implement a 4th-order Runge-Kutta (RK4) ODE solver in Python.
-    The solver should:
-    1. Solve systems of first-order ODEs
-    2. Handle both scalar and vector-valued functions
-    3. Return time points and solution values
-    4. Include error estimation
+    Implement a fourth-order Runge-Kutta integrator and use it to solve the simple harmonic
+    oscillator dy/dt = v, dv/dt = -y with y(0) = 1 and v(0) = 0.
 
-    Test it on the simple harmonic oscillator:
-    dy/dt = v
-    dv/dt = -y
-    with y(0) = 1, v(0) = 0
-  evaluator: multi_step_solution
+    Expose exactly this function:
+        `rk4_harmonic(t_end: float, dt: float) -> float`
+    returning the value of y at t_end, integrated with fixed step dt. t_end will always be an exact
+    multiple of dt. The analytic solution is cos(t), and your result must match it to within 1e-6
+    for dt = 0.001.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "RK4 stage coefficients"
-      pattern: "k1|k2|k3|k4"
-      order: 1
-    - step: "Weighted update"
-      pattern: "k1 \\+ 2|/6|/ 6|(k1.*2.*k2.*2.*k3.*k4)"
-      order: 2
-    - step: "Integration over time steps"
-      pattern: "for .* in|range|t \\+|dt|step"
-      order: 3
+    - function: rk4_harmonic
+      args: [0.0, 0.001]
+      expected: 1.0
+      tolerance: 1.0e-6
+    - function: rk4_harmonic
+      args: [1.0, 0.001]
+      expected: 0.5403023058681398
+      tolerance: 1.0e-6
+    - function: rk4_harmonic
+      args: [2.0, 0.001]
+      expected: -0.4161468365471424
+      tolerance: 1.0e-6
+    - function: rk4_harmonic
+      args: [3.0, 0.001]
+      expected: -0.9899924966004454
+      tolerance: 1.0e-6
 
 - id: TA-05
   category: Terminal Algorithms
-  difficulty: hard
+  difficulty: expert
   source: terminal-bench/feal-differential-cryptanalysis
+  description: "Differential cryptanalysis reduced to its measurable core: the DDT"
   prompt: |
-    Explain differential cryptanalysis applied to the FEAL block cipher.
-    Include:
-    1. What is differential cryptanalysis
-    2. How to construct differential characteristics
-    3. How to recover key bits using chosen plaintexts
-    4. The specific differentials used against FEAL-4
-    5. Implementation approach for the attack
-  evaluator: multi_step_solution
+    Differential cryptanalysis of a block cipher starts from the difference distribution table
+    (DDT) of its S-box. For a bijective S-box S over n-bit values, DDT[a][b] counts the inputs x
+    for which S(x) XOR S(x XOR a) == b.
+
+    Write a Python function `max_ddt(sbox: list[int]) -> int` returning the largest DDT entry over
+    all input differences a != 0 and all output differences b. (This value divided by len(sbox) is
+    the S-box's maximum differential probability.)
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Differential cryptanalysis explanation"
-      pattern: "differential|XOR|probability|characteristic"
-      order: 1
-    - step: "FEAL specifics"
-      pattern: "FEAL|round|G-function|F-function"
-      order: 2
-    - step: "Attack method"
-      pattern: "chosen plaintext|key recovery|decrypt"
-      order: 3
+    # Identity S-box: every non-zero difference propagates unchanged for all 16 inputs.
+    - function: max_ddt
+      args: [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]]
+      expected: 16
+    # PRESENT cipher S-box: maximum differential probability is 4/16.
+    - function: max_ddt
+      args: [[12, 5, 6, 11, 9, 0, 10, 13, 3, 14, 15, 8, 4, 7, 1, 2]]
+      expected: 4
+    # 2-bit identity S-box.
+    - function: max_ddt
+      args: [[0, 1, 2, 3]]
+      expected: 4
 
 - id: TA-06
   category: Terminal Algorithms
-  difficulty: hard
+  difficulty: expert
   source: terminal-bench/feal-linear-cryptanalysis
+  description: "Textbook RSA key derivation; requires extended Euclid, not trial division"
   prompt: |
-    Explain linear cryptanalysis applied to the FEAL block cipher.
-    Include:
-    1. What is linear cryptanalysis
-    2. How to find linear approximations
-    3. How to use linear hulls
-    4. The specific linear approximations for FEAL
-    5. Comparison with differential cryptanalysis
-  evaluator: multi_step_solution
+    Write a Python function `rsa_private_exponent(p: int, q: int, e: int) -> int` that returns the
+    RSA private exponent d, i.e. the modular inverse of e modulo (p-1)(q-1), reduced to the range
+    1 <= d < (p-1)(q-1). Assume p and q are distinct primes and gcd(e, (p-1)(q-1)) == 1. It must
+    work for 512-bit inputs, so use the extended Euclidean algorithm rather than a search.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Linear cryptanalysis"
-      pattern: "linear|approximation|parity|bias"
-      order: 1
-    - step: "Linear hulls"
-      pattern: "hull|correlation|piling-up|lemma"
-      order: 2
-    - step: "FEAL linear attack"
-      pattern: "FEAL|round function|key bits"
-      order: 3
+    - function: rsa_private_exponent
+      args: [61, 53, 17]
+      expected: 2753
+    - function: rsa_private_exponent
+      args: [11, 3, 3]
+      expected: 7
+    - function: rsa_private_exponent
+      args: [7, 11, 7]
+      expected: 43
+    - function: rsa_private_exponent
+      args: [13, 17, 5]
+      expected: 77
+    - function: rsa_private_exponent
+      args: [101, 103, 7]
+      expected: 8743
 
 - id: TA-07
   category: Terminal Algorithms
-  difficulty: medium
+  difficulty: hard
   source: terminal-bench/cross-entropy-method
   prompt: |
-    Implement the Cross-Entropy Method for optimization.
-    The algorithm should:
-    1. Sample solutions from a parameterized distribution
-    2. Evaluate fitness of samples
-    3. Update distribution parameters based on top performers
-    4. Converge to optimal solution
-
-    Test it on the function: f(x,y) = -(x^2 + y^2) (find maximum at origin)
-    Provide complete Python implementation.
-  evaluator: multi_step_solution
+    Write a Python function `knapsack(weights: list[int], values: list[int], capacity: int) -> int`
+    returning the maximum total value obtainable by selecting a subset of items whose total weight
+    does not exceed the capacity. Each item may be used at most once.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Sample from a distribution"
-      pattern: "normal|gauss|sample|random|mean.*std|mu.*sigma"
-      order: 1
-    - step: "Select elite/top performers"
-      pattern: "elite|top|sort|percentile|argsort|best"
-      order: 2
-    - step: "Update distribution parameters"
-      pattern: "update|mean =|std =|mu =|sigma =|fit"
-      order: 3
+    - function: knapsack
+      args: [[1, 3, 4, 5], [1, 4, 5, 7], 7]
+      expected: 9
+    - function: knapsack
+      args: [[], [], 10]
+      expected: 0
+    - function: knapsack
+      args: [[5], [10], 4]
+      expected: 0
+    - function: knapsack
+      args: [[1, 2, 3], [6, 10, 12], 5]
+      expected: 22
+    - function: knapsack
+      args: [[2, 2, 2], [3, 3, 3], 0]
+      expected: 0
 
 - id: TA-08
   category: Terminal Algorithms
   difficulty: hard
   source: terminal-bench/adaptive-rejection-sampler
+  description: "Convex hull: the geometric core of an adaptive-rejection envelope"
   prompt: |
-    Implement an Adaptive Rejection Sampler (ARS) for log-concave distributions.
-    Explain:
-    1. What is rejection sampling
-    2. Why adaptive rejection works for log-concave densities
-    3. How to construct and update the piecewise linear upper hull
-    4. How to compute intersection points
-    5. Provide complete Python implementation
-  evaluator: multi_step_solution
+    Write a Python function `convex_hull(points: list[list[int]]) -> list[list[int]]` computing the
+    convex hull of a set of 2D points. Return the hull vertices as two-element lists in
+    counter-clockwise order, starting from the lexicographically smallest point, and exclude points
+    that lie strictly on the interior of a hull edge. Handle inputs of one or two points by
+    returning them in sorted order.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Rejection sampling basis"
-      pattern: "reject|envelope|proposal|accept"
-      order: 1
-    - step: "Log-concave upper hull"
-      pattern: "log.concave|upper hull|tangent|piecewise|concav"
-      order: 2
-    - step: "Update hull / intersections"
-      pattern: "intersection|abscissa|update|add point|squeeze"
-      order: 3
+    - function: convex_hull
+      args: [[[0, 0], [4, 0], [4, 4], [0, 4], [2, 2]]]
+      expected: [[0, 0], [4, 0], [4, 4], [0, 4]]
+    - function: convex_hull
+      args: [[[0, 0], [1, 1], [2, 2], [2, 0], [0, 2]]]
+      expected: [[0, 0], [2, 0], [2, 2], [0, 2]]
+    - function: convex_hull
+      args: [[[3, 3]]]
+      expected: [[3, 3]]
+    - function: convex_hull
+      args: [[[1, 1], [0, 0]]]
+      expected: [[0, 0], [1, 1]]
 
 - id: TA-09
   category: Terminal Algorithms
-  difficulty: easy
+  difficulty: medium
   source: terminal-bench/enemy-grid-escape
   prompt: |
-    You are on a grid with enemies that move towards you each turn.
-    Write a function that finds the shortest path to escape the grid
-    while avoiding enemies.
-
-    Rules:
-    - Grid is NxN with obstacles
-    - You start at (0,0), exit is at (N-1,N-1)
-    - Enemies move 1 step closer to you each turn
-    - If an enemy reaches you, you lose
-    - You can move up, down, left, or right
-
-    Return the path as a list of coordinates, or empty list if impossible.
-  evaluator: multi_step_solution
+    Write a Python function `shortest_path_grid(grid: list[str]) -> int` returning the minimum
+    number of moves to travel from the top-left cell to the bottom-right cell of a rectangular
+    grid. '.' is open and '#' is a wall; movement is one step up, down, left or right into open
+    cells only. Return -1 if no path exists, and 0 if the grid is a single open cell.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Graph/grid search"
-      pattern: "BFS|DFS|A\\*|queue|deque|visited|shortest"
-      order: 1
-    - step: "Enemy movement modeling"
-      pattern: "enemy|enemies|distance|manhattan|move.*toward"
-      order: 2
-    - step: "Return path or empty list"
-      pattern: "path|return \\[\\]|append|return path"
-      order: 3
+    - function: shortest_path_grid
+      args: [["..#", "..#", "..."]]
+      expected: 4
+    - function: shortest_path_grid
+      args: [["."]]
+      expected: 0
+    - function: shortest_path_grid
+      args: [[".#", "#."]]
+      expected: -1
+    - function: shortest_path_grid
+      args: [["...", "...", "..."]]
+      expected: 4
+    - function: shortest_path_grid
+      args: [["..", ".#"]]
+      expected: -1
 
 - id: TA-10
   category: Terminal Algorithms
-  difficulty: medium
+  difficulty: hard
   source: terminal-bench/constraints-scheduling
+  description: "Earliest-due-date is optimal for max lateness; SPT is the tempting wrong answer"
   prompt: |
-    Solve a job scheduling problem with constraints.
-    Given N jobs with:
-    - Duration
-    - Deadline
-    - Dependencies (other jobs that must complete first)
-
-    Find a schedule that:
-    1. Minimizes total tardiness
-    2. Respects all dependencies
-    3. Uses the minimum number of machines
-
-    Implement using constraint programming or heuristics.
-    Provide complete Python solution.
-  evaluator: multi_step_solution
+    Write a Python function `min_max_lateness(jobs: list[list[int]]) -> int` where each job is
+    [duration, deadline]. All jobs run one at a time on a single machine starting at time 0, with
+    no idle time. Return the minimum achievable maximum lateness, where a job's lateness is its
+    completion time minus its deadline and may be negative. Return 0 for an empty job list.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Resolve dependencies (topological order)"
-      pattern: "topolog|dependen|in.?degree|prerequisite|DAG"
-      order: 1
-    - step: "Order by deadline / minimize tardiness"
-      pattern: "deadline|tardiness|sort|EDF|earliest"
-      order: 2
-    - step: "Assign to machines and return schedule"
-      pattern: "machine|assign|schedule|return"
-      order: 3
+    - function: min_max_lateness
+      args: [[[2, 5], [3, 4]]]
+      expected: 0
+    - function: min_max_lateness
+      args: [[[4, 4], [3, 5]]]
+      expected: 2
+    - function: min_max_lateness
+      args: [[[1, 10]]]
+      expected: -9
+    - function: min_max_lateness
+      args: [[]]
+      expected: 0
+    - function: min_max_lateness
+      args: [[[1, 4], [2, 8], [3, 10]]]
+      expected: -3
+    - function: min_max_lateness
+      args: [[[3, 3], [2, 8], [1, 4]]]
+      expected: 0

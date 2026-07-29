@@ -1,8 +1,17 @@
 # Code Generation Test Suite
+#
+# Fixtures now include the edge cases that separate a working implementation from
+# one that passes the happy path: empty input, duplicates, negative numbers,
+# non-ASCII text, strings inside nested structures, and input sizes that punish
+# exponential algorithms. Returned values are compared structurally, so a
+# function returning 2 where the fixture says 2.0 is accepted - only genuinely
+# wrong answers fail.
 
 - id: CG-01
   category: Code Generation
-  prompt: "Write a Python function `fibonacci(n)` that returns the nth Fibonacci number (0-indexed: fibonacci(0)=0, fibonacci(1)=1). Reply with only the code in a Python code block."
+  difficulty: medium
+  description: "n=70 rules out naive exponential recursion"
+  prompt: "Write a Python function `fibonacci(n)` returning the nth Fibonacci number, 0-indexed, with fibonacci(0)=0 and fibonacci(1)=1. It must return the correct value for n up to at least 90 without taking an impractical amount of time. Reply with only the code in a Python code block."
   evaluator: code_exec
   expected:
     - function: fibonacci
@@ -12,75 +21,114 @@
       args: [1]
       expected: 1
     - function: fibonacci
-      args: [5]
-      expected: 5
-    - function: fibonacci
       args: [10]
       expected: 55
+    - function: fibonacci
+      args: [70]
+      expected: 190392490709135
+    - function: fibonacci
+      args: [90]
+      expected: 2880067194370816120
 
 - id: CG-02
   category: Code Generation
-  prompt: "Write a Python function `reverse_string(s)` that reverses a string. Reply with only the code in a Python code block."
+  difficulty: medium
+  description: "Whitespace normalisation is the real requirement"
+  prompt: |
+    Write a Python function `reverse_words(s)` that reverses the order of the words in a string. Words are separated by one or more spaces. The result must have exactly one space between words and no leading or trailing spaces.
+    Example: "  the sky   is blue  " -> "blue is sky the"
+    Reply with only the code in a Python code block.
   evaluator: code_exec
   expected:
-    - function: reverse_string
+    - function: reverse_words
+      args: ["  the sky   is blue  "]
+      expected: "blue is sky the"
+    - function: reverse_words
       args: ["hello"]
-      expected: "olleh"
-    - function: reverse_string
-      args: ["abc"]
-      expected: "cba"
-    - function: reverse_string
+      expected: "hello"
+    - function: reverse_words
+      args: ["   "]
+      expected: ""
+    - function: reverse_words
       args: [""]
       expected: ""
+    - function: reverse_words
+      args: ["a  b"]
+      expected: "b a"
 
 - id: CG-03
   category: Code Generation
-  prompt: "Write a Python function `is_palindrome(s)` that returns True if a string is a palindrome (case-insensitive), False otherwise. Reply with only the code in a Python code block."
+  difficulty: medium
+  prompt: |
+    Write a Python function `is_palindrome(s)` that returns True if the string is a palindrome considering only alphanumeric characters and ignoring case, and False otherwise. An empty string counts as a palindrome.
+    Reply with only the code in a Python code block.
   evaluator: code_exec
   expected:
     - function: is_palindrome
-      args: ["racecar"]
+      args: ["A man, a plan, a canal: Panama"]
       expected: true
     - function: is_palindrome
-      args: ["hello"]
+      args: ["race a car"]
       expected: false
     - function: is_palindrome
-      args: ["Madam"]
+      args: [""]
+      expected: true
+    - function: is_palindrome
+      args: ["0P"]
+      expected: false
+    - function: is_palindrome
+      args: [".,"]
       expected: true
 
 - id: CG-04
   category: Code Generation
-  prompt: "Write a Python function `count_vowels(s)` that counts the number of vowels (a, e, i, o, u) in a string. Reply with only the code in a Python code block."
+  difficulty: medium
+  prompt: "Write a Python function `roman_to_int(s)` that converts a Roman numeral string (valid input, I to MMMCMXCIX) to an integer, handling subtractive pairs such as IV, IX, XL, XC, CD and CM. Reply with only the code in a Python code block."
   evaluator: code_exec
   expected:
-    - function: count_vowels
-      args: ["hello"]
-      expected: 2
-    - function: count_vowels
-      args: ["aeiou"]
-      expected: 5
-    - function: count_vowels
-      args: ["xyz"]
-      expected: 0
+    - function: roman_to_int
+      args: ["III"]
+      expected: 3
+    - function: roman_to_int
+      args: ["LVIII"]
+      expected: 58
+    - function: roman_to_int
+      args: ["MCMXCIV"]
+      expected: 1994
+    - function: roman_to_int
+      args: ["MMMCMXCIX"]
+      expected: 3999
+    - function: roman_to_int
+      args: ["IV"]
+      expected: 4
 
 - id: CG-05
   category: Code Generation
-  prompt: "Write a Python function `factorial(n)` that returns the factorial of n (n >= 0). Reply with only the code in a Python code block."
+  difficulty: hard
+  prompt: "Write a Python function `int_to_roman(n)` converting an integer from 1 to 3999 into its canonical Roman numeral string, using subtractive notation (4 is IV, not IIII). Reply with only the code in a Python code block."
   evaluator: code_exec
   expected:
-    - function: factorial
-      args: [0]
-      expected: 1
-    - function: factorial
-      args: [5]
-      expected: 120
-    - function: factorial
-      args: [10]
-      expected: 3628800
+    - function: int_to_roman
+      args: [4]
+      expected: "IV"
+    - function: int_to_roman
+      args: [58]
+      expected: "LVIII"
+    - function: int_to_roman
+      args: [1994]
+      expected: "MCMXCIV"
+    - function: int_to_roman
+      args: [3999]
+      expected: "MMMCMXCIX"
+    - function: int_to_roman
+      args: [40]
+      expected: "XL"
 
 - id: CG-06
   category: Code Generation
-  prompt: "Write a Python function `fizzbuzz(n)` that returns 'Fizz' if n is divisible by 3, 'Buzz' if divisible by 5, 'FizzBuzz' if divisible by both, and the number itself otherwise. Reply with only the code in a Python code block."
+  difficulty: easy
+  description: "Return type matters: strings for the multiples, the int itself otherwise"
+  prompt: "Write a Python function `fizzbuzz(n)` that returns the string 'Fizz' if n is divisible by 3, 'Buzz' if divisible by 5, 'FizzBuzz' if divisible by both, and otherwise the integer n itself. It must behave correctly for negative integers. Reply with only the code in a Python code block."
   evaluator: code_exec
   expected:
     - function: fizzbuzz
@@ -95,57 +143,150 @@
     - function: fizzbuzz
       args: [7]
       expected: 7
+    - function: fizzbuzz
+      args: [-15]
+      expected: "FizzBuzz"
+    - function: fizzbuzz
+      args: [-4]
+      expected: -4
 
 - id: CG-07
   category: Code Generation
-  prompt: "Write a Python function `flatten(lst)` that deeply flattens a nested list. Example: [1, [2, [3, 4], 5], 6] -> [1, 2, 3, 4, 5, 6]. Reply with only the code in a Python code block."
+  difficulty: hard
+  description: "Strings are iterable but must not be flattened"
+  prompt: |
+    Write a Python function `flatten(lst)` that deeply flattens arbitrarily nested lists and tuples into a single flat list, preserving order. Strings must be treated as atomic values, not flattened into characters.
+    Example: [1, [2, ("a", [3])], "bc"] -> [1, 2, "a", 3, "bc"]
+    Reply with only the code in a Python code block.
   evaluator: code_exec
   expected:
     - function: flatten
       args: [[1, [2, [3, 4], 5], 6]]
       expected: [1, 2, 3, 4, 5, 6]
     - function: flatten
-      args: [[[1, 2], [3, [4, [5]]]]]
-      expected: [1, 2, 3, 4, 5]
-    - function: flatten
       args: [[]]
       expected: []
+    - function: flatten
+      args: [[[], [[]], [[[1]]]]]
+      expected: [1]
+    - function: flatten
+      args: [[1, ["ab", [2]], "c"]]
+      expected: [1, "ab", 2, "c"]
 
 - id: CG-08
   category: Code Generation
-  prompt: "Write a Python function `binary_search(arr, target)` that returns the index of target in sorted arr, or -1 if not found. Reply with only the code in a Python code block."
+  difficulty: hard
+  description: "Duplicates: must return the leftmost match, not any match"
+  prompt: "Write a Python function `binary_search_leftmost(arr, target)` that returns the index of the FIRST occurrence of target in the sorted list arr, or -1 if it is absent. It must run in O(log n) time. Reply with only the code in a Python code block."
   evaluator: code_exec
   expected:
-    - function: binary_search
+    - function: binary_search_leftmost
       args: [[1, 3, 5, 7, 9], 5]
       expected: 2
-    - function: binary_search
+    - function: binary_search_leftmost
       args: [[1, 3, 5, 7, 9], 4]
       expected: -1
-    - function: binary_search
+    - function: binary_search_leftmost
       args: [[], 1]
       expected: -1
+    - function: binary_search_leftmost
+      args: [[2, 2, 2, 2, 2], 2]
+      expected: 0
+    - function: binary_search_leftmost
+      args: [[1, 2, 2, 2, 3], 2]
+      expected: 1
+    - function: binary_search_leftmost
+      args: [[1, 2, 2, 2, 3], 3]
+      expected: 4
 
 - id: CG-09
   category: Code Generation
-  prompt: "Write a Python function `merge_sort(lst)` that sorts a list using merge sort. Return the sorted list. Reply with only the code in a Python code block."
+  difficulty: hard
+  description: "Requires a deterministic canonical ordering of the output"
+  prompt: |
+    Write a Python function `group_anagrams(words)` that groups words that are anagrams of each other. Return a list of groups where each group is a list of words sorted alphabetically, and the outer list is sorted by each group's first word.
+    Example: ["eat","tea","tan","ate","nat","bat"] -> [["ate","eat","tea"],["bat"],["nat","tan"]]
+    Reply with only the code in a Python code block.
   evaluator: code_exec
   expected:
-    - function: merge_sort
-      args: [[3, 1, 4, 1, 5, 9]]
-      expected: [1, 1, 3, 4, 5, 9]
-    - function: merge_sort
+    - function: group_anagrams
+      args: [["eat", "tea", "tan", "ate", "nat", "bat"]]
+      expected: [["ate", "eat", "tea"], ["bat"], ["nat", "tan"]]
+    - function: group_anagrams
       args: [[]]
       expected: []
-    - function: merge_sort
-      args: [[1]]
-      expected: [1]
+    - function: group_anagrams
+      args: [[""]]
+      expected: [[""]]
+    - function: group_anagrams
+      args: [["ab", "ba", "abc"]]
+      expected: [["ab", "ba"], ["abc"]]
 
 - id: CG-10
   category: Code Generation
-  prompt: "Write a Python function `trie_insert(root, word)` and `trie_search(root, word)` that implement a trie. Reply with only the code in a Python code block."
+  difficulty: hard
+  description: "Prefix must not count as a word; harness also checks the empty trie"
+  prompt: |
+    Implement a trie in Python with two module-level functions:
+      `trie_insert(root, word)` - inserts a word
+      `trie_search(root, word)` - returns True only if the exact word was inserted, False for a mere prefix
+    Also define a class `TrieNode` that can be constructed with no arguments to create an empty root.
+    Reply with only the code in a Python code block.
   evaluator: code_exec
   expected:
     - function: test_trie
       args: []
       expected: true
+
+- id: CG-11
+  category: Code Generation
+  difficulty: hard
+  description: "Version comparison: numeric segments, unequal lengths, leading zeros"
+  prompt: |
+    Write a Python function `compare_versions(a, b)` comparing two dotted version strings. Return -1 if a < b, 0 if they are equal, and 1 if a > b. Segments compare numerically, so "1.10" > "1.2"; missing trailing segments are treated as 0, so "1.0" equals "1.0.0"; leading zeros are insignificant, so "1.01" equals "1.1".
+    Reply with only the code in a Python code block.
+  evaluator: code_exec
+  expected:
+    - function: compare_versions
+      args: ["1.2", "1.10"]
+      expected: -1
+    - function: compare_versions
+      args: ["1.0.0", "1.0"]
+      expected: 0
+    - function: compare_versions
+      args: ["1.01", "1.1"]
+      expected: 0
+    - function: compare_versions
+      args: ["2.1", "2.0.9"]
+      expected: 1
+    - function: compare_versions
+      args: ["1.0.0", "1.0.1"]
+      expected: -1
+    - function: compare_versions
+      args: ["10.0", "9.9.9"]
+      expected: 1
+
+- id: CG-12
+  category: Code Generation
+  difficulty: medium
+  prompt: |
+    Write a Python function `run_length_encode(s)` that encodes a string by replacing each run of identical characters with the character followed by the run length, always including the count even when it is 1.
+    Example: "aaabbc" -> "a3b2c1"; "" -> ""
+    Reply with only the code in a Python code block.
+  evaluator: code_exec
+  expected:
+    - function: run_length_encode
+      args: ["aaabbc"]
+      expected: "a3b2c1"
+    - function: run_length_encode
+      args: [""]
+      expected: ""
+    - function: run_length_encode
+      args: ["abc"]
+      expected: "a1b1c1"
+    - function: run_length_encode
+      args: ["aabaa"]
+      expected: "a2b1a2"
+    - function: run_length_encode
+      args: ["zzzzzzzzzzzz"]
+      expected: "z12"

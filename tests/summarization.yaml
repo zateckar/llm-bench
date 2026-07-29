@@ -1,62 +1,169 @@
 # Summarization Test Suite
+#
+# Length limits alone do not test summarisation: the old items passed on any text of
+# the right length that mentioned one keyword. Each item now also requires the
+# specific facts that must survive compression, and forbids the ones that must not
+# be invented or carried over - which is where summarisers actually fail.
 
 - id: SU-01
   category: Summarization
+  difficulty: hard
+  description: "Must keep the instrument and the planet, drop the journal, and not overclaim habitability"
   prompt: |
-    Summarize the following in exactly 2-3 sentences:
+    Summarise the following in exactly 2 sentences, at most 45 words in total. Name the planet and the
+    detected molecule. Do not mention the journal it was published in.
 
-    The James Webb Space Telescope (JWST) has made a groundbreaking discovery by detecting carbon dioxide in the atmosphere of an exoplanet for the first time. The planet, WASP-39b, is a hot gas giant located 700 light-years from Earth. Using its Near-Infrared Spectrograph (NIRSpec) and Mid-Infrared Instrument (MIRI), JWST identified the CO2 signature in starlight passing through the planet's atmosphere. This discovery demonstrates JWST's ability to detect atmospheric composition of distant worlds, bringing us closer to identifying potentially habitable planets. The finding was published in Nature and represents a major milestone in exoplanet research.
+    The James Webb Space Telescope has detected carbon dioxide in the atmosphere of an exoplanet for the
+    first time. The planet, WASP-39b, is a hot gas giant 700 light-years from Earth. Using its
+    Near-Infrared Spectrograph (NIRSpec) and Mid-Infrared Instrument (MIRI), JWST identified the CO2
+    signature in starlight passing through the planet's atmosphere during transit. The discovery
+    demonstrates JWST's ability to characterise the atmospheric composition of distant worlds. The
+    finding was published in Nature.
   evaluator: format_check
   expected:
     checks:
-      - type: min_sentences
+      - type: sentence_count_exact
         value: 2
-      - type: max_sentences
-        value: 3
+      - type: max_words
+        value: 45
       - type: regex
-        value: "(?i)carbon dioxide|co2|co₂"
+        value: '(?i)(carbon dioxide|\bCO2\b|CO₂)'
+        description: "names the detected molecule"
+      - type: regex
+        value: '(?i)WASP-?39\s?b'
+        description: "names the planet"
+      - type: not_regex
+        value: '(?i)\bNature\b'
+        description: "omits the journal as instructed"
+      - type: not_regex
+        value: '(?i)(habitable|life|inhabited|biosignature|signs? of life)'
+        description: "does not overclaim habitability"
 
 - id: SU-02
   category: Summarization
+  difficulty: hard
+  description: "The unexpected-recovery caveat is the detail summarisers drop"
   prompt: |
-    Summarize this article in one sentence (max 30 words):
+    Summarise this in exactly one sentence of at most 32 words. The sentence must include the percentage
+    decline, the cause, and the fact that some reefs recovered.
 
-    A new study published in Science reveals that global coral reef coverage has declined by 14% since 2009. Researchers from the Australian Institute of Marine Science surveyed 127 reef sites across the Great Barrier Reef and found that staghorn and tabulate corals were most affected. The primary cause is repeated marine heatwaves linked to climate change. However, some northern reefs showed unexpected recovery when water temperatures stabilized. The team recommends immediate action on carbon emissions and local pollution reduction to prevent further decline.
+    A study in Science reports that global coral reef coverage has declined 14% since 2009. Researchers
+    at the Australian Institute of Marine Science surveyed 127 reef sites across the Great Barrier Reef
+    and found staghorn and tabulate corals worst affected. The primary cause is repeated marine
+    heatwaves linked to climate change. Some northern reefs showed unexpected recovery where water
+    temperatures stabilised. The team recommends immediate action on carbon emissions and local
+    pollution.
   evaluator: format_check
   expected:
     checks:
-      - type: min_sentences
-        value: 1
-      - type: max_sentences
+      - type: sentence_count_exact
         value: 1
       - type: max_words
-        value: 30
+        value: 32
+      - type: regex
+        value: '\b14\s*%'
+        description: "includes the 14% decline"
+      - type: regex
+        value: '(?i)(heatwave|warming|climate change|temperature)'
+        description: "includes the cause"
+      - type: regex
+        value: '(?i)(recover|rebound|regrow)'
+        description: "includes the partial recovery"
 
 - id: SU-03
   category: Summarization
+  difficulty: hard
+  description: "Extraction with an exact bullet count and no invented facts"
   prompt: |
-    Extract the key facts from this passage as a bullet list (max 5 bullets):
+    Extract the key facts from this passage as a bullet list using the '-' marker, with exactly 4 bullets
+    and one fact per bullet. Include the flight date and the flight duration. Do not state that the
+    booster was caught by the tower.
 
-    SpaceX's Starship successfully completed its fourth test flight on June 6, 2024. The Super Heavy booster performed a soft splashdown in the Gulf of Mexico, while the Starship upper stage reached orbital velocity and re-entered the atmosphere over the Indian Ocean. Both stages survived reentry, marking a significant milestone. The flight lasted approximately 95 minutes. This was the first time both stages survived their respective trajectories. SpaceX plans to attempt a booster catch with the launch tower Mechazilla on the next flight.
+    SpaceX's Starship completed its fourth test flight on 6 June 2024. The Super Heavy booster performed
+    a soft splashdown in the Gulf of Mexico, while the Starship upper stage reached orbital velocity and
+    re-entered over the Indian Ocean. Both stages survived reentry, a first for the programme. The flight
+    lasted approximately 95 minutes. SpaceX plans to attempt a booster catch with the launch tower on a
+    future flight.
   evaluator: format_check
   expected:
     checks:
       - type: bullet_list
+        value: 4
+      - type: line_count
+        value: 4
       - type: regex
-        value: "(?i)starship|booster|june 6|95 min|reentry|re-entry"
+        value: '(?i)(6 june|june 6|2024-06-06|06/06/2024)'
+        description: "includes the flight date"
+      - type: regex
+        value: '\b95\b'
+        description: "includes the 95-minute duration"
+      - type: not_regex
+        value: '(?i)(?:booster (?:was|were) caught|caught (?:the )?booster|tower caught)'
+        description: "does not assert a booster catch happened"
 
 - id: SU-04
   category: Summarization
+  difficulty: hard
+  description: "Register change: jargon must be eliminated, not merely surrounded by plain words"
   prompt: |
-    Rewrite this technical passage for a non-technical audience (keep it under 50 words):
+    Rewrite this for a reader with no technical background, in at most 55 words and at least 25. You must
+    not use any of these words: Kubernetes, container, declarative, YAML, manifest, orchestrate,
+    reconcile, cluster.
 
-    Kubernetes orchestrates containerized applications across clusters of machines. It uses a declarative configuration model where desired state is specified in YAML manifests. The control plane continuously reconciles actual state with desired state, automatically handling scaling, self-healing, and rolling updates.
+    Kubernetes orchestrates containerised applications across clusters of machines. It uses a declarative
+    configuration model in which the desired state is specified in YAML manifests. The control plane
+    continuously reconciles actual state with desired state, automatically handling scaling, self-healing
+    and rolling updates.
   evaluator: format_check
   expected:
     checks:
-      - type: max_words
-        value: 50
       - type: min_words
-        value: 10
+        value: 25
+      - type: max_words
+        value: 55
+      - type: not_regex
+        value: '(?i)\b(kubernetes|k8s|container\w*|declarativ\w*|yaml|manifests?|orchestrat\w*|reconcil\w*|clusters?)\b'
+        description: "forbidden jargon absent"
       - type: regex
-        value: "(?i)app|software|program|machine|server|manage|run"
+        value: '(?i)(automatic|itself|on its own|without (?:you|someone)|by itself)'
+        description: "conveys the automation"
+      - type: regex
+        value: '(?i)(server|machine|computer|app|application|software|program|website|service)'
+        description: "uses plain equivalents"
+
+- id: SU-05
+  category: Summarization
+  difficulty: expert
+  description: "Compression with a hard fact budget: every number must survive"
+  prompt: |
+    Summarise the incident below in exactly 3 sentences, at most 60 words total. Every one of these must
+    appear: the severity level, the peak P99 latency, the total minutes of user-visible impact, and the
+    release that introduced the bug. Do not name the on-call engineer.
+
+    INCIDENT INC-2024-0892, severity P1. At 14:28 UTC a Redis node was OOM-killed. At 14:32 P99 latency
+    for payment-service rose from 200 ms to 5.2 s. The on-call engineer, Taylor, was paged at 14:33 and
+    acknowledged at 14:35. The cause - a session-cache memory leak introduced in release v2.3.1 - was
+    identified at 14:38. The node was restarted and the connection pool enlarged at 14:42. Latency
+    returned to baseline at 14:45.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: sentence_count_exact
+        value: 3
+      - type: max_words
+        value: 60
+      - type: regex
+        value: '\bP1\b'
+        description: "includes the severity"
+      - type: regex
+        value: '5\.2\s*s|5200\s*ms'
+        description: "includes the peak latency"
+      - type: regex
+        value: '\b13\b'
+        description: "includes the 13 minutes of impact"
+      - type: regex
+        value: 'v?2\.3\.1'
+        description: "includes the release"
+      - type: not_regex
+        value: '(?i)\bTaylor\b'
+        description: "omits the engineer's name as instructed"

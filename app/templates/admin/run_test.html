@@ -5,8 +5,18 @@
 <div class="max-w-2xl mx-auto space-y-6">
     <div>
         <h1 class="text-2xl font-bold text-white">Run Benchmark</h1>
-        <p class="text-slate-400 mt-1">Start a new benchmark run against an LLM model</p>
+        <p class="text-slate-400 mt-1">
+            Start a new benchmark run against an LLM model
+            {% if question_count %}&mdash; {{ question_count }} questions in the current suite{% endif %}
+        </p>
     </div>
+
+    {% if suite_error %}
+    <div class="card p-4 bg-red-900/20 border border-red-800/50">
+        <p class="text-sm font-medium text-red-400">The test suite failed to load</p>
+        <pre class="mt-2 text-xs text-slate-300 whitespace-pre-wrap">{{ suite_error }}</pre>
+    </div>
+    {% endif %}
 
     {% if not models %}
     <div class="card p-8 text-center">
@@ -14,7 +24,32 @@
         <a href="/admin/models" class="mt-3 inline-block text-sm text-blue-400 hover:text-blue-300">Add a model</a>
     </div>
     {% else %}
-    <form method="POST" action="/admin/run" class="card p-6 space-y-5">
+    <form method="POST" action="/admin/run" class="card p-6 space-y-5"
+          x-data="{
+            perf: false,
+            concurrency: '1,2,4,8',
+            maxLevel: {{ max_concurrency }},
+            get levels() {
+                return this.concurrency.split(',')
+                    .map(p => parseInt(p.trim(), 10))
+                    .filter(n => Number.isInteger(n) && n >= 1 && n <= this.maxLevel)
+                    .filter((n, i, a) => a.indexOf(n) === i)
+                    .sort((a, b) => a - b);
+            },
+            get rejected() {
+                return this.concurrency.split(',').map(p => p.trim()).filter(p => p.length)
+                    .filter(p => {
+                        const n = parseInt(p, 10);
+                        return !Number.isInteger(n) || n < 1 || n > this.maxLevel;
+                    });
+            },
+            /* Mirrors PerfConfig.total_requests(): warm-up + latency + decode +
+               prefill + max(level * 2, 8) per level. */
+            get estimatedRequests() {
+                return 2 + 8 + 3 + 3 +
+                    this.levels.reduce((sum, n) => sum + Math.max(n * 2, 8), 0);
+            }
+          }">
         <div>
             <label class="block text-sm font-medium text-slate-300 mb-1">Model</label>
             <select name="model_id" required class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
@@ -24,34 +59,101 @@
             </select>
         </div>
 
-        <div>
-            <label class="block text-sm font-medium text-slate-300 mb-1">Category Filter</label>
-            <select name="category" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
-                <option value="">All Categories</option>
-                <option value="Factual Knowledge">Factual Knowledge</option>
-                <option value="Mathematical Reasoning">Mathematical Reasoning</option>
-                <option value="Logical Reasoning">Logical Reasoning</option>
-                <option value="Code Generation">Code Generation</option>
-                <option value="Instruction Following">Instruction Following</option>
-                <option value="Truthfulness">Truthfulness</option>
-                <option value="Reading Comprehension">Reading Comprehension</option>
-                <option value="Tool Using">Tool Using</option>
-                <option value="Long Context Coherence">Long Context Coherence</option>
-                <option value="Agentic Use Cases">Agentic Use Cases</option>
-                <option value="Advanced Coding">Advanced Coding</option>
-                <option value="Security">Security</option>
-            </select>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Category Filter</label>
+                <select name="category" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                    <option value="">All Categories</option>
+                    {% for category in categories %}
+                    <option value="{{ category }}">{{ category }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Difficulty Filter</label>
+                <select name="difficulty" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                    <option value="">All Difficulties</option>
+                    {% for difficulty in difficulties %}
+                    <option value="{{ difficulty }}">{{ difficulty }}</option>
+                    {% endfor %}
+                </select>
+            </div>
         </div>
 
-        <div>
-            <label class="block text-sm font-medium text-slate-300 mb-1">Question Limit</label>
-            <input type="number" name="limit" value="0" min="0"
-                   class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                   placeholder="0 = no limit">
-            <p class="text-xs text-slate-500 mt-1">Set to 0 to run all questions</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Question Limit</label>
+                <input type="number" name="limit" value="0" min="0"
+                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                       placeholder="0 = no limit">
+                <p class="text-xs text-slate-500 mt-1">0 runs every matching question</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Concurrent Workers</label>
+                <input type="number" name="workers" value="1" min="1" max="16"
+                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                <p class="text-xs text-slate-500 mt-1">
+                    Above 1 the run finishes sooner, but per-question latency then includes
+                    server-side queueing. Use the performance suite for clean latency figures.
+                </p>
+            </div>
         </div>
 
-        <button type="submit" class="btn-primary w-full">Start Benchmark</button>
+        <div class="border-t border-slate-700 pt-5 space-y-3">
+            <label class="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" name="run_perf" value="1" x-model="perf"
+                       class="mt-1 rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-blue-500">
+                <span>
+                    <span class="text-sm font-medium text-slate-300">Also run the performance suite</span>
+                    <span class="block text-xs text-slate-500 mt-0.5">
+                        Measures latency distribution, time to first token, single-stream decode rate,
+                        prefill rate, and a concurrency sweep reporting aggregate throughput and error
+                        rate under load.
+                    </span>
+                </span>
+            </label>
+
+            <div x-show="perf" x-collapse>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Concurrency Levels</label>
+                <input type="text" name="concurrency" x-model="concurrency"
+                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500">
+                <p class="text-xs text-slate-500 mt-1">
+                    Comma-separated, each between 1 and {{ max_concurrency }}. Include level 1 to get a
+                    scaling-efficiency figure &mdash; it is the baseline the others are compared against.
+                </p>
+
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <span class="text-xs text-slate-500">Presets:</span>
+                    {% for preset in concurrency_presets %}
+                    <button type="button" @click="concurrency = '{{ preset }}'"
+                            class="px-2 py-0.5 rounded text-xs font-mono bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors"
+                            :class="concurrency === '{{ preset }}' ? 'ring-1 ring-blue-500 text-blue-300' : ''">{{ preset }}</button>
+                    {% endfor %}
+                </div>
+
+                <p class="text-xs mt-2" :class="rejected.length ? 'text-amber-400' : 'text-slate-500'">
+                    <template x-if="rejected.length">
+                        <span>Ignoring <span x-text="rejected.join(', ')"></span> &mdash; outside 1&ndash;<span x-text="maxLevel"></span>. </span>
+                    </template>
+                    <span>
+                        Will measure <span class="text-slate-300" x-text="levels.length"></span> level(s)
+                        using about <span class="text-slate-300" x-text="estimatedRequests"></span> requests.
+                    </span>
+                </p>
+
+                <p x-show="levels.some(n => n > 64)" x-collapse
+                   class="text-xs text-amber-400/90 mt-2 rounded bg-amber-900/20 border border-amber-800/40 p-2">
+                    Above 64 in-flight requests the load generator's own thread scheduling and socket
+                    handling start to show up in the latency figures, so those rows are a lower bound on
+                    the endpoint's capacity rather than an exact measurement. The run also holds one
+                    socket per in-flight request, so make sure the host's file-descriptor limit allows it.
+                </p>
+            </div>
+        </div>
+
+        <button type="submit" class="btn-primary w-full" {% if suite_error %}disabled{% endif %}>Start Benchmark</button>
     </form>
     {% endif %}
 </div>

@@ -1,6 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Run #{{ run.id }} - LLM Bench{% endblock %}
 
+{# Latency values arrive as milliseconds or None; render them compactly. #}
+{% macro ms(value) -%}
+{%- if value is none -%}n/a
+{%- elif value >= 1000 -%}{{ "%.2f s"|format(value / 1000) }}
+{%- else -%}{{ "%.0f ms"|format(value) }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro rate(value, unit) -%}
+{%- if value is none -%}n/a{%- else -%}{{ "%.1f"|format(value) }} {{ unit }}{%- endif -%}
+{%- endmacro %}
+
 {% block content %}
 <div class="space-y-6" x-data="{ expandedCategories: {}, expandedQuestion: null }">
     <div class="flex items-center gap-4">
@@ -13,9 +25,22 @@
         </div>
         <div class="ml-auto flex items-center gap-3">
             {% if run.status == 'completed' %}
-            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-pass">
-                {{ run.passed_questions }}/{{ run.total_questions }} passed ({{ "%.1f"|format(run.avg_score * 100) }}%)
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-pass"
+                  title="A question passes only when it reaches its own pass threshold, so partial credit never counts as a pass.">
+                {{ run.passed_questions }}/{{ run.scored_questions or run.total_questions }} passed ({{ "%.1f"|format(run.avg_score * 100) }}%)
             </span>
+            {% if run.weighted_score %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-slate-800 text-slate-300"
+                  title="Average score weighted by question difficulty (easy 1.0, medium 1.5, hard 2.0, expert 3.0).">
+                {{ "%.1f"|format(run.weighted_score * 100) }}% weighted
+            </span>
+            {% endif %}
+            {% if run.error_count %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-900/50 text-amber-400"
+                  title="Requests that failed at the transport layer. These are excluded from the percentages.">
+                {{ run.error_count }} request error{{ 's' if run.error_count != 1 }}
+            </span>
+            {% endif %}
             {% elif run.status == 'running' %}
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-running">Running</span>
             {% elif run.status == 'failed' %}
@@ -23,13 +48,15 @@
             {% else %}
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-pending">Pending</span>
             {% endif %}
-            {% if evaluator_errors and user and user.role == 'admin' %}
+            {# Only infrastructure failures are re-runnable; a wrong answer is a result. #}
+            {% set rerunnable = (evaluator_errors|length) + (transport_errors|length) %}
+            {% if rerunnable and user and user.role == 'admin' %}
             <form method="POST" action="/runs/{{ run.id }}/rerun-failed" class="inline"
                   x-data
-                  x-on:submit.prevent="if(confirm('Re-run {{ evaluator_errors|length }} errored questions?')) $el.submit()">
+                  x-on:submit.prevent="if(confirm('Re-run {{ rerunnable }} question(s) that failed for infrastructure reasons?')) $el.submit()">
                 <button type="submit" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-900/50 text-amber-400 hover:bg-amber-900/70 transition-colors">
                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                    Re-run Errored ({{ evaluator_errors|length }})
+                    Re-run Errored ({{ rerunnable }})
                 </button>
             </form>
             {% endif %}
@@ -64,6 +91,207 @@
             <p class="text-sm text-slate-300 mt-1 truncate">{{ run.error_message or 'None' }}</p>
         </div>
     </div>
+
+    <!-- Performance measured while running the questions -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div class="card p-4">
+            <p class="text-xs text-slate-500 uppercase tracking-wider">Wall Clock</p>
+            <p class="text-sm text-slate-300 mt-1">{{ ms(run.duration_ms) }}</p>
+            <p class="text-xs text-slate-500">{{ run.workers or 1 }} worker{{ 's' if (run.workers or 1) != 1 }}</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-500 uppercase tracking-wider">Latency p50</p>
+            <p class="text-sm text-slate-300 mt-1">{{ ms(run.latency_p50_ms) }}</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-500 uppercase tracking-wider">Latency p95</p>
+            <p class="text-sm text-slate-300 mt-1">{{ ms(run.latency_p95_ms) }}</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-500 uppercase tracking-wider">Latency p99</p>
+            <p class="text-sm text-slate-300 mt-1">{{ ms(run.latency_p99_ms) }}</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-500 uppercase tracking-wider">TTFT p50</p>
+            <p class="text-sm text-slate-300 mt-1">{{ ms(run.ttft_p50_ms) }}</p>
+            <p class="text-xs text-slate-500">p95 {{ ms(run.ttft_p95_ms) }}</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-500 uppercase tracking-wider">Run Throughput</p>
+            <p class="text-sm text-slate-300 mt-1">{{ rate(run.output_tokens_per_sec, 'tok/s') }}</p>
+            <p class="text-xs text-slate-500">output tokens / wall clock</p>
+        </div>
+    </div>
+
+    {% if perf %}
+    <!-- Dedicated performance suite -->
+    <div class="card p-5 space-y-5">
+        <div class="flex items-baseline justify-between">
+            <h2 class="text-lg font-semibold text-white">Performance Suite</h2>
+            {% if perf.streaming is defined %}
+            <span class="text-xs {% if perf.streaming %}text-slate-500{% else %}text-amber-400{% endif %}">
+                {% if perf.streaming %}streaming enabled{% else %}streaming unavailable &mdash; TTFT not measurable{% endif %}
+            </span>
+            {% endif %}
+        </div>
+
+        {% if perf.error %}
+        <p class="text-sm text-red-400">The performance suite did not complete: {{ perf.error }}</p>
+        {% else %}
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div>
+                <p class="text-xs text-slate-500 uppercase tracking-wider">Decode</p>
+                <p class="text-sm text-slate-200 mt-1">{{ rate(perf.decode_tokens_per_sec, 'tok/s') }}</p>
+                <p class="text-xs text-slate-500">single stream</p>
+            </div>
+            <div>
+                <p class="text-xs text-slate-500 uppercase tracking-wider">Prefill</p>
+                <p class="text-sm text-slate-200 mt-1">{{ rate(perf.prefill_tokens_per_sec, 'tok/s') }}</p>
+                <p class="text-xs text-slate-500">from TTFT on a long prompt</p>
+            </div>
+            <div>
+                <p class="text-xs text-slate-500 uppercase tracking-wider">Peak Output</p>
+                <p class="text-sm text-slate-200 mt-1">{{ rate(perf.peak_output_tokens_per_sec, 'tok/s') }}</p>
+                <p class="text-xs text-slate-500">aggregate under load</p>
+            </div>
+            <div>
+                <p class="text-xs text-slate-500 uppercase tracking-wider">Peak Rate</p>
+                <p class="text-sm text-slate-200 mt-1">{{ rate(perf.peak_requests_per_sec, 'req/s') }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-slate-500 uppercase tracking-wider">Saturates At</p>
+                <p class="text-sm text-slate-200 mt-1">
+                    {% if perf.saturation_concurrency %}c = {{ perf.saturation_concurrency }}{% else %}n/a{% endif %}
+                </p>
+                <p class="text-xs text-slate-500">beyond this, latency only</p>
+            </div>
+            <div>
+                <p class="text-xs text-slate-500 uppercase tracking-wider">Scaling</p>
+                <p class="text-sm text-slate-200 mt-1">
+                    {% if perf.scaling_efficiency is not none %}{{ "%.0f%%"|format(perf.scaling_efficiency * 100) }}{% else %}n/a{% endif %}
+                </p>
+                <p class="text-xs text-slate-500">of linear at max c</p>
+            </div>
+        </div>
+
+        <div>
+            <h3 class="text-sm font-medium text-slate-300 mb-2">Single-stream latency distribution</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr>
+                            <th class="text-left">Metric</th><th class="text-left">n</th>
+                            <th class="text-left">Mean</th><th class="text-left">p50</th>
+                            <th class="text-left">p90</th><th class="text-left">p95</th>
+                            <th class="text-left">p99</th><th class="text-left">Max</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for label, stats in [('End-to-end', perf.serial_latency), ('Time to first token', perf.serial_ttft)] %}
+                        {% if stats %}
+                        <tr>
+                            <td class="text-slate-300">{{ label }}</td>
+                            <td class="text-slate-400">{{ stats.count }}</td>
+                            <td class="text-slate-400">{{ ms(stats.mean_ms) }}</td>
+                            <td class="text-slate-200">{{ ms(stats.p50_ms) }}</td>
+                            <td class="text-slate-400">{{ ms(stats.p90_ms) }}</td>
+                            <td class="text-slate-200">{{ ms(stats.p95_ms) }}</td>
+                            <td class="text-slate-400">{{ ms(stats.p99_ms) }}</td>
+                            <td class="text-slate-400">{{ ms(stats.max_ms) }}</td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% if perf.concurrency %}
+        <div>
+            <h3 class="text-sm font-medium text-slate-300 mb-2">Concurrency sweep</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr>
+                            <th class="text-left">Concurrency</th><th class="text-left">Requests</th>
+                            <th class="text-left">Errors</th><th class="text-left">Req/s</th>
+                            <th class="text-left">Output tok/s</th><th class="text-left">p50 latency</th>
+                            <th class="text-left">p95 latency</th><th class="text-left">p50 TTFT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for point in perf.concurrency %}
+                        <tr>
+                            <td class="text-slate-200 font-mono">
+                                {{ point.concurrency }}
+                                {%- if point.concurrency > 64 %}
+                                <span class="text-amber-400 cursor-help"
+                                      title="Above 64 in-flight requests the load generator contributes to the measured latency; treat this row as a lower bound on capacity.">*</span>
+                                {%- endif %}
+                            </td>
+                            <td class="text-slate-400">{{ point.requests }}</td>
+                            <td class="{% if point.errors %}text-red-400{% else %}text-slate-500{% endif %}">
+                                {{ point.errors }} ({{ "%.0f%%"|format(point.error_rate * 100) }})
+                            </td>
+                            <td class="text-slate-300">{{ "%.2f"|format(point.requests_per_sec) }}</td>
+                            <td class="text-slate-200">{{ "%.1f"|format(point.output_tokens_per_sec) }}</td>
+                            <td class="text-slate-300">{{ ms(point.latency.p50_ms) }}</td>
+                            <td class="text-slate-300">{{ ms(point.latency.p95_ms) }}</td>
+                            <td class="text-slate-400">{{ ms(point.ttft.p50_ms) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div style="position: relative; height: 220px;" class="mt-4"><canvas id="concurrencyChart"></canvas></div>
+        </div>
+        {% endif %}
+
+        {% if perf.notes %}
+        <div class="rounded-lg bg-amber-900/20 border border-amber-800/40 p-3">
+            <p class="text-xs font-medium text-amber-400 mb-1">Measurement notes</p>
+            <ul class="text-xs text-slate-300 space-y-1 list-disc list-inside">
+                {% for note in perf.notes %}<li>{{ note }}</li>{% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if difficulty_rows %}
+    <div class="card p-5">
+        <h2 class="text-lg font-semibold text-white mb-3">By Difficulty</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {% for row in difficulty_rows %}
+            <div class="rounded-lg bg-slate-800/50 p-3">
+                <p class="text-xs text-slate-500 uppercase tracking-wider">{{ row.difficulty }}</p>
+                <p class="text-lg font-semibold text-slate-200 mt-1">{{ row.passed }}/{{ row.scored or row.total }}</p>
+                <p class="text-xs text-slate-500">{{ "%.0f%%"|format((row.avg_score or 0) * 100) }} average score</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if transport_errors %}
+    <div class="card p-5 bg-amber-900/20 border border-amber-800/50">
+        <h2 class="text-lg font-semibold text-amber-400 mb-2">Infrastructure Errors ({{ transport_errors|length }})</h2>
+        <p class="text-sm text-slate-400 mb-3">
+            These requests never reached the model, so they are excluded from the scores above rather
+            than counted as wrong answers.
+        </p>
+        <div class="space-y-2">
+            {% for r in transport_errors %}
+            <div class="flex items-center gap-3 px-3 py-2 rounded bg-slate-900/50">
+                <span class="font-mono text-xs text-slate-500">{{ r.test_id }}</span>
+                <span class="text-sm text-slate-300 truncate flex-1">{{ r.category }}</span>
+                <span class="text-xs text-amber-400">{{ r.detail[:100] }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     {% if evaluator_errors %}
     <!-- Evaluator Errors -->
@@ -114,7 +342,11 @@
                         </div>
                         <div>
                             <p class="font-medium text-slate-200">{{ cat.category }}</p>
-                            <p class="text-xs text-slate-500">{{ cat.passed }}/{{ cat.total }} questions passed</p>
+                            <p class="text-xs text-slate-500">
+                                {{ cat.passed }}/{{ cat.scored or cat.total }} passed
+                                {%- if cat.weighted_score is not none %} &middot; {{ "%.0f%%"|format(cat.weighted_score * 100) }} weighted{% endif %}
+                                {%- if cat.avg_latency_ms %} &middot; {{ ms(cat.avg_latency_ms) }} avg latency{% endif %}
+                            </p>
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
@@ -138,15 +370,20 @@
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-2">
                                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs
-                                        {% if r.score >= 0.5 %}bg-emerald-900/50 text-emerald-400{% else %}bg-red-900/50 text-red-400{% endif %}">
-                                        {% if r.score >= 0.5 %}&#10003;{% else %}&#10007;{% endif %}
+                                        {% if not r.request_ok %}bg-amber-900/50 text-amber-400
+                                        {% elif r.passed %}bg-emerald-900/50 text-emerald-400
+                                        {% else %}bg-red-900/50 text-red-400{% endif %}">
+                                        {% if not r.request_ok %}!{% elif r.passed %}&#10003;{% else %}&#10007;{% endif %}
                                     </span>
                                     <span class="font-mono text-xs text-slate-500">{{ r.test_id }}</span>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide bg-slate-800 text-slate-400">{{ r.difficulty or 'medium' }}</span>
                                     <span class="text-sm text-slate-300 truncate max-w-md">{{ r.prompt[:80] }}{% if r.prompt|length > 80 %}...{% endif %}</span>
                                 </div>
                                 <div class="flex items-center gap-3">
+                                    <span class="text-xs text-slate-500">{{ ms(r.latency_ms) }}</span>
                                     <span class="text-xs text-slate-500">{{ r.prompt_tokens + r.completion_tokens }} tok</span>
-                                    <span class="text-xs font-medium {% if r.score >= 0.5 %}text-emerald-400{% else %}text-red-400{% endif %}">
+                                    <span class="text-xs font-medium {% if r.passed %}text-emerald-400{% else %}text-red-400{% endif %}"
+                                          title="Needed {{ '%.0f%%'|format((r.pass_threshold or 1.0) * 100) }} to pass">
                                         {{ "%.0f"|format(r.score * 100) }}%
                                     </span>
                                 </div>
@@ -176,6 +413,16 @@
                                     <div class="flex items-center gap-1">
                                         <span>Tokens:</span>
                                         <span class="text-slate-400">{{ r.prompt_tokens }} in + {{ r.completion_tokens }} out = {{ r.prompt_tokens + r.completion_tokens }} total</span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <span>Latency:</span>
+                                        <span class="text-slate-400">
+                                            {{ ms(r.latency_ms) }}{% if r.ttft_ms %} (TTFT {{ ms(r.ttft_ms) }}){% endif %}
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <span>Pass bar:</span>
+                                        <span class="text-slate-400">{{ "%.0f%%"|format((r.pass_threshold or 1.0) * 100) }}</span>
                                     </div>
                                 </div>
                             </div>
@@ -222,7 +469,7 @@
     // Pie chart
     const pieCtx = document.getElementById('pieChart').getContext('2d');
     const passedCount = {{ run.passed_questions }};
-    const failedCount = {{ run.total_questions }} - {{ run.passed_questions }};
+    const failedCount = {{ run.scored_questions or run.total_questions }} - {{ run.passed_questions }};
 
     new Chart(pieCtx, {
         type: 'doughnut',
@@ -247,6 +494,64 @@
             }
         }
     });
+
+    {% if perf and perf.concurrency %}
+    // Throughput against latency across the concurrency sweep. The point where the
+    // throughput line flattens while the latency line keeps climbing is the
+    // saturation point.
+    const concCtx = document.getElementById('concurrencyChart').getContext('2d');
+    new Chart(concCtx, {
+        type: 'line',
+        data: {
+            labels: {{ perf.concurrency | map(attribute='concurrency') | list | tojson }},
+            datasets: [
+                {
+                    label: 'Output tokens/s (aggregate)',
+                    data: {{ perf.concurrency | map(attribute='output_tokens_per_sec') | list | tojson }},
+                    borderColor: 'rgba(16, 185, 129, 0.9)',
+                    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                    yAxisID: 'y',
+                    tension: 0.25,
+                },
+                {
+                    label: 'p95 latency (ms)',
+                    data: {{ perf.concurrency | map(attribute='latency') | map(attribute='p95_ms') | list | tojson }},
+                    borderColor: 'rgba(234, 179, 8, 0.9)',
+                    backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                    yAxisID: 'y1',
+                    tension: 0.25,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: {
+                    title: { display: true, text: 'Concurrency', color: '#94a3b8' },
+                    grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                    ticks: { color: '#94a3b8' }
+                },
+                y: {
+                    position: 'left',
+                    title: { display: true, text: 'tokens/s', color: '#10b981' },
+                    grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                    ticks: { color: '#94a3b8' },
+                    beginAtZero: true
+                },
+                y1: {
+                    position: 'right',
+                    title: { display: true, text: 'ms', color: '#eab308' },
+                    grid: { drawOnChartArea: false },
+                    ticks: { color: '#94a3b8' },
+                    beginAtZero: true
+                }
+            },
+            plugins: { legend: { labels: { color: '#94a3b8' } } }
+        }
+    });
+    {% endif %}
 </script>
 {% endif %}
 {% endblock %}

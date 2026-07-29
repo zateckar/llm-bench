@@ -1,212 +1,258 @@
 # Long Context Coherence Test Suite
+#
+# The previous items were answerable by finding one or two literal strings in the
+# document, and `contains_keywords` awarded 0.5 for finding half of them - enough
+# to pass. Every item now requires combining facts stated in different places,
+# usually with arithmetic, and most are graded on a single exact-format answer line
+# so partial recall earns nothing.
 
 - id: LC-01
   category: Long Context Coherence
+  difficulty: hard
+  description: "Joins the phase plan, the team roster and the decisions log"
   prompt: |
-    Read this document carefully and answer the question.
-
     PROJECT NEXUS - Technical Specification v2.3
 
-    1. Overview: Project Nexus is a real-time analytics platform. The system processes 10M events/second. Primary language: Rust. Secondary: Python for ML pipelines.
+    1. Overview: a real-time analytics platform processing 10M events/second. Primary language Rust,
+       with Python for ML pipelines.
+    2. Architecture: three tiers. React 18 with TypeScript on the front end; Rust with Actix-web 4.0 on
+       the back end; PostgreSQL 15 with the TimescaleDB extension; Redis 7.0 cache with 64 GB allocated.
+    3. Team: project lead Maria Chen (joined March 2024). Backend: Alex, Jordan, Sam, Riley. Frontend:
+       Casey, Morgan. DevOps: Taylor. ML: Quinn, Avery.
+    4. Timeline: Phase 1 (Q1) core ingestion; Phase 2 (Q2) dashboard UI; Phase 3 (Q3) ML anomaly
+       detection; Phase 4 (Q4) mobile SDK.
+    5. Budget: total $2.4M - infrastructure $800K, salaries $1.2M, tools and licences $200K,
+       contingency $200K.
+    6. Technical debt: the auth module uses bcrypt with cost factor 12 where 14 is required; the event
+       parser is O(n^2) for payloads above 10 MB; the Redis eviction policy is volatile-lru but should
+       be allkeys-lru.
+    7. Decisions log: MongoDB replaced by PostgreSQL (May 2024); Actix-web chosen over Axum (June 2024);
+       TimescaleDB chosen over InfluxDB (July 2024).
 
-    2. Architecture: Three-tier design. Frontend uses React 18 with TypeScript. Backend is Rust with Actix-web 4.0. Database: PostgreSQL 15 with TimescaleDB extension. Cache layer: Redis 7.0 with 64GB allocation.
+    Answer all four, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>, <c>, <d>`
 
-    3. Team: Project lead is Maria Chen (joined March 2024). Backend team: 4 engineers (Alex, Jordan, Sam, Riley). Frontend: 2 engineers (Casey, Morgan). DevOps: 1 engineer (Taylor). ML team: 2 engineers (Quinn, Avery).
-
-    4. Timeline: Phase 1 (Q1): Core ingestion pipeline. Phase 2 (Q2): Dashboard UI. Phase 3 (Q3): ML anomaly detection. Phase 4 (Q4): Mobile SDK.
-
-    5. Budget: Total $2.4M. Infrastructure: $800K. Salaries: $1.2M. Tools/licenses: $200K. Contingency: $200K.
-
-    6. Technical Debt: The auth module uses bcrypt with cost factor 12 (should be 14). The event parser has a known O(n²) bug for payloads >10MB. Redis eviction policy is set to 'volatile-lru' but should be 'allkeys-lru'.
-
-    7. Decisions Log: Switched from MongoDB to PostgreSQL (May 2024). Adopted Actix-web over Axum (June 2024). Chose TimescaleDB over InfluxDB (July 2024).
-
-    Question: Who is responsible for the ML anomaly detection work in Phase 3, and what database change was made that supports time-series data for this feature?
-  evaluator: contains_keywords
-  expected: ["quinn", "avery", "timescaledb"]
+    (a) How many engineers in total are named in section 3, excluding the project lead?
+    (b) Which named team members will do the Phase 3 work? List their names separated by a space.
+    (c) Which database extension decision supports Phase 3's data shape? Give the extension name.
+    (d) How many dollars of the budget are neither salaries nor infrastructure? Give a whole number.
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*9\s*,\s*(?:Quinn\s+Avery|Avery\s+Quinn)\s*,\s*TimescaleDB\s*,\s*\$?400,?000\s*\.?\s*$'
 
 - id: LC-02
   category: Long Context Coherence
+  difficulty: hard
+  description: "Requires applying the notice period and the fee formula, not just quoting them"
   prompt: |
-    Read this contract excerpt and answer.
-
     SERVICE AGREEMENT between TechCorp Inc. (Provider) and DataFlow Ltd. (Client)
-    Effective Date: January 15, 2024
+    Effective date: 15 January 2024.
 
-    Section 1: Scope
-    Provider shall deliver cloud infrastructure management services including:
-    - 24/7 monitoring of production systems
-    - Incident response within 15 minutes (Priority 1)
-    - Monthly security audits
-    - Quarterly capacity planning reviews
+    Section 1 - Scope: 24/7 monitoring of production systems; Priority 1 incident response within 15
+    minutes; monthly security audits; quarterly capacity reviews.
 
-    Section 2: Pricing
-    - Base fee: $25,000/month
-    - On-call premium: $5,000/month
-    - Additional incidents beyond 10/month: $500 each
-    - Holiday coverage: 150% of base rate
+    Section 2 - Pricing: base fee $25,000/month; on-call premium $5,000/month; incidents beyond 10 per
+    month billed at $500 each; holiday coverage billed at 150% of the base rate.
 
-    Section 3: SLA Terms
-    - Uptime guarantee: 99.95%
-    - Response time SLA: 15 minutes for P1, 4 hours for P2
-    - Resolution time SLA: 4 hours for P1, 24 hours for P2
-    - SLA credit: 10% of monthly fee per 0.1% below 99.95% uptime
+    Section 3 - SLA: uptime guarantee 99.95%; response 15 minutes for P1 and 4 hours for P2; resolution
+    4 hours for P1 and 24 hours for P2; SLA credit of 10% of the monthly fee for each full 0.1
+    percentage point below 99.95% uptime.
 
-    Section 4: Termination
-    - Either party may terminate with 60 days written notice
-    - Early termination fee: 3 months of base fees
-    - Provider retains data for 30 days after termination
+    Section 4 - Termination: either party may terminate on 60 days' written notice; early termination
+    incurs a fee of 3 months of base fees; the Provider retains client data for 30 days after
+    termination.
 
-    Question: If DataFlow wants to terminate the contract immediately on March 1, 2024, how much would they owe in early termination fees, and what happens to their data?
-  evaluator: contains_keywords
-  expected: ["75,000", "30 days"]
+    Answer all three, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>, <c>`
+
+    (a) DataFlow wants to stop service immediately on 1 March 2024 rather than serving notice. What
+        early termination fee is owed, in whole dollars?
+    (b) For how many days after termination does the Provider retain the data? Give a number.
+    (c) In a month with 14 incidents and 99.75% measured uptime, what is the total amount DataFlow owes
+        for that month, in whole dollars? Count the base fee, the on-call premium and the excess
+        incident charges, then subtract the SLA credit, calculating the credit as a percentage of the
+        base fee.
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*\$?75,?000\s*,\s*30\s*,\s*\$?27,?000\s*\.?\s*$'
 
 - id: LC-03
   category: Long Context Coherence
+  difficulty: hard
+  description: "Attribute each issue to the commit that plausibly caused it, and to a module"
   prompt: |
-    Analyze this codebase description:
-
     Repository: payment-service (monorepo)
 
-    Module Structure:
-    - /src/core: Payment processing engine (Rust, v3.2.1)
-    - /src/gateway: Bank gateway integrations (Rust, v3.2.1)
-    - /src/api: REST API layer (Python FastAPI, v2.1.0)
-    - /src/webhooks: Event delivery system (Go, v1.0.3)
-    - /src/ml: Fraud detection model (Python, v0.9.4-beta)
+    Modules:
+      /src/core     Payment processing engine (Rust, v3.2.1)
+      /src/gateway  Bank gateway integrations (Rust, v3.2.1)
+      /src/api      REST API layer (Python FastAPI, v2.1.0)
+      /src/webhooks Event delivery system (Go, v1.0.3)
+      /src/ml       Fraud detection model (Python, v0.9.4-beta)
 
-    Recent Changes (git log):
-    - 2024-03-15: 'fix: resolve race condition in webhook delivery' (author: @chen)
-    - 2024-03-14: 'feat: add Stripe Connect support' (author: @patel)
-    - 2024-03-12: 'refactor: extract common validation logic' (author: @silva)
-    - 2024-03-10: 'fix: handle duplicate idempotency keys' (author: @chen)
-    - 2024-03-08: 'feat: implement 3D Secure v2' (author: @patel)
-    - 2024-03-05: 'chore: update ML model to v0.9.4-beta' (author: @kim)
-    - 2024-03-01: 'fix: correct currency conversion rounding' (author: @silva)
+    Recent commits:
+      2024-03-15  fix: resolve race condition in webhook delivery   (@chen)
+      2024-03-14  feat: add Stripe Connect support                  (@patel)
+      2024-03-12  refactor: extract common validation logic         (@silva)
+      2024-03-10  fix: handle duplicate idempotency keys            (@chen)
+      2024-03-08  feat: implement 3D Secure v2                      (@patel)
+      2024-03-05  chore: update ML model to v0.9.4-beta             (@kim)
+      2024-03-01  fix: correct currency conversion rounding         (@silva)
 
-    Known Issues:
-    - ISSUE-1042: ML model accuracy dropped 2% after v0.9.4-beta update
-    - ISSUE-1039: Webhook retry logic doesn't respect backoff
-    - ISSUE-1035: Stripe Connect payments fail for JPY currency
+    Known issues:
+      ISSUE-1042  ML model accuracy dropped 2% after the v0.9.4-beta update
+      ISSUE-1039  Webhook retry logic does not respect backoff
+      ISSUE-1035  Stripe Connect payments fail for JPY currency
 
-    Question: Based on the commit history and known issues, which developer likely introduced ISSUE-1042, and what module is affected by ISSUE-1039?
-  evaluator: contains_keywords
-  expected: ["kim", "webhooks", "ml"]
+    Answer all three, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>, <c>`
+
+    (a) Which commit author most likely introduced ISSUE-1042? Give the handle including the @.
+    (b) Which module path is affected by ISSUE-1039? Give the path.
+    (c) Which commit author most likely introduced ISSUE-1035? Give the handle including the @.
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*@?kim\s*,\s*/src/webhooks\s*,\s*@?patel\s*\.?\s*$'
 
 - id: LC-04
   category: Long Context Coherence
+  difficulty: hard
+  description: "Two blockers, both stated in different turns of the transcript"
   prompt: |
-    Read this meeting transcript and answer.
-
     MEETING: Q1 Retrospective - Platform Team
-    Date: March 28, 2024
+    Date: 28 March 2024
     Attendees: Maria (PM), Alex (Backend), Casey (Frontend), Taylor (DevOps)
 
     Maria: Let's review Q1. We shipped the new dashboard but missed the mobile SDK. What went well?
-
     Casey: The React migration went smoother than expected. We cut bundle size by 40%.
-
-    Alex: Backend performance improved 3x after the Rust rewrite. But we introduced a regression in the payment validation that took 2 weeks to fix.
-
-    Taylor: Infrastructure costs dropped 25% with the new auto-scaling. However, we had 3 production incidents - all related to database connection pooling.
-
+    Alex: Backend performance improved 3x after the Rust rewrite, but we introduced a regression in
+      payment validation that took 2 weeks to fix.
+    Taylor: Infrastructure costs dropped 25% with the new auto-scaling. We did have 3 production
+      incidents, all traced to database connection pooling.
     Maria: What about the ML pipeline?
+    Alex: Quinn's anomaly detection model is ready, but we can't deploy it because the feature flag
+      system isn't finished. That's blocking Q2.
+    Casey: Also Morgan left the team last month, so we're down to one frontend engineer.
+    Maria: Action items: 1) Alex to fix the payment validation regression by 5 April. 2) Taylor to
+      implement connection pooling limits. 3) Hire 2 frontend engineers. 4) Unblock the ML deployment.
 
-    Alex: Quinn's anomaly detection model is ready but we can't deploy it because the feature flags system isn't complete. That's blocking Q2.
+    Answer all four, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>, <c>, <d>`
 
-    Casey: Also, Morgan left the team last month. We're down to 1 frontend engineer.
-
-    Maria: Action items: 1) Alex to fix payment validation regression by April 5. 2) Taylor to implement connection pooling limits. 3) We need to hire 2 frontend engineers. 4) Unblock ML deployment.
-
-    Question: What was the root cause of all 3 production incidents in Q1, and what two items are blocking the Q2 ML deployment?
-  evaluator: contains_keywords
-  expected: ["connection pooling", "feature flags", "quinn"]
+    (a) What was the single root cause shared by all 3 production incidents? Answer in three words.
+    (b) Which system's incompleteness blocks the ML deployment? Answer in two words.
+    (c) How many frontend engineers will the team have once the action items are complete? Give a number.
+    (d) How many of the four action items are assigned to a named individual? Give a number.
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*(?:database\s+)?connection\s+pool(?:ing)?\s*,\s*feature\s+flags?\s*,\s*3\s*,\s*2\s*\.?\s*$'
 
 - id: LC-05
   category: Long Context Coherence
+  difficulty: hard
+  description: "Reconstruct the plan history and the credit arithmetic from a transcript"
   prompt: |
-    Read this customer support conversation and identify the issue.
-
     Ticket #4521: Premium subscription billing issue
     Customer: Sarah Mitchell
-    Plan: Premium ($49/month)
+    Current plan: Premium ($49/month)
 
     [Mar 15, 10:30] Sarah: I was charged $98 today but I only have one subscription.
-    [Mar 15, 11:15] Agent (Tom): I see your account. You have Premium plan active. Let me check the billing history.
-    [Mar 15, 11:45] Tom: I see charges on Mar 1 and Mar 15. Were you on the Trial plan before?
-    [Mar 15, 12:00] Sarah: Yes, I started with Trial on Feb 15, upgraded to Basic on Feb 28, then to Premium on Mar 1.
-    [Mar 15, 12:30] Tom: I see the issue. When you upgraded from Basic to Premium, the prorated credit wasn't applied. You should have been charged $32, not $49.
+    [Mar 15, 11:15] Tom: I can see your account on the Premium plan. Let me check the billing history.
+    [Mar 15, 11:45] Tom: There are charges on Mar 1 and Mar 15. Were you on the Trial plan before?
+    [Mar 15, 12:00] Sarah: Yes - Trial from Feb 15, then Basic on Feb 28, then Premium on Mar 1.
+    [Mar 15, 12:30] Tom: Found it. On the Basic-to-Premium upgrade the prorated credit was not applied;
+      you should have been charged $32, not $49.
     [Mar 15, 13:00] Sarah: So I'm owed $17 back?
-    [Mar 15, 13:15] Tom: Actually, looking at the Trial-to-Basic upgrade on Feb 28, there was a $15 credit that wasn't applied either. Total credit owed: $32.
-    [Mar 15, 13:45] Tom: I've processed a refund of $32 to your Visa ending in 4242. It will appear in 3-5 business days.
-    [Mar 15, 14:00] Sarah: Thank you!
+    [Mar 15, 13:15] Tom: Also the Trial-to-Basic change on Feb 28 had a $15 credit that was not applied.
+      Total credit owed is $32.
+    [Mar 15, 13:45] Tom: I've refunded $32 to your Visa ending 4242. It will appear in 3-5 business days.
+    [Mar 15, 14:00] Sarah: Thank you.
 
-    Question: What was the total refund amount, which card was it refunded to, and how many plan changes did the customer make before the billing issue occurred?
-  evaluator: format_check
+    Answer all four, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>, <c>, <d>`
+
+    (a) What was the total refund, in whole dollars?
+    (b) Which card was refunded? Give the last four digits.
+    (c) How many times did the customer switch from one plan to another before the billing issue arose?
+    (d) How many separate unapplied credits made up the refund?
+  evaluator: regex_all
   expected:
-    checks:
-      - type: contains
-        value: "32"
-      - type: contains
-        value: "4242"
-      - type: regex
-        value: "(?i)(\\b2\\b|two)[^.\\n]*(plan\\s*change)|plan\\s*change[^.\\n]*(\\b2\\b|two)"
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*\$?32\s*,\s*4242\s*,\s*2\s*,\s*2\s*\.?\s*$'
 
 - id: LC-06
   category: Long Context Coherence
+  difficulty: hard
+  description: "Timeline arithmetic across events reported out of chronological order"
   prompt: |
-    Read this technical document and answer.
-
     INCIDENT REPORT: INC-2024-0892
     Date: 2024-03-15 14:32 UTC
     Severity: P1
 
     Timeline:
-    - 14:30: Normal traffic patterns on payment-service
-    - 14:32: P99 latency spiked from 200ms to 5.2s
-    - 14:33: Alert fired on PagerDuty
-    - 14:35: On-call engineer Taylor acknowledged
-    - 14:38: Taylor identified Redis connection pool exhaustion
-    - 14:40: Redis cluster node-3 was OOM killed at 14:28
-    - 14:42: Taylor restarted node-3 and increased pool size
-    - 14:45: Latency returned to normal
-    - 15:00: Post-mortem initiated
+      14:30  Normal traffic patterns on payment-service
+      14:32  P99 latency spiked from 200 ms to 5.2 s
+      14:33  Alert fired on PagerDuty
+      14:35  On-call engineer Taylor acknowledged
+      14:38  Taylor identified Redis connection pool exhaustion
+      14:40  Discovered that Redis cluster node-3 had been OOM-killed at 14:28
+      14:42  Taylor restarted node-3 and increased the pool size
+      14:45  Latency returned to normal
+      15:00  Post-mortem initiated
 
-    Root Cause: Redis node-3 ran out of memory due to a memory leak in the session cache (BUG-4521). The leak was introduced in v2.3.1 (deployed 2024-03-14). Sessions were not being expired properly.
+    Root cause: node-3 exhausted memory because of a leak in the session cache (BUG-4521) introduced in
+    v2.3.1, deployed 2024-03-14. Sessions were not being expired.
 
-    Fix: Hotfix v2.3.2 deployed 2024-03-16. Added TTL to session cache entries. Implemented Redis memory alerts at 80% threshold.
+    Fix: hotfix v2.3.2 deployed 2024-03-16, adding a TTL to session cache entries and a Redis memory
+    alert at an 80% threshold.
 
-    Question: How many minutes elapsed between the root cause event (Redis OOM at 14:28) and the fix being applied (restart + pool increase)? Answer in the form "N minutes".
-  evaluator: contains_keywords
-  expected: ["14 minutes"]
+    Answer all four, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>, <c>, <d>`
+
+    (a) How many minutes elapsed between the root-cause event and remediation being applied?
+    (b) How many minutes elapsed between the root-cause event and anyone being alerted?
+    (c) How many days elapsed between the release that introduced the bug and the hotfix?
+    (d) How many minutes of elevated latency did users experience?
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*14\s*,\s*5\s*,\s*2\s*,\s*13\s*\.?\s*$'
 
 - id: LC-07
   category: Long Context Coherence
+  difficulty: hard
+  description: "Table reading plus threshold crossing plus a computed decline"
   prompt: |
-    Read this research abstract and answer.
-
     Title: Effects of Sleep Deprivation on Cognitive Performance
 
-    Study Design: 120 participants divided into 4 groups (30 each).
-    - Group A: Full sleep (8 hours) - Control
-    - Group B: Mild deprivation (6 hours)
-    - Group C: Moderate deprivation (4 hours)
-    - Group D: Severe deprivation (2 hours)
+    Design: 120 participants in 4 groups of 30.
+      Group A: full sleep, 8 hours (control)
+      Group B: mild deprivation, 6 hours
+      Group C: moderate deprivation, 4 hours
+      Group D: severe deprivation, 2 hours
 
-    Tests administered at 9 AM, 12 PM, 3 PM, and 6 PM.
+    Tests administered at 9 AM, 12 PM, 3 PM and 6 PM.
 
     Results (cognitive test scores, 0-100):
-               9AM  12PM  3PM  6PM
-    Group A:   92   90   88   87
-    Group B:   88   82   78   75
-    Group C:   82   71   62   55
-    Group D:   75   58   42   30
+                 9AM  12PM  3PM  6PM
+      Group A:    92    90   88   87
+      Group B:    88    82   78   75
+      Group C:    82    71   62   55
+      Group D:    75    58   42   30
 
-    Conclusion: Sleep deprivation has a cumulative effect throughout the day. Severe deprivation (Group D) showed a 60% decline from morning to evening.
+    Answer all four, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>, <c>, <d>`
 
-    Question: At what time of day did Group B first score below 80?
-  evaluator: format_check
+    (a) At which test time did Group B first score below 80? Give the time as written in the table.
+    (b) Which group had the largest absolute drop between two consecutive test times, and how many
+        points was that drop? Give it as `X/N`.
+    (c) What was Group D's percentage decline from 9 AM to 6 PM, to the nearest whole percent?
+    (d) How many of the four groups finished the day below 60?
+  evaluator: regex_all
   expected:
-    checks:
-      - type: regex
-        value: "(?i)3\\s*pm|3:00|afternoon|15:00"
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*3\s*PM\s*,\s*D\s*/\s*17\s*,\s*60\s*%?\s*,\s*2\s*\.?\s*$'

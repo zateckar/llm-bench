@@ -1,262 +1,404 @@
 # Tool Using Test Suite
+#
+# The old grading only asked whether the tool names appeared anywhere in the
+# response, so listing every available tool in any order passed. Plans are now
+# requested as JSON and graded structurally with `json_match`: the number of
+# steps, their order, the tool chosen at each step, and the arguments that matter
+# must all be right. Free-text arguments are listed in `ignore_keys`, so they
+# must be present but their wording is not graded.
 
 - id: TU-01
   category: Tool Using
+  difficulty: medium
   prompt: |
-    You have access to these tools:
-    1. `search_web(query: str) -> list[str]` - Searches the web
-    2. `read_file(path: str) -> str` - Reads a file
-    3. `write_file(path: str, content: str) -> bool` - Writes to a file
-    4. `run_code(code: str) -> str` - Executes Python code
-    5. `send_email(to: str, subject: str, body: str) -> bool`
+    Available tools:
+      search_web(query: str) -> list[str]
+      read_file(path: str) -> str
+      write_file(path: str, content: str) -> bool
+      run_code(code: str) -> str
+      send_email(to: str, subject: str, body: str) -> bool
 
-    Task: I need to find the current population of Tokyo, save it to a file called 'tokyo_pop.txt', and email it to alice@example.com.
+    Task: find the current population of Tokyo, save it to a file called 'tokyo_pop.txt', and email it
+    to alice@example.com.
 
-    List the tools you would use IN ORDER, with the exact function call for each step. Reply with a numbered list like: 1. tool_name(args)
-  evaluator: format_check
+    Reply with ONLY a JSON array of the tool calls, in execution order. Each element must be
+    {"tool": "<name>", "args": {...}} using the exact parameter names above. Use the minimum number of
+    calls needed.
+  evaluator: json_match
   expected:
-    checks:
-      - type: contains
-        value: search_web
-      - type: contains
-        value: write_file
-      - type: contains
-        value: send_email
-      - type: numbered_list
+    mode: subset
+    ignore_keys: [query, content, subject, body]
+    value:
+      - tool: search_web
+        args: {query: ""}
+      - tool: write_file
+        args: {path: "tokyo_pop.txt", content: ""}
+      - tool: send_email
+        args: {to: "alice@example.com", subject: "", body: ""}
 
 - id: TU-02
   category: Tool Using
+  difficulty: hard
+  description: "Requires the join key, the aggregate, the window filter and the limit"
   prompt: |
-    You have a tool `execute_sql(query: str) -> list[dict]` that runs SQL queries.
+    You have `execute_sql(query: str) -> list[dict]`.
 
-    Database schema:
-    - users(id, name, email, created_at)
-    - orders(id, user_id, amount, status, created_at)
-    - products(id, name, price, category)
+    Schema:
+      users(id, name, email, created_at)
+      orders(id, user_id, amount, status, created_at)
+      products(id, name, price, category)
 
-    Task: Find the top 5 customers by total order amount in the last 30 days.
-
-    Write the exact SQL query you would pass to execute_sql.
-  evaluator: contains_keywords
-  expected: ["join", "sum", "group by", "order by", "limit"]
+    Task: return the top 5 customers by total order amount over the last 30 days, with their name and
+    total. Write the exact SQL query you would pass to execute_sql. Reply with only the SQL.
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?is)\bjoin\b[\s\S]{0,120}\bon\b[\s\S]{0,80}(?:users?\.id\s*=\s*orders?\.user_id|orders?\.user_id\s*=\s*users?\.id|\bu\.id\s*=\s*o\.user_id|\bo\.user_id\s*=\s*u\.id)'
+      - '(?is)sum\s*\(\s*\w*\.?amount\s*\)'
+      - '(?is)group\s+by'
+      - '(?is)order\s+by[\s\S]{0,60}\bdesc\b'
+      - '(?is)limit\s+5\b'
+      - "(?is)(?:interval\\s+'?30'?\\s*day|now\\(\\)\\s*-\\s*interval|current_date\\s*-\\s*(?:interval\\s*)?'?30|date\\s*\\(\\s*'now'\\s*,\\s*'-30 day|dateadd\\s*\\(\\s*day\\s*,\\s*-30|>=\\s*now\\(\\)\\s*-|datetime\\s*\\(\\s*'now'\\s*,\\s*'-30 day)"
+    must_not:
+      # A plain LIMIT without ordering, or ordering ascending, is the wrong result.
+      - '(?is)order\s+by[\s\S]{0,40}\basc\b[\s\S]{0,60}limit\s+5'
 
 - id: TU-03
   category: Tool Using
+  difficulty: hard
   prompt: |
-    You are building a tool-use agent. You have these tools:
-    - `get_weather(city: str) -> dict` returns {temp, condition, humidity}
-    - `search_products(query: str) -> list[dict]` returns [{name, price, rating}]
-    - `book_hotel(city, checkin, checkout, guests) -> dict` returns {confirmation, total}
-    - `send_notification(user_id, message) -> bool`
+    Available tools:
+      get_weather(city: str) -> dict
+      search_products(query: str) -> list[dict]
+      book_hotel(city: str, checkin: str, checkout: str, guests: int) -> dict
+      send_notification(user_id: str, message: str) -> bool
 
-    A user says: 'I'm planning a trip to Paris next week for 2 people. Find me a hotel and let me know what the weather will be like.'
+    A user (user_id "u-77") says: "I'm going to Paris from 2024-09-10 to 2024-09-14 for 2 people. Book
+    me a hotel and tell me what the weather will be like."
 
-    Describe your multi-step tool plan. What information do you need from each tool, and how does the output of one tool feed into the next?
-  evaluator: contains_keywords
-  expected: ["get_weather", "book_hotel", "send_notification"]
+    Reply with ONLY a JSON array of tool calls in execution order, each
+    {"tool": "<name>", "args": {...}} with exact parameter names. Do not call any tool that is not
+    needed for this task.
+  evaluator: json_match
+  expected:
+    mode: subset
+    ignore_keys: [message]
+    value:
+      - tool: get_weather
+        args: {city: "Paris"}
+      - tool: book_hotel
+        args: {city: "Paris", checkin: "2024-09-10", checkout: "2024-09-14", guests: 2}
+      - tool: send_notification
+        args: {user_id: "u-77", message: ""}
 
 - id: TU-04
   category: Tool Using
+  difficulty: hard
+  description: "Graded on the non-obvious parts: obfuscated addresses, mailto, dedupe, politeness"
   prompt: |
-    You have a tool `fetch_url(url: str) -> str` that returns HTML content.
-    You need to extract all email addresses from a company's website.
+    You have `fetch_url(url: str) -> str` returning HTML.
 
-    Describe your approach step by step. Include:
-    1. How you discover pages on the site
-    2. How you extract emails from HTML
-    3. How you handle duplicates
-    4. What edge cases to watch for
-  evaluator: format_check
+    You must extract every email address published on a company's website. Describe your approach in
+    order, covering:
+      1. How you discover the set of pages to fetch.
+      2. How you extract addresses from HTML, including addresses that are not plain text.
+      3. How you deduplicate them correctly.
+      4. What you do to avoid hammering the site.
+  evaluator: multi_step_solution
   expected:
-    checks:
-      - type: contains
-        value: fetch_url
-      - type: regex
-        value: "(?i)regex|regular expression|re\\.|pattern"
-      - type: min_words
-        value: 50
+    steps:
+      - step: "Page discovery from sitemap or link crawl"
+        pattern: 'sitemap(?:\.xml)?|crawl[\s\S]{0,80}(?:links?|<a\s|href)|breadth[- ]first|frontier'
+        order: 1
+      - step: "Extraction including mailto: and obfuscated forms"
+        pattern: 'mailto:'
+        order: 2
+      - step: "Handles obfuscation (entities, [at], JS-assembled)"
+        pattern: '(?:\[at\]|\(at\)|&#\d+;|html\.unescape|unescape|obfuscat|entity|\bat\b\s*\[?dot\]?)'
+        order: 3
+      - step: "Case-insensitive deduplication"
+        pattern: '(?:set\(|dedup)[\s\S]{0,200}(?:lower|casefold|normali[sz])|(?:lower|casefold)[\s\S]{0,120}(?:set\(|dedup)'
+        order: 4
+      - step: "Rate limiting / robots.txt politeness"
+        pattern: 'robots\.txt|rate.?limit|sleep|crawl-delay|throttl|concurrency limit'
+        order: 5
 
 - id: TU-05
   category: Tool Using
+  difficulty: hard
   prompt: |
-    You have tools:
-    - `create_issue(repo, title, body, labels) -> {url}`
-    - `search_code(repo, query) -> list[{file, line, content}]`
-    - `read_file(repo, path) -> str`
-    - `run_tests(repo, test_filter) -> {passed, failed, errors}`
+    Available tools:
+      search_code(repo: str, query: str) -> list[dict]
+      read_file(repo: str, path: str) -> str
+      run_tests(repo: str, test_filter: str) -> dict
+      create_issue(repo: str, title: str, body: str, labels: list) -> dict
 
-    A CI pipeline failed with 'test_login_returns_401'. Write the exact sequence of tool calls to investigate and fix this. For each call, show the arguments you'd use.
-  evaluator: format_check
+    CI for repo "acme/api" failed on the test `test_login_returns_401`. Investigate before changing
+    anything: reproduce the failure, locate the test, read the file it lives in, and only then file an
+    issue.
+
+    Reply with ONLY a JSON array of tool calls in execution order, each {"tool": "<name>", "args": {...}}
+    with exact parameter names.
+  evaluator: json_match
   expected:
-    checks:
-      - type: contains
-        value: run_tests
-      - type: contains
-        value: search_code
-      - type: contains
-        value: read_file
+    mode: subset
+    ignore_keys: [title, body, labels, path]
+    value:
+      - tool: run_tests
+        args: {repo: "acme/api", test_filter: "test_login_returns_401"}
+      - tool: search_code
+        args: {repo: "acme/api", query: "test_login_returns_401"}
+      - tool: read_file
+        args: {repo: "acme/api", path: ""}
+      - tool: create_issue
+        args: {repo: "acme/api", title: "", body: "", labels: []}
 
 - id: TU-06
   category: Tool Using
+  difficulty: medium
   prompt: |
-    You have a tool `http_request(method, url, headers, body) -> {status, body}`.
-    The API at https://api.example.com requires:
-    - GET /users for list of users
-    - POST /users/{id}/tasks to create a task
-    - DELETE /tasks/{task_id} to remove a task
-    - Auth: Bearer token in Authorization header
+    You have `http_request(method: str, url: str, headers: dict, body: dict) -> dict`.
 
-    Write the exact http_request calls to:
-    1. Get all users
-    2. Create a task 'Buy groceries' for user 42
-    3. Delete task with id 99
-  evaluator: format_check
+    The API at https://api.example.com exposes:
+      GET /users
+      POST /users/{id}/tasks
+      DELETE /tasks/{task_id}
+    All calls require `Authorization: Bearer TOKEN123`.
+
+    Produce the calls to: list all users; create a task titled "Buy groceries" for user 42; delete task 99.
+
+    Reply with ONLY a JSON array of tool calls in execution order, each {"tool": "http_request", "args": {...}}.
+    Use `null` for a body that is not sent.
+  evaluator: json_match
   expected:
-    checks:
-      - type: contains
-        value: GET
-      - type: contains
-        value: POST
-      - type: contains
-        value: DELETE
-      - type: contains
-        value: Authorization
+    mode: subset
+    value:
+      - tool: http_request
+        args:
+          method: "GET"
+          url: "https://api.example.com/users"
+          headers: {Authorization: "Bearer TOKEN123"}
+      - tool: http_request
+        args:
+          method: "POST"
+          url: "https://api.example.com/users/42/tasks"
+          headers: {Authorization: "Bearer TOKEN123"}
+      - tool: http_request
+        args:
+          method: "DELETE"
+          url: "https://api.example.com/tasks/99"
+          headers: {Authorization: "Bearer TOKEN123"}
 
 - id: TU-07
   category: Tool Using
+  difficulty: medium
   prompt: |
-    You have tools:
-    - `get_user(user_id) -> {name, email, department}`
-    - `get_tickets(user_id) -> list[{id, subject, status, created_at}]`
-    - `send_slack_message(channel, message) -> bool`
-    - `create_jira_ticket(project, summary, description, assignee) -> {key}`
+    Available tools:
+      get_user(user_id: str) -> dict
+      get_tickets(user_id: str) -> list[dict]
+      send_slack_message(channel: str, message: str) -> bool
+      create_jira_ticket(project: str, summary: str, description: str, assignee: str) -> dict
 
-    A customer named Alice (user_id: 123) emailed support@company.com complaining about 3 open tickets. Write the tool call sequence to: 1) Get Alice's info, 2) Get her tickets, 3) Send her a Slack message acknowledging, 4) Create a Jira ticket to track the escalation.
-  evaluator: format_check
+    Alice (user_id "123") emailed support complaining about her 3 open tickets. Look up her record,
+    fetch her tickets, acknowledge in the "#support" Slack channel, then open a tracking ticket in the
+    "ESC" Jira project assigned to "oncall".
+
+    Reply with ONLY a JSON array of tool calls in execution order, each {"tool": "<name>", "args": {...}}
+    with exact parameter names.
+  evaluator: json_match
   expected:
-    checks:
-      - type: contains
-        value: get_user
-      - type: contains
-        value: get_tickets
-      - type: contains
-        value: send_slack_message
-      - type: contains
-        value: create_jira_ticket
+    mode: subset
+    ignore_keys: [message, summary, description]
+    value:
+      - tool: get_user
+        args: {user_id: "123"}
+      - tool: get_tickets
+        args: {user_id: "123"}
+      - tool: send_slack_message
+        args: {channel: "#support", message: ""}
+      - tool: create_jira_ticket
+        args: {project: "ESC", summary: "", description: "", assignee: "oncall"}
 
 - id: TU-08
   category: Tool Using
+  difficulty: expert
+  description: "Needs a correlated subquery or window function, not a plain AVG in HAVING"
   prompt: |
-    You have a tool `query_db(sql: str) -> list[dict]`.
+    You have `query_db(sql: str) -> list[dict]`.
 
     Schema:
-    - employees(id, name, dept_id, salary, hire_date)
-    - departments(id, name, budget)
-    - projects(id, name, dept_id, start_date, end_date)
+      employees(id, name, dept_id, salary, hire_date)
+      departments(id, name, budget)
+      projects(id, name, dept_id, start_date, end_date)
 
-    Task: Find all employees in departments whose budget exceeds $1M, who are assigned to active projects (end_date > today), earning more than the department average salary.
-
-    Write the SQL query.
-  evaluator: contains_keywords
-  expected: ["join", "avg", "where", "group by"]
-
-# --- NEW HARDER QUESTIONS ---
+    Task: list every employee whose department budget exceeds 1000000, who is assigned to a project
+    that is still active (end_date in the future), and whose salary is above the average salary of
+    their own department. Reply with only the SQL.
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?is)\bbudget\b\s*>\s*1_?0{6}|budget\s*>\s*1000000'
+      - '(?is)end_date\s*>\s*(?:current_date|now\(\)|getdate\(\)|date\s*\(\s*.now.|current_timestamp|sysdate)'
+      - '(?is)avg\s*\(\s*\w*\.?salary\s*\)'
+      # The department-average must be correlated to the employee's own department,
+      # either via a correlated subquery or a window function partitioned by dept.
+      - "(?is)(?:over\\s*\\(\\s*partition\\s+by[\\s\\S]{0,40}dept|where[\\s\\S]{0,200}dept_id\\s*=\\s*\\w+\\.dept_id|group\\s+by[\\s\\S]{0,40}dept_id)"
+      - '(?is)\bjoin\b'
+    must_not:
+      # A single global AVG(salary) is the classic wrong answer.
+      - '(?is)salary\s*>\s*\(\s*select\s+avg\s*\(\s*salary\s*\)\s+from\s+employees\s*\)'
 
 - id: TU-09
   category: Tool Using
+  difficulty: hard
   prompt: |
-    You have these tools:
-    - `fetch_data(url: str, headers: dict) -> dict` - Makes HTTP requests
-    - `parse_json(data: dict, path: str) -> any` - Extracts data from JSON
-    - `transform(fn: str, data: list) -> list` - Applies transformation
-    - `aggregate(fn: str, data: list) -> number` - Aggregates data
-    - `write_result(data: any, destination: str) -> bool` - Saves output
+    Available tools:
+      fetch_data(url: str, headers: dict) -> dict
+      parse_json(data: dict, path: str) -> any
+      transform(fn: str, data: list) -> list
+      aggregate(fn: str, data: list) -> float
+      write_result(data: any, destination: str) -> bool
 
-    Task: Fetch user activity data from https://api.example.com/users/activity, extract the "sessions" array, filter sessions longer than 30 minutes, calculate the average duration, and save to /tmp/report.json.
+    Task: fetch https://api.example.com/users/activity, extract the "sessions" array, keep only
+    sessions longer than 30 minutes, compute the mean duration, and save the result to
+    /tmp/report.json.
 
-    Write the complete tool call sequence with exact arguments for each step.
-  evaluator: format_check
+    Reply with ONLY a JSON array of tool calls in execution order, each {"tool": "<name>", "args": {...}}
+    with exact parameter names. For `aggregate`, `fn` must be "mean".
+  evaluator: json_match
   expected:
-    checks:
-      - type: contains
-        value: fetch_data
-      - type: contains
-        value: parse_json
-      - type: contains
-        value: aggregate
-      - type: numbered_list
+    mode: subset
+    ignore_keys: [headers, data]
+    value:
+      - tool: fetch_data
+        args: {url: "https://api.example.com/users/activity", headers: {}}
+      - tool: parse_json
+        args: {data: {}, path: "sessions"}
+      - tool: transform
+        args: {data: []}
+      - tool: aggregate
+        args: {fn: "mean", data: []}
+      - tool: write_result
+        args: {data: null, destination: "/tmp/report.json"}
 
 - id: TU-10
   category: Tool Using
+  difficulty: hard
+  description: "Review the diff before committing; push before opening the PR"
   prompt: |
-    You have tools:
-    - `git_status(repo: str) -> {branch, modified, staged, untracked}`
-    - `git_diff(repo: str, file: str) -> str` - Shows file changes
-    - `git_commit(repo: str, message: str, files: list) -> {hash}`
-    - `git_push(repo: str, branch: str) -> bool`
-    - `create_pr(repo: str, title: str, body: str, reviewers: list) -> {url}`
+    Available tools:
+      git_status(repo: str) -> dict
+      git_diff(repo: str, file: str) -> str
+      git_commit(repo: str, message: str, files: list) -> dict
+      git_push(repo: str, branch: str) -> bool
+      create_pr(repo: str, title: str, body: str, reviewers: list) -> dict
 
-    Task: You need to commit and push changes to a feature branch, then create a pull request. The repo is "myorg/webapp", branch is "feat/auth". Changes include modified files: src/auth.py and tests/test_auth.py. PR reviewers: alice, bob.
+    Repo "myorg/webapp", branch "feat/auth". Modified files: src/auth.py and tests/test_auth.py.
+    Review each modified file's diff before committing, commit both files together, push, then open a
+    PR for review by alice and bob.
 
-    Write the exact sequence of tool calls.
-  evaluator: format_check
+    Reply with ONLY a JSON array of tool calls in execution order, each {"tool": "<name>", "args": {...}}
+    with exact parameter names.
+  evaluator: json_match
   expected:
-    checks:
-      - type: contains
-        value: git_diff
-      - type: contains
-        value: git_commit
-      - type: contains
-        value: git_push
-      - type: contains
-        value: create_pr
-      - type: numbered_list
+    mode: subset
+    ignore_keys: [message, title, body]
+    value:
+      - tool: git_status
+        args: {repo: "myorg/webapp"}
+      - tool: git_diff
+        args: {repo: "myorg/webapp", file: "src/auth.py"}
+      - tool: git_diff
+        args: {repo: "myorg/webapp", file: "tests/test_auth.py"}
+      - tool: git_commit
+        args:
+          repo: "myorg/webapp"
+          message: ""
+          files: ["src/auth.py", "tests/test_auth.py"]
+      - tool: git_push
+        args: {repo: "myorg/webapp", branch: "feat/auth"}
+      - tool: create_pr
+        args:
+          repo: "myorg/webapp"
+          title: ""
+          body: ""
+          reviewers: ["alice", "bob"]
 
 - id: TU-11
   category: Tool Using
+  difficulty: hard
+  description: "Must search before replacing, and must not blind-replace across all files"
   prompt: |
-    You have tools:
-    - `read_file(path: str) -> str`
-    - `list_files(directory: str) -> list[str]`
-    - `search_text(pattern: str, path: str) -> list[{file, line, content}]`
-    - `replace_text(file: str, old: str, new: str) -> bool`
+    Available tools:
+      list_files(directory: str) -> list[str]
+      read_file(path: str) -> str
+      search_text(pattern: str, path: str) -> list[dict]
+      replace_text(file: str, old: str, new: str) -> bool
 
-    Task: A Python project has a deprecated API call `requests.get()` that needs to be replaced with `httpx.get()` across all Python files. Find all occurrences and make the replacement.
+    A project at "/srv/app" must have every call to `requests.get(` replaced with `httpx.get(`.
+    Locate the occurrences first, then replace them, then verify no occurrences remain.
 
-    Write the tool call sequence to accomplish this.
-  evaluator: format_check
+    Reply with ONLY a JSON array of tool calls in execution order, each {"tool": "<name>", "args": {...}}
+    with exact parameter names. Assume exactly one file, "/srv/app/client.py", contains a match.
+  evaluator: json_match
   expected:
-    checks:
-      - type: contains
-        value: list_files
-      - type: contains
-        value: search_text
-      - type: contains
-        value: replace_text
-      - type: numbered_list
+    mode: subset
+    ignore_keys: [pattern]
+    value:
+      - tool: list_files
+        args: {directory: "/srv/app"}
+      - tool: search_text
+        args: {pattern: "", path: "/srv/app"}
+      - tool: replace_text
+        args:
+          file: "/srv/app/client.py"
+          old: "requests.get("
+          new: "httpx.get("
+      - tool: search_text
+        args: {pattern: "", path: "/srv/app"}
 
 - id: TU-12
   category: Tool Using
+  difficulty: expert
+  description: "Conditional control flow: rollback must be gated on the health check"
   prompt: |
-    You have tools:
-    - `deploy(service: str, environment: str, version: str) -> {status, url}`
-    - `health_check(url: str) -> {status, latency_ms}`
-    - `rollback(service: str, environment: str) -> {status}`
-    - `notify(channel: str, message: str) -> bool`
-    - `get_logs(service: str, lines: int) -> list[str]`
+    Available tools:
+      deploy(service: str, environment: str, version: str) -> dict
+      health_check(url: str) -> dict
+      rollback(service: str, environment: str) -> dict
+      notify(channel: str, message: str) -> bool
+      get_logs(service: str, lines: int) -> list[str]
 
-    Task: Deploy version 2.1.0 of "api-gateway" to production. If health check fails after deployment, rollback immediately and notify the #alerts Slack channel with the error details.
+    Deploy version 2.1.0 of "api-gateway" to production. If and only if the post-deploy health check
+    fails, collect logs, roll back, and notify "#alerts" with the error detail. If it succeeds, notify
+    "#alerts" that the deploy is healthy.
 
-    Write the complete tool call sequence with conditional logic.
-  evaluator: format_check
+    Write the plan as numbered steps, making the conditional explicit (for example "if
+    health_check.status != 'ok' then ...").
+  evaluator: multi_step_solution
   expected:
-    checks:
-      - type: contains
-        value: deploy
-      - type: contains
-        value: health_check
-      - type: contains
-        value: rollback
-      - type: contains
-        value: notify
-      - type: numbered_list
+    steps:
+      - step: "Deploy 2.1.0 of api-gateway to production"
+        pattern: 'deploy\s*\([^)]*api-gateway[^)]*production[^)]*2\.1\.0|deploy\s*\([^)]*"?api-gateway"?[\s\S]{0,60}2\.1\.0'
+        order: 1
+      - step: "Health check the deployed URL"
+        pattern: 'health_check\s*\('
+        order: 2
+      - step: "Failure branch is conditional"
+        pattern: '\bif\b[\s\S]{0,160}(?:health|status|fail|not ok|!=\s*[''"]?ok)'
+        order: 3
+      - step: "Collect logs on failure"
+        pattern: 'get_logs\s*\('
+        order: 4
+      - step: "Roll back on failure"
+        pattern: 'rollback\s*\([^)]*api-gateway'
+        order: 5
+      - step: "Notify #alerts"
+        pattern: 'notify\s*\([^)]*#alerts'
+        order: 6
+      - step: "Success branch also notifies"
+        pattern: '(?:\belse\b|\bif\b[\s\S]{0,80}(?:succe|healthy|ok\b))[\s\S]{0,200}notify'
+        order: 7
+    must_not:
+      # An unconditional rollback after every deploy is not a plan.
+      - '(?is)^\s*(?:\d+[.)]\s*)?deploy[\s\S]{0,200}\n\s*\d+[.)]\s*rollback'

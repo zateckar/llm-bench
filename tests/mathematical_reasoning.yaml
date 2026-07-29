@@ -1,91 +1,180 @@
 # Mathematical Reasoning Test Suite
+#
+# Every expected value here was derived in closed form; `numeric_match` accepts
+# only the model's *final* asserted number, with a tolerance implied by the
+# precision the prompt asks for. There is no credit for the right value showing
+# up as an intermediate step.
 
 - id: MR-01
   category: Mathematical Reasoning
-  prompt: "A retailer offers a 'Triple Tier' discount: first 25% off the original price, then an additional 15% off that discounted price, and finally a loyalty coupon of 10% off the second discounted price. However, there is a sales tax of 8% applied to the final checkout price. What is the net percentage discount from the original price, including the sales tax? Reply with just the number rounded to two decimal places (e.g., 35.12 for 35.12%)."
+  difficulty: medium
+  prompt: "A retailer applies a 'Triple Tier' discount: 25% off the original price, then a further 15% off that price, then a loyalty coupon of 10% off the twice-discounted price. Sales tax of 8% is then applied to the final checkout price. What is the net percentage discount from the original price, including the sales tax? Reply with just the number rounded to two decimal places (e.g. 35.12 for 35.12%)."
   evaluator: numeric_match
   expected: 38.04
 
 - id: MR-02
   category: Mathematical Reasoning
-  prompt: "A train travels from Station A to B at 90 km/h, but stops for 15 minutes due to a signal delay. It then returns from B to A at 120 km/h with no delays. If the distance between A and B is 180 km, what is the average speed of the train for the entire round trip in km/h? Reply with just the number, rounded to two decimal places."
+  difficulty: medium
+  prompt: "A train travels from station A to station B at 90 km/h but stops for 15 minutes due to a signal delay. It then returns from B to A at 120 km/h with no delays. The distance between A and B is 180 km. What is the average speed for the entire round trip, in km/h? Reply with just the number rounded to two decimal places."
   evaluator: numeric_match
   expected: 96.0
 
 - id: MR-03
   category: Mathematical Reasoning
-  prompt: "How many distinct ways can you arrange the letters in the word 'PROBABILITY' such that the two 'I's are never adjacent? Reply with just the number."
+  difficulty: hard
+  prompt: "How many distinct arrangements of the letters in the word 'PROBABILITY' have the two 'I's non-adjacent? Reply with just the number."
   evaluator: numeric_match
   expected: 8164800.0
 
 - id: MR-04
   category: Mathematical Reasoning
-  prompt: "A biased coin has a probability of 0.6 of landing heads. If you flip this coin 5 times, what is the probability of getting exactly 3 heads? Express as a decimal, rounded to four decimal places."
+  difficulty: medium
+  prompt: "A biased coin lands heads with probability 0.6. In 5 independent flips, what is the probability of getting exactly 3 heads? Express the answer as a decimal rounded to four decimal places. Reply with just the number."
   evaluator: numeric_match
   expected: 0.3456
 
 - id: MR-05
   category: Mathematical Reasoning
-  prompt: "A hemispherical bowl of radius 6 cm is filled with water to a depth of 3 cm. What is the volume of the water in cubic centimeters? Use pi = 3.14159. Reply with just the number, rounded to two decimal places."
+  difficulty: hard
+  prompt: "A hemispherical bowl of radius 6 cm, flat side up, is filled with water to a depth of 3 cm. What is the volume of the water in cubic centimetres? Use pi = 3.14159. Reply with just the number rounded to two decimal places."
   evaluator: numeric_match
   expected: 141.37
 
 - id: MR-06
   category: Mathematical Reasoning
-  prompt: "If you invest $8,000 in an account with an annual interest rate of 5.5% compounded monthly, how much money will be in the account after 4 years? Round to the nearest cent. Reply with just the number."
+  difficulty: hard
+  description: "Base-rate neglect: the intuitive answer is ~0.99"
+  prompt: "A screening test for a disease has 99% sensitivity and 95% specificity. The disease affects 0.5% of the population. A randomly chosen person tests positive. What is the probability that they actually have the disease? Express the answer as a decimal rounded to four decimal places. Reply with just the number."
   evaluator: numeric_match
-  expected: 9963.58
+  expected: 0.0905
 
 - id: MR-07
   category: Mathematical Reasoning
-  prompt: "A bag contains 5 red, 4 blue, and 3 green marbles. If you draw 3 marbles without replacement, what is the probability of drawing exactly 1 of each color? Express as a fraction in lowest terms (e.g. 3/11)."
-  evaluator: contains_keywords
-  expected: ["3/11", "3}{11"]
+  difficulty: medium
+  prompt: "A bag contains 5 red, 4 blue and 3 green marbles. Three marbles are drawn without replacement. What is the probability of drawing exactly one of each colour? Express the answer as a fraction in lowest terms."
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?:\b3\s*/\s*11\b|\\frac\{3\}\{11\}|\{3\}\{11\})'
 
 - id: MR-08
   category: Mathematical Reasoning
-  prompt: "If tan(x) = -3/4 and x is in the second quadrant, what is sin(2x)? Express as a decimal, reply with just the number."
+  difficulty: medium
+  prompt: "Given tan(x) = -3/4 with x in the second quadrant, what is sin(2x)? Express the answer as a decimal. Reply with just the number."
   evaluator: numeric_match
   expected: -0.96
 
 - id: MR-09
   category: Mathematical Reasoning
-  prompt: "An infinite geometric series has a first term of 12 and a sum of 16. What is the sum of the first 4 terms of this series? Express as a decimal, reply with just the number."
+  difficulty: medium
+  prompt: "An infinite geometric series has first term 12 and sum 16. What is the sum of its first 4 terms? Express the answer as a decimal. Reply with just the number."
   evaluator: numeric_match
   expected: 15.9375
 
 - id: MR-10
   category: Mathematical Reasoning
-  prompt: "How many diagonals does a regular 20-gon (icosagon) have? Reply with just the number."
+  difficulty: hard
+  description: "Circulant 4x4 determinant; the sign is the part models get wrong"
+  prompt: "What is the determinant of the matrix [[1, 2, 3, 4], [2, 3, 4, 1], [3, 4, 1, 2], [4, 1, 2, 3]]? Reply with just the number."
   evaluator: numeric_match
-  expected: 170.0
+  expected: -160.0
 
 - id: MR-11
   category: Mathematical Reasoning
-  prompt: "What is the value of the second derivative of f(x) = ln(x^2 + 1) evaluated at x = 2? Express as a decimal, reply with just the number."
+  difficulty: medium
+  prompt: "What is the value of the second derivative of f(x) = ln(x^2 + 1) at x = 2? Express the answer as a decimal. Reply with just the number."
   evaluator: numeric_match
   expected: -0.24
 
 - id: MR-12
   category: Mathematical Reasoning
-  prompt: "A ladder of length 13 meters stands vertically against a wall. The base of the ladder is pulled away from the wall at a constant rate of 2 meters per second. How fast is the top of the ladder sliding down the wall (in meters per second) when the base is 5 meters from the wall? Reply with the absolute speed in m/s, rounded to two decimal places."
+  difficulty: medium
+  prompt: "A 13 m ladder leans against a vertical wall. Its base is pulled away from the wall at a constant 2 m/s. How fast is the top sliding down the wall, in m/s, when the base is 5 m from the wall? Reply with the absolute speed rounded to two decimal places."
   evaluator: numeric_match
   expected: 0.83
 
 - id: MR-13
   category: Mathematical Reasoning
-  prompt: "What is the determinant of the 3x3 matrix [[3, 2, 4], [1, 0, 2], [-1, 1, 2]]? Reply with just the number."
+  difficulty: hard
+  prompt: "What is the remainder when 2^1000 is divided by 13? Reply with just the number."
   evaluator: numeric_match
-  expected: -10.0
+  expected: 3.0
 
 - id: MR-14
   category: Mathematical Reasoning
-  prompt: "What is the sum of the squares of all integers from 1 to 50? Reply with just the number."
+  difficulty: hard
+  prompt: "What are the last two digits of 7^2024? Reply with the two digits only (for example 07)."
   evaluator: numeric_match
-  expected: 42925.0
+  expected: 1.0
 
 - id: MR-15
   category: Mathematical Reasoning
-  prompt: "An acute triangle has sides of length 7, 8, and 10. What is the area of this triangle? Reply with just the number, rounded to two decimal places."
+  difficulty: hard
+  prompt: "An acute triangle has sides of length 7, 8 and 10. What is its area? Reply with just the number rounded to two decimal places."
   evaluator: numeric_match
   expected: 27.81
+
+- id: MR-16
+  category: Mathematical Reasoning
+  difficulty: hard
+  prompt: "How many permutations of 5 distinct objects leave no object in its original position (i.e. have no fixed point)? Reply with just the number."
+  evaluator: numeric_match
+  expected: 44.0
+
+- id: MR-17
+  category: Mathematical Reasoning
+  difficulty: hard
+  prompt: "How many integers from 1 to 1000 inclusive are divisible by none of 2, 3 and 5? Reply with just the number."
+  evaluator: numeric_match
+  expected: 266.0
+
+- id: MR-18
+  category: Mathematical Reasoning
+  difficulty: hard
+  prompt: "Two fair six-sided dice are rolled repeatedly until the sum is either 7 or 8. What is the probability that a sum of 7 occurs before a sum of 8? Express the answer as a decimal rounded to four decimal places. Reply with just the number."
+  evaluator: numeric_match
+  expected: 0.5455
+
+- id: MR-19
+  category: Mathematical Reasoning
+  difficulty: hard
+  prompt: "What is the expected number of rolls of a fair six-sided die needed to observe every face at least once? Express the answer as a decimal rounded to two decimal places. Reply with just the number."
+  evaluator: numeric_match
+  expected: 14.7
+
+- id: MR-20
+  category: Mathematical Reasoning
+  difficulty: hard
+  prompt: "Evaluate the definite integral of x^2 * e^x from x = 0 to x = 1. Express the answer as a decimal rounded to four decimal places. Reply with just the number."
+  evaluator: numeric_match
+  expected: 0.7183
+
+- id: MR-21
+  category: Mathematical Reasoning
+  difficulty: medium
+  prompt: "Evaluate the infinite sum of 1/(n(n+2)) for n = 1, 2, 3, ... Express the answer as a decimal. Reply with just the number."
+  evaluator: numeric_match
+  expected: 0.75
+
+- id: MR-22
+  category: Mathematical Reasoning
+  difficulty: hard
+  prompt: "An open-top box is made from a 12 cm by 12 cm square sheet by cutting an x by x square from each corner and folding up the sides. What is the maximum possible volume in cubic centimetres? Reply with just the number."
+  evaluator: numeric_match
+  expected: 128.0
+
+- id: MR-23
+  category: Mathematical Reasoning
+  difficulty: hard
+  description: "Multi-part: every sub-answer must be right, so guessing one does not help"
+  prompt: |
+    Answer all three parts, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>, <c>`
+
+    (a) How many ways can 10 identical balls be placed into 4 distinct boxes so that no box is empty?
+    (b) What is the sum of the decimal digits of 2^20?
+    (c) The sequence is defined by a(1) = 1 and a(n+1) = 2*a(n) + 1. What is a(10)?
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*84\s*,\s*31\s*,\s*1023\s*\.?\s*$'

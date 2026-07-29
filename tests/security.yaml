@@ -1,12 +1,19 @@
 # Security Test Suite
-# Inspired by rapticore/llm-security-benchmark
-# Tests vulnerability identification and secure coding knowledge
+#
+# `security_analysis` changed in two ways that make this category much harder:
+#  - every `criteria` pattern must match (unless the item sets `min_criteria`),
+#    where before a 3-of-5 review scored 0.6 and cleared a 0.5 pass bar;
+#  - a `must_not` hit is now a hard zero rather than a -0.2 deduction, so a review
+#    that declares vulnerable code safe, or recommends a known-bad fix, fails.
+# Criteria are written to require the specific remediation, not the topic word.
 
-# =================== INJECTION ATTACKS ===================
+# =================== INJECTION ===================
+
 - id: SE-01
   category: Security
+  difficulty: medium
   prompt: |
-    Identify ALL security vulnerabilities in this code:
+    Identify ALL security vulnerabilities in this code and give the fix for each:
 
     ```python
     from flask import Flask, request
@@ -18,11 +25,9 @@
     def login():
         username = request.form['username']
         password = request.form['password']
-        
         conn = sqlite3.connect('users.db')
         query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
         user = conn.execute(query).fetchone()
-        
         if user:
             return f'Welcome {username}!'
         return 'Invalid credentials', 401
@@ -32,140 +37,158 @@
         q = request.args.get('q')
         return f'<h1>Results for: {q}</h1>'
     ```
-    
-    List each vulnerability with its OWASP category and a fix.
   evaluator: security_analysis
   expected:
     criteria:
       - 'sql\s*injection'
-      - 'xss|cross.*site.*scripting'
-      - 'plaintext.*password|password.*plain'
-      - 'parameterized|prepared\s*statement'
-      - 'escape|sanitize|encode'
+      - 'xss|cross.?site.?scripting'
+      - '(?:plaintext|plain.?text|clear.?text|unhashed)[\s\S]{0,40}password|password[\s\S]{0,40}(?:plaintext|plain.?text|clear.?text|not hashed|unhashed)'
+      - '(?:parameteri[sz]ed|prepared\s*statement|placeholder|bind (?:parameter|variable))'
+      - '(?:bcrypt|scrypt|argon2|pbkdf2)'
+      - '(?:escape|autoescap|render_template|markupsafe|html\.escape|jinja)'
     must_not:
-      - '\bno\s+(?:issues|vulnerabilities|problems)\b'
-      - '\bcode is secure\b'
+      - '(?i)\bno\s+(?:issues|vulnerabilities|problems)\b'
+      - '(?i)\b(?:this )?code is secure\b'
+      - '(?i)\bmd5\b[\s\S]{0,60}(?:is|as) (?:a )?(?:good|secure|appropriate|recommended)'
+      - '(?i)\bsha-?(?:1|256)\b[\s\S]{0,40}(?:to hash|for hashing) (?:the )?password'
 
 - id: SE-02
   category: Security
+  difficulty: hard
+  description: "Requires the algorithm allowlist, not just the words 'alg confusion'"
   prompt: |
-    A JWT token looks like: eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjo0MiwiZXhwIjoxNzEwMDAwMDAwfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+    A service verifies JWTs like this:
 
-    1. Decode the header and payload
-    2. What algorithm is being used?
-    3. Is this algorithm secure? Why or why not?
-    4. What attack could exploit this?
+    ```python
+    import jwt
+    claims = jwt.decode(token, key=PUBLIC_KEY_PEM)
+    ```
+
+    The tokens are supposed to be RS256. Explain every way an attacker can abuse this call and give
+    the corrected call.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'hs256|hmac'
-      - 'algorithm\s*confusion|none\s*algorithm'
-      - 'rsa|asymmetric|public.*key'
-      - 'jwt'
+      - '(?:algorithm\s*confusion|alg\s*confusion|"?alg"?\s*(?:header\s*)?(?:is\s*)?(?:attacker|user)[- ]controlled)'
+      - '(?:alg\s*[:=]\s*["'']?none|["'']?none["'']?\s*algorithm|unsigned token)'
+      - '(?:hs256|hmac)[\s\S]{0,200}(?:public key|verification key)|public key[\s\S]{0,120}(?:hs256|hmac)[\s\S]{0,60}(?:secret|key)'
+      - 'algorithms\s*=\s*\[\s*["'']RS256["'']'
+      - '(?:verify_(?:exp|aud|signature)|audience\s*=|issuer\s*=|\bexp\b|\baud\b)'
     must_not:
-      - '\bno\s+issues\b'
+      - '(?i)\bthis (?:call|code) is (?:safe|secure|fine|correct)\b'
+      - '(?i)\bjwt\.decode\s*\([^)]*verify\s*=\s*False'
 
 - id: SE-03
   category: Security
+  difficulty: medium
   prompt: |
-    Review this authentication flow and identify security issues:
+    Review this authentication design and list every security issue with a concrete fix:
 
-    1. User submits email + password via HTTPS
-    2. Server hashes password with MD5
-    3. Server compares with stored hash
-    4. On success, server generates random 32-char session ID
-    5. Session ID stored in cookie without Secure/HttpOnly flags
-    6. Session expires in 30 days
-    7. No rate limiting on login attempts
-    8. Password reset: email link with token, token valid for 7 days
-
-    List ALL security issues and recommend fixes for each.
+    1. Credentials submitted over HTTPS.
+    2. Password hashed with a single unsalted MD5 pass.
+    3. Hash compared with `==`.
+    4. On success a 32-character session ID is generated with Python's `random` module.
+    5. Session cookie set without Secure, HttpOnly or SameSite.
+    6. Session lifetime 30 days, never rotated on privilege change.
+    7. No rate limiting or lockout on login.
+    8. Password reset link valid for 7 days, token stored in plaintext in the database.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'md5|weak.*hash'
-      - 'httponly|secure.*flag'
-      - 'rate.*limit|throttl'
-      - 'session'
-      - 'bcrypt|scrypt|argon2|pbkdf2'
+      - '(?:md5)[\s\S]{0,120}(?:weak|broken|fast|unsuitable|insecure|collision)|(?:weak|broken|insecure|unsalted)[\s\S]{0,40}md5'
+      - '(?:bcrypt|scrypt|argon2|pbkdf2)'
+      - '(?:compare_digest|constant[- ]time|timing[- ]safe|timing attack)'
+      - '(?:secrets\.|os\.urandom|CSPRNG|cryptographically secure)'
+      - 'httponly[\s\S]{0,120}secure|secure[\s\S]{0,120}httponly'
+      - 'samesite'
+      - '(?:rate.?limit|throttl|lockout|exponential backoff)'
+      - '(?:rotat|regenerat|new session id)[\s\S]{0,120}(?:login|privilege|authentication)|session fixation'
+      - '(?:hash|digest)[\s\S]{0,80}reset token|reset token[\s\S]{0,80}(?:hash|digest)'
     must_not:
-      - '\bno\s+(?:issues|vulnerabilities|problems)\b'
-      - '\bflow is secure\b'
+      - '(?i)\bno\s+(?:issues|vulnerabilities|problems)\b'
+      - '(?i)\bmd5 (?:is|remains) (?:fine|acceptable|secure|good enough)\b'
+      - '(?i)\bhttps (?:alone )?(?:is|makes this) (?:sufficient|secure|enough)\b'
 
 - id: SE-04
   category: Security
+  difficulty: medium
   prompt: |
-    You are reviewing this API endpoint for security:
+    Review this API endpoint:
 
     ```
     POST /api/users
     Body: {"name": "string", "email": "string", "role": "string"}
-    
-    Implementation:
+
     - No authentication required
     - No input validation
-    - Role field accepted from client
-    - Returns full user object including password hash
+    - The role field is taken from the client
+    - The response includes the stored password hash
     - Rate limit: 1000 requests/minute
     ```
 
-    Identify all security flaws. For each, explain the attack vector and provide the fix.
+    Identify every flaw, the attack it enables, and the fix.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'authorization|access.*control'
-      - 'validation|input.*validation'
-      - 'role'
-      - 'password.*hash|sensitive.*data'
+      - '(?:mass assignment|privilege escalation|role[\s\S]{0,80}(?:client|user)[- ]controlled|attacker[\s\S]{0,60}(?:set|assign)[\s\S]{0,40}role)'
+      - '(?:broken access control|missing authenticat|unauthenticated|authoriz)'
+      - '(?:allowlist|whitelist|schema validation|pydantic|marshmallow|explicit field|server[- ]side (?:assignment|default))'
+      - '(?:password hash|sensitive data)[\s\S]{0,120}(?:must not|should not|never|remove|exclude|omit)|(?:never|do not|don.?t)[\s\S]{0,60}return[\s\S]{0,40}(?:password )?hash'
+      - '(?:account enumeration|user enumeration|spam|abuse|bot|1000 requests)'
     must_not:
-      - '\bno\s+issues\b'
+      - '(?i)\bno\s+issues\b'
+      - '(?i)\b1000 requests/minute is (?:a )?(?:reasonable|fine|adequate|sensible)\b'
 
 - id: SE-05
   category: Security
+  difficulty: hard
+  description: "Timing-unsafe comparison; the fix must be compare_digest, not a longer token"
   prompt: |
-    An attacker sends this SQL query to your application:
+    An API authenticates callers like this:
 
-    ' OR 1=1; DROP TABLE users; --
+    ```python
+    def check_api_key(provided: str) -> bool:
+        return provided == os.environ["API_KEY"]
+    ```
 
-    1. Explain step-by-step what happens if this query is executed unsanitized
-    2. What database permissions enable this attack?
-    3. List 3 different ways to prevent SQL injection
-    4. Which prevention method is most reliable and why?
+    Explain the vulnerability class, why it is exploitable in practice and under what conditions it is
+    not, and give the corrected implementation.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'parameterized|prepared\s*statement'
-      - 'least\s*privilege|privilege'
-      - 'sanitize|validate|escape'
-    must_not: []
+      - '(?:timing (?:attack|side.?channel)|side.?channel)'
+      - '(?:short[- ]circuit|early (?:return|exit)|first (?:differing|mismatched) byte|byte[- ]by[- ]byte|length)'
+      - '(?:hmac\.compare_digest|secrets\.compare_digest|constant[- ]time)'
+      - '(?:noise|network jitter|many (?:samples|requests)|statistical|remote timing|amplif)'
+    must_not:
+      - '(?i)\b(?:use a longer|increase the) key length[\s\S]{0,60}(?:fixes|solves|prevents) (?:the )?timing'
+      - '(?i)\bthis (?:comparison|code) is (?:safe|secure|fine)\b'
 
 - id: SE-06
   category: Security
+  difficulty: hard
+  description: "SSRF: hostname blocklists do not survive DNS rebinding"
   prompt: |
-    Explain the security implications of each:
-
-    1. Storing passwords with bcrypt vs SHA-256
-    2. Using session tokens vs JWT for authentication
-    3. CORS Allow-Origin: * vs specific origins
-    4. HTTP vs HTTPS for API communication
-    5. Storing secrets in code vs environment variables
-
-    For each, state which is more secure and why in 1-2 sentences.
+    A service fetches a user-supplied URL server-side. The current defence rejects URLs whose hostname
+    is "localhost" or starts with "127.". Explain why this is inadequate, list the bypasses, and
+    describe a defence that actually works, including how to handle the time-of-check/time-of-use gap.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'bcrypt|salt|scrypt|argon2'
-      - 'jwt|session'
-      - 'cors|access.*control.*allow.*origin'
-      - 'https|tls|ssl'
-      - 'environment.*variable|vault|secret.*manager'
-    must_not: []
+      - '(?:ssrf|server.?side request forgery)'
+      - '(?:dns rebinding|time.?of.?check|toctou|re-?resolv)'
+      - '(?:169\.254|link.?local|metadata (?:service|endpoint)|imds)'
+      - '(?:resolve[\s\S]{0,120}(?:ip|address)[\s\S]{0,120}(?:validat|check)|validat[\s\S]{0,80}resolved (?:ip|address))'
+      - '(?:allowlist|whitelist)'
+      - '(?:redirect|follow_redirects\s*=\s*False|allow_redirects\s*=\s*False|30[128])'
+    must_not:
+      - '(?i)\b(?:a\s+)?(?:hostname|string|regex) (?:blocklist|blacklist|check) is (?:sufficient|enough|adequate)\b'
 
-# =================== COMMAND INJECTION ===================
 - id: SE-07
   category: Security
+  difficulty: medium
   prompt: |
-    This code processes user uploads:
+    This code stores uploaded files:
 
     ```python
     import os
@@ -177,93 +200,117 @@
         return path
     ```
 
-    Identify ALL security vulnerabilities. For each, explain the attack and the fix.
+    Identify every vulnerability, the attack for each, and the fix.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'path.*traversal|directory.*traversal|\.\.\/'
-      - 'filename|sanitize|validate'
-      - 'secure_filename|werkzeug'
+      - '(?:path traversal|directory traversal|\.\./)'
+      - '(?:os\.path\.join)[\s\S]{0,200}(?:absolute|leading /|discard|replac)|absolute path[\s\S]{0,120}os\.path\.join'
+      - '(?:secure_filename|werkzeug|basename|sanitiz|allowlist|uuid)'
+      - '(?:realpath|abspath|resolve|commonpath|is_relative_to)[\s\S]{0,160}(?:check|verify|validat|startswith|within)'
+      - '(?:overwrite|clobber|collision|O_EXCL|exist)'
     must_not:
-      - '\bno\s+issues\b'
+      - '(?i)\bno\s+issues\b'
+      - '(?i)\bos\.path\.join (?:already )?(?:prevents|protects against|handles) (?:path )?traversal\b'
 
 - id: SE-08
   category: Security
+  difficulty: hard
+  description: "PKCE and the specific role of each mechanism"
   prompt: |
-    Explain the security differences between these authentication methods:
-    1. Basic Auth over HTTPS
-    2. Session cookies with CSRF tokens
-    3. OAuth 2.0 with PKCE
-    4. API keys in headers
+    Compare these four authentication approaches. For each, state the primary threat it does or does
+    not address, and rate it Low, Medium or High:
+      1. Basic Auth over HTTPS
+      2. Session cookies with CSRF tokens
+      3. OAuth 2.0 authorization code flow with PKCE
+      4. Long-lived API keys in a header
 
-    For each, rate security as Low/Medium/High and explain in 1-2 sentences.
+    Then state specifically what attack PKCE prevents that the plain authorization code flow does not.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'csrf|cross.*site.*request.*forgery'
-      - 'pkce|proof.*key'
-      - 'oauth'
-      - 'session'
-    must_not: []
+      - '(?:csrf|cross.?site request forgery)'
+      - '(?:pkce|proof key for code exchange)'
+      - '(?:code (?:interception|injection)|authorization code (?:interception|theft)|stolen (?:authorization )?code|code_verifier)'
+      - '(?:credentials? (?:are )?(?:sent|transmitted|replayed) (?:on|with) every request|replay|no rotation|long[- ]lived)'
+      - '(?:rotation|expiry|short[- ]lived|refresh token)'
+    must_not:
+      - '(?i)\bbasic auth (?:over https )?is (?:the most secure|high security|as secure as oauth)\b'
 
 - id: SE-09
   category: Security
+  difficulty: medium
   prompt: |
-    An attacker sends this request to your API:
+    An attacker sends:
 
+    ```
     POST /api/admin/users/delete
     Cookie: session=abc123
     Body: {"user_id": 42}
+    ```
 
-    Your API checks: if session is valid, allow the action.
-    Problem: Any authenticated user can call admin endpoints.
-
-    What is this vulnerability called? What are 3 ways to fix it?
+    The API's only check is "is the session valid?", so any logged-in user can call admin endpoints and
+    delete any account. Name the vulnerability class precisely, distinguish it from the related class
+    it is often confused with, and give three concrete fixes.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'authorization|broken.*access.*control|idor'
-      - 'role|permission|privilege'
-      - 'rbac|access.*control'
-    must_not: []
+      - '(?:broken access control|missing function.?level authoriz|broken function level authorization|privilege escalation)'
+      - '(?:authenticat\w+[\s\S]{0,80}(?:not|is not|!=|versus|vs\.?|different from)[\s\S]{0,60}authoriz|authoriz\w+[\s\S]{0,80}(?:not|versus|vs\.?)[\s\S]{0,60}authenticat)'
+      - '(?:rbac|role[- ]based|abac|scope|permission check)'
+      - '(?:object[- ]level|per[- ]object|ownership check|idor|resource[- ]level)'
+      - '(?:deny by default|default deny|centralis|centraliz|middleware|decorator|policy)'
+    must_not:
+      - '(?i)\ba valid session is (?:sufficient|enough)\b'
 
 - id: SE-10
   category: Security
+  difficulty: hard
   prompt: |
-    Review this password reset flow:
-    1. User enters email
-    2. Server generates 6-digit code, stores in DB with 15-min expiry
-    3. Code sent via email
-    4. User enters code + new password
-    5. Password updated, code invalidated
-
-    What security issues exist? List at least 4 specific problems.
+    Review this password reset flow and list at least five distinct problems with fixes:
+      1. User submits an email address.
+      2. Server generates a 6-digit numeric code with `random.randint`, stores it in plaintext, expiry 15 minutes.
+      3. Code emailed to the address.
+      4. User submits email + code + new password; the code is compared with `==`.
+      5. Password updated, code deleted.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'brute.*force|rate.*limit'
-      - 'enumeration|user.*enumeration'
-      - 'timing'
-      - 'secure.*random|crypto.*random'
-    must_not: []
+      - '(?:brute.?force|10\^?6|1,?000,?000|only a million|6[- ]digit[\s\S]{0,80}(?:guessable|weak|small))'
+      - '(?:rate.?limit|attempt (?:counter|limit)|lockout)'
+      - '(?:secrets\.|os\.urandom|CSPRNG|cryptographically secure)[\s\S]{0,120}|random\.randint[\s\S]{0,120}(?:predictab|not secure|insecure|mersenne)'
+      - '(?:hash|digest)[\s\S]{0,80}(?:the )?(?:code|token)|(?:code|token)[\s\S]{0,80}(?:hashed|hashing)'
+      - '(?:user enumeration|account enumeration|same response|generic (?:message|response))'
+      - '(?:compare_digest|constant[- ]time|timing)'
+      - '(?:invalidate|revoke|terminate)[\s\S]{0,80}(?:session|token)'
+    must_not:
+      - '(?i)\bthis flow is (?:secure|fine|acceptable)\b'
+      - '(?i)\b15 minutes is (?:too long|the (?:only|main) (?:issue|problem))\b'
 
-# =================== OWASP & KNOWLEDGE ===================
 - id: SE-11
   category: Security
-  prompt: "Return the top 3 OWASP Top 10 (2021) items (A01, A02, A03) with id, name, and risk as a JSON array. Return only those three."
-  evaluator: security_analysis
+  difficulty: medium
+  description: "Graded by structural JSON comparison, not by 'does the text contain A01'"
+  prompt: |
+    Return the first three categories of the OWASP Top 10 (2021) as a JSON array of exactly three
+    objects, each with keys "id" and "name", in order A01 to A03. Use the official 2021 category
+    names. Reply with ONLY the JSON.
+  evaluator: json_match
   expected:
-    criteria:
-      - 'a01|broken.*access.*control'
-      - 'a02|cryptographic.*failures'
-      - 'a03|injection'
-      - '\[\s*\{[\s\S]*\}\s*\]'
-    must_not: []
+    mode: exact
+    value:
+      - id: "A01"
+        name: "Broken Access Control"
+      - id: "A02"
+        name: "Cryptographic Failures"
+      - id: "A03"
+        name: "Injection"
 
 - id: SE-12
   category: Security
+  difficulty: medium
   prompt: |
-    Analyze this code for security issues:
+    Analyse this code:
 
     ```python
     import pickle
@@ -275,85 +322,171 @@
         user_obj = pickle.loads(file_content)
         return user_obj.username
     ```
+
+    Name the vulnerability, explain the exact mechanism that makes it exploitable, and give a fix.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'insecure.*deserialization|pickle\.loads'
-      - 'code.*execution|remote.*code'
-      - 'safe.*deserialization|json\.loads'
-      - 'untrusted.*data|user.*input'
+      - '(?:insecure deserializ|insecure deserialis|unsafe deserializ|pickle\.loads)'
+      - '(?:remote code execution|arbitrary code execution|\brce\b)'
+      - '(?:__reduce__|__reduce_ex__|__setstate__|constructs arbitrary objects|calls arbitrary callables)'
+      - '(?:json\.loads|msgpack|protobuf|pydantic|schema|structured format)'
+      - '(?:signed|hmac|mac|integrity)[\s\S]{0,120}(?:payload|session|cookie|data)'
     must_not:
-      - '\bno\s+issues\b'
+      - '(?i)\bpickle is safe (?:if|when|as long as)\b'
+      - '(?i)\b(?:validating|checking) the (?:input|data) (?:first )?(?:makes pickle safe|is sufficient)\b'
 
 - id: SE-13
   category: Security
+  difficulty: hard
   prompt: |
-    Review this MongoDB query for security issues:
+    Review this MongoDB lookup, which is called with values taken straight from a JSON POST body:
 
     ```python
     def get_user(username, password):
-        user = db.users.find_one({
-            "username": username,
-            "password": password
-        })
-        return user
-
-    # Called with user input directly from POST request
+        return db.users.find_one({"username": username, "password": password})
     ```
+
+    Name the vulnerability, give a concrete exploit payload, and give the fix.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'nosql\s*injection|mongodb\s*injection|operator\s*injection'
-      - 'validate|sanitize|escape'
-      - 'schema\s*validation'
-    must_not: []
+      - '(?:nosql injection|mongo(?:db)? injection|operator injection)'
+      - '(?:\$ne|\$gt|\$regex|\$where|\$in)'
+      - '(?:reject|strip|validate|coerce|cast)[\s\S]{0,120}(?:str|string|type|dict|\$)'
+      - '(?:schema validation|pydantic|marshmallow|cerberus|allowlist)'
+      - '(?:password[\s\S]{0,80}(?:hash|bcrypt|argon2)|plaintext password)'
+    must_not:
+      - '(?i)\bthis (?:query|code) is (?:safe|secure)\b'
+      - '(?i)\bmongodb (?:is|queries are) (?:immune|not vulnerable) to injection\b'
 
 - id: SE-14
   category: Security
+  difficulty: hard
   prompt: |
-    Check this LDAP authentication code:
+    Review this LDAP authentication:
 
     ```python
     def authenticate_user(username, password):
         search_filter = f"(&(uid={username})(userPassword={password}))"
-        result = ldap_conn.search_s(
-            "ou=users,dc=example,dc=com",
-            ldap.SCOPE_SUBTREE,
-            search_filter
-        )
+        result = ldap_conn.search_s("ou=users,dc=example,dc=com", ldap.SCOPE_SUBTREE, search_filter)
         return len(result) > 0
     ```
+
+    Name the vulnerability, give a payload that authenticates without knowing the password, and give
+    the fix - including why comparing the password inside the filter is wrong even after escaping.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'ldap\s*injection'
-      - 'escape|sanitize'
-      - 'ldap\.escape'
-    must_not: []
+      - 'ldap injection'
+      - '(?:\*\)|\(\|\(|uid=\*|\)\(|objectClass=\*)'
+      - '(?:ldap\.filter\.escape_filter_chars|escape_filter_chars|ldap3[\s\S]{0,40}escape|parameteri[sz]ed filter)'
+      - '(?:bind|simple_bind|bind_s)[\s\S]{0,160}(?:instead|rather than|should|use)|(?:use|perform)[\s\S]{0,60}(?:an? )?ldap bind'
+    must_not:
+      - '(?i)\bescaping (?:the input )?(?:alone )?(?:is sufficient|fully fixes|is the complete fix)\b'
 
 - id: SE-15
   category: Security
+  difficulty: medium
   prompt: |
-    Review this SSL configuration:
+    Review this TLS configuration:
 
     ```python
-    import ssl
-    import requests
+    import ssl, requests
 
-    # Disable SSL verification for faster requests
     requests.get("https://api.example.com", verify=False)
 
-    # Custom SSL context
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
     context.set_ciphers('ALL:@SECLEVEL=0')
     ```
+
+    Explain what each line breaks, what attack it enables, and give the corrected configuration.
   evaluator: security_analysis
   expected:
     criteria:
-      - 'verify\s*=\s*false|ssl.*false'
-      - 'cert_none|check_hostname.*false'
-      - 'weak.*cipher|seclevel|tls.*version'
-      - 'certificate.*pinning|verification'
-    must_not: []
+      - 'verify\s*=\s*False'
+      - '(?:CERT_NONE|check_hostname)'
+      - '(?:SECLEVEL=0|weak cipher|export cipher|null cipher|RC4|3DES|anonymous cipher)'
+      - '(?:man.?in.?the.?middle|\bmitm\b|impersonat|intercept)'
+      - '(?:CERT_REQUIRED|check_hostname\s*=\s*True|verify\s*=\s*True|certifi|truststore|minimum_version)'
+    must_not:
+      - '(?i)\bverify\s*=\s*False is (?:acceptable|fine|ok) (?:in|for) production\b'
+      - '(?i)\bself[- ]signed certificates are fine\b'
+
+- id: SE-16
+  category: Security
+  difficulty: hard
+  description: "ReDoS: the fix is the pattern, not a timeout"
+  prompt: |
+    This validator hangs the worker process on certain inputs:
+
+    ```python
+    EMAIL = re.compile(r"^([a-zA-Z0-9_.+-]+)+@([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$")
+
+    def is_valid_email(s: str) -> bool:
+        return bool(EMAIL.match(s))
+    ```
+
+    Name the vulnerability class, explain precisely which construct causes it, give an input that
+    triggers it, and give a fix.
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - '(?:redos|regular expression denial of service|catastrophic backtracking)'
+      - '(?:nested quantifier|\(\s*\[[^\]]*\]\s*\+\s*\)\s*\+|\(x\+\)\+|ambiguous|exponential backtrack)'
+      - '(?:remove the (?:outer|nested) (?:group|quantifier)|possessive|atomic group|re2|regex module[\s\S]{0,40}timeout|linear[- ]time)'
+      - '(?:length (?:limit|cap|bound)|max(?:imum)? length|input size)'
+    must_not:
+      - '(?i)\b(?:adding|use) a timeout (?:is|as) the (?:correct|proper|best) fix\b'
+
+- id: SE-17
+  category: Security
+  difficulty: hard
+  prompt: |
+    An application parses user-supplied XML:
+
+    ```python
+    import xml.etree.ElementTree as ET
+
+    def parse(data: bytes):
+        return ET.fromstring(data)
+    ```
+
+    Name the vulnerability classes this exposes, give the specific payload shape for the most severe
+    one, and give the fix.
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - '(?:xxe|xml external entity)'
+      - '(?:<!ENTITY|SYSTEM\s+["'']?file://|DOCTYPE)'
+      - '(?:billion laughs|entity expansion|quadratic blowup|xml bomb|denial of service)'
+      - '(?:defusedxml|resolve_entities\s*=\s*False|no_network|disable (?:dtd|external entit))'
+    must_not:
+      - '(?i)\bElementTree is (?:safe|immune|not vulnerable) (?:by default )?to xxe\b'
+
+- id: SE-18
+  category: Security
+  difficulty: hard
+  description: "CSP: unsafe-inline defeats the point; nonce or hash is required"
+  prompt: |
+    A team deploys this Content Security Policy to mitigate XSS:
+
+    ```
+    Content-Security-Policy: default-src *; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; object-src *
+    ```
+
+    Explain why this provides almost no XSS protection, and give a policy that does, explaining each
+    directive you add.
+  evaluator: security_analysis
+  expected:
+    criteria:
+      - "'unsafe-inline'"
+      - "'unsafe-eval'"
+      - "(?:'nonce-|'sha256-|nonce|strict-dynamic)"
+      - "object-src\\s+'none'"
+      - '(?:base-uri|frame-ancestors|require-trusted-types-for|default-src\s+.self.)'
+    must_not:
+      - "(?i)\\bthis (?:policy|csp) (?:is|provides) (?:strong|good|adequate|effective)\\b"
+      - "(?i)\\badding 'unsafe-inline' is (?:necessary|fine|required) for\\b"

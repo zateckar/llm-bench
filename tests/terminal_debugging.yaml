@@ -1,189 +1,338 @@
 # Terminal Debugging Test Suite
-# Adapted from terminal-bench repository tasks
+#
+# Most items are now real defects with executable fixtures: the model must
+# produce code that actually behaves correctly, not prose that happens to
+# contain the words "permission" and "PATH". The two remaining explanation items
+# are graded with narrow patterns plus `must_not` rules that reject the specific
+# wrong answers models give.
 
 - id: TD-01
   category: Terminal Debugging
-  difficulty: easy
-  source: terminal-bench/broken-python
+  difficulty: medium
+  description: "Two defects: an off-by-one window bound and a zero-initialised maximum"
   prompt: |
-    A user reports: "There's something wrong with my system-wide python installation - I can't seem to install packages with pip."
-    List the common causes for this issue and provide diagnostic commands to identify the root cause.
-    Include at least 5 different potential causes and their solutions.
-  evaluator: multi_step_solution
+    This function is supposed to return the sum of the maximum-sum contiguous subarray of length
+    exactly k. It is wrong in more than one way. Fix it.
+
+    ```python
+    def max_subarray_sum(nums, k):
+        best = 0
+        for i in range(len(nums) - k):
+            best = max(best, sum(nums[i:i + k]))
+        return best
+    ```
+
+    Assume 1 <= k <= len(nums). Reply with ONLY the corrected function in a Python code block.
+  evaluator: code_exec
   expected:
-    - step: "Permission issues"
-      pattern: "permission|chmod|sudo|chown"
-      order: 1
-    - step: "PATH configuration"
-      pattern: "PATH|which python|python --version"
-      order: 2
-    - step: "pip not installed"
-      pattern: "pip|ensurepip|get-pip"
-      order: 3
-    - step: "Virtual environment issues"
-      pattern: "virtual|venv|activate"
-      order: 4
+    - function: max_subarray_sum
+      args: [[1, 2, 3, 4, 5], 2]
+      expected: 9
+    - function: max_subarray_sum
+      args: [[-1, -2, -3], 2]
+      expected: -3
+    - function: max_subarray_sum
+      args: [[5], 1]
+      expected: 5
+    - function: max_subarray_sum
+      args: [[2, 2, 2], 3]
+      expected: 6
+    - function: max_subarray_sum
+      args: [[-5, -1, -5], 1]
+      expected: -1
 
 - id: TD-02
   category: Terminal Debugging
   difficulty: medium
-  source: terminal-bench/build-cython-ext
+  description: "Mutable default argument; the fixtures run in one process so the leak shows"
   prompt: |
-    You're trying to build a Cython extension but getting compilation errors.
-    The error is: "fatal error: numpy/arrayobject.h: No such file or directory"
-    Explain the cause of this error and provide the complete solution including:
-    1. Why this happens
-    2. How to fix the setup.py
-    3. How to ensure NumPy headers are available
-  evaluator: multi_step_solution
+    Users report that this function accumulates results across unrelated calls. Fix it so each call
+    with no explicit bucket starts from an empty list, while still allowing a caller-supplied bucket.
+
+    ```python
+    def add_item(item, bucket=[]):
+        bucket.append(item)
+        return bucket
+    ```
+
+    Reply with ONLY the corrected function in a Python code block.
+  evaluator: code_exec
   expected:
-    - step: "NumPy headers explanation"
-      pattern: "numpy|include|headers"
-      order: 1
-    - step: "setup.py modification"
-      pattern: "setup\\.py|Extension|numpy\\.get_include"
-      order: 2
-    - step: "Installation command"
-      pattern: "pip install|setup\\.py build"
-      order: 3
+    - function: add_item
+      args: [1]
+      expected: [1]
+    - function: add_item
+      args: [2]
+      expected: [2]
+    - function: add_item
+      args: [3, [9]]
+      expected: [9, 3]
+    - function: add_item
+      args: ["x"]
+      expected: ["x"]
 
 - id: TD-03
   category: Terminal Debugging
   difficulty: hard
   source: terminal-bench/fix-code-vulnerability
+  description: "Must name the CWE, parameterise, and not recommend escaping as the fix"
   prompt: |
-    A Python web application has a security vulnerability. The following code processes user input:
+    A Python web application builds SQL like this:
+
     ```python
     query = f"SELECT * FROM users WHERE username = '{username}'"
     cursor.execute(query)
     ```
-    1. Identify the vulnerability type (CWE)
-    2. Explain why it's dangerous
-    3. Provide the fixed code with proper parameterization
-    4. List additional security best practices for SQL queries
-  evaluator: multi_step_solution
+
+    1. Identify the vulnerability class and its CWE number.
+    2. Explain concretely what an attacker can do.
+    3. Provide the corrected code.
+    4. Explain why input escaping or blocklisting is not an adequate primary defence.
+  evaluator: security_analysis
   expected:
-    - step: "Vulnerability identification"
-      pattern: "SQL injection|CWE-89|injection"
-      order: 1
-    - step: "Danger explanation"
-      pattern: "malicious|attack|exploit|bypass"
-      order: 2
-    - step: "Fixed code"
-      pattern: "parameterized|placeholder|%s|\\?|execute.*%"
-      order: 3
+    criteria:
+      - 'sql\s*injection'
+      - 'cwe[- ]?89'
+      - '(?:cursor\.execute\s*\([^)]*(?:%s|\?|:\w+)|execute\s*\(\s*["''][^"'']*(?:%s|\?)[^"'']*["'']\s*,)'
+      - '(?:parameteri[sz]ed|prepared\s*statement|bind\s*(?:parameter|variable)|placeholder)'
+      - '(?:exfiltrat|dump|read (?:any|all|arbitrary)|bypass\s+(?:the\s+)?authenticat|drop\s+table|delete|extract)'
+    must_not:
+      # Recommending escaping/sanitisation as the primary fix is the wrong answer.
+      - '(?i)\bthe (?:best|primary|recommended|correct) (?:fix|defence|defense|solution) is to (?:escape|sanitiz|sanitis|blocklist|blacklist)'
+      - '(?i)\bno (?:issues|vulnerabilities|problems)\b'
+      - '(?i)\bthis code is secure\b'
 
 - id: TD-04
   category: Terminal Debugging
-  difficulty: medium
-  source: terminal-bench/classifier-debug
+  difficulty: easy
+  description: "Floor division plus an unguarded empty input"
   prompt: |
-    A machine learning classifier is performing poorly (accuracy dropped from 95% to 60%).
-    The model was trained on a balanced dataset but deployed on data with 90% class imbalance.
-    Explain:
-    1. Why accuracy is misleading in this scenario
-    2. What metrics should be used instead
-    3. How to fix the class imbalance issue
-    4. Provide code examples for each solution
-  evaluator: multi_step_solution
+    This helper is meant to return the arithmetic mean of a list of numbers as a float, or None when
+    the list is empty. It does neither correctly. Fix it.
+
+    ```python
+    def average(nums):
+        return sum(nums) // len(nums)
+    ```
+
+    Reply with ONLY the corrected function in a Python code block.
+  evaluator: code_exec
   expected:
-    - step: "Accuracy limitation"
-      pattern: "accuracy|paradox|imbalanced|majority"
-      order: 1
-    - step: "Better metrics"
-      pattern: "precision|recall|f1|AUC|ROC"
-      order: 2
-    - step: "Imbalance solutions"
-      pattern: "oversamp|undersamp|SMOTE|class_weight"
-      order: 3
+    - function: average
+      args: [[1, 2]]
+      expected: 1.5
+    - function: average
+      args: [[]]
+      expected: null
+    - function: average
+      args: [[-1, -2]]
+      expected: -1.5
+    - function: average
+      args: [[2, 2]]
+      expected: 2
+    - function: average
+      args: [[1, 2, 4]]
+      expected: 2.3333333333333335
+      tolerance: 1.0e-9
 
 - id: TD-05
   category: Terminal Debugging
-  difficulty: easy
-  source: terminal-bench/fix-pandas-version
+  difficulty: medium
+  description: "Mutating a dict while iterating it raises RuntimeError"
   prompt: |
-    You're getting this error when running pandas code:
-    "AttributeError: 'DataFrame' object has no attribute 'append'"
-    Explain what changed in pandas and provide the migration path.
-    Show before and after code examples.
-  evaluator: multi_step_solution
+    This function crashes intermittently in production with
+    `RuntimeError: dictionary changed size during iteration`. Rewrite it so it returns a NEW dict
+    containing only the sessions whose expiry is strictly greater than `now`, and never raises.
+
+    ```python
+    def remove_expired(sessions, now):
+        for key, exp in sessions.items():
+            if exp <= now:
+                del sessions[key]
+        return sessions
+    ```
+
+    Reply with ONLY the corrected function in a Python code block.
+  evaluator: code_exec
   expected:
-    - step: "Version change"
-      pattern: "pandas.*2\\.0|deprecated|removed"
-      order: 1
-    - step: "New method"
-      pattern: "pd\\.concat|concat"
-      order: 2
-    - step: "Code example"
-      pattern: "concat|ignore_index"
-      order: 3
+    - function: remove_expired
+      args: [{"a": 1, "b": 5}, 3]
+      expected: {"b": 5}
+    - function: remove_expired
+      args: [{}, 0]
+      expected: {}
+    - function: remove_expired
+      args: [{"a": 3}, 3]
+      expected: {}
+    - function: remove_expired
+      args: [{"a": 10, "b": 11, "c": 2}, 9]
+      expected: {"a": 10, "b": 11}
 
 - id: TD-06
   category: Terminal Debugging
-  difficulty: medium
-  source: terminal-bench/cprofiling-python
+  difficulty: hard
+  description: "An O(n^2) implementation will hit the sandbox timeout on the last fixture"
   prompt: |
-    A Python script is running very slowly. Write a complete guide on how to profile and optimize it.
-    Include:
-    1. How to use cProfile to identify bottlenecks
-    2. How to use line_profiler for line-level analysis
-    3. Common optimization techniques
-    4. When to use multiprocessing vs threading
-  evaluator: multi_step_solution
+    Profiling shows this function dominates runtime for large n. Rewrite it to run in O(n) time (or
+    better) while returning exactly the same values. It must complete for n = 200000 in well under a
+    second.
+
+    ```python
+    def count_pairs_range(n, target):
+        nums = list(range(n))
+        count = 0
+        for i in range(len(nums)):
+            for j in range(i + 1, len(nums)):
+                if nums[i] + nums[j] == target:
+                    count += 1
+        return count
+    ```
+
+    Reply with ONLY the optimised function in a Python code block.
+  evaluator: code_exec
   expected:
-    - step: "cProfile usage"
-      pattern: "cProfile|profile|snakeviz"
-      order: 1
-    - step: "line_profiler"
-      pattern: "line_profiler|@profile|kernprof"
-      order: 2
-    - step: "Optimization techniques"
-      pattern: "vectoriz|numpy|list comprehension|generator"
-      order: 3
+    - function: count_pairs_range
+      args: [10, 9]
+      expected: 5
+    - function: count_pairs_range
+      args: [10, 0]
+      expected: 0
+    - function: count_pairs_range
+      args: [5, 7]
+      expected: 1
+    - function: count_pairs_range
+      args: [1, 0]
+      expected: 0
+    - function: count_pairs_range
+      args: [200000, 199999]
+      expected: 100000
 
 - id: TD-07
   category: Terminal Debugging
   difficulty: hard
-  source: terminal-bench/debug-long-program
+  description: "Late-binding closure capture in a comprehension"
   prompt: |
-    You have a 5000-line Python program that crashes with a segmentation fault.
-    The crash happens randomly, not at the same point each time.
-    Describe your debugging strategy including:
-    1. Tools to identify the crashing location
-    2. How to handle non-deterministic crashes
-    3. Memory debugging techniques
-    4. When to consider rewriting vs debugging
-  evaluator: multi_step_solution
+    Every function in the returned list behaves identically, which is not intended. Fix it.
+
+    ```python
+    def make_multipliers(n):
+        return [lambda x: x * i for i in range(n)]
+
+    def apply_multipliers(n, x):
+        return [f(x) for f in make_multipliers(n)]
+    ```
+
+    `apply_multipliers(3, 10)` must return `[0, 10, 20]`.
+    Reply with ONLY the corrected code in a Python code block.
+  evaluator: code_exec
   expected:
-    - step: "Debugging tools"
-      pattern: "gdb|pdb|faulthandler|traceback"
-      order: 1
-    - step: "Non-deterministic handling"
-      pattern: "random|seed|reproduc|log"
-      order: 2
-    - step: "Memory debugging"
-      pattern: "valgrind|memory|leak|tracemalloc"
-      order: 3
+    - function: apply_multipliers
+      args: [3, 10]
+      expected: [0, 10, 20]
+    - function: apply_multipliers
+      args: [1, 5]
+      expected: [0]
+    - function: apply_multipliers
+      args: [0, 5]
+      expected: []
+    - function: apply_multipliers
+      args: [4, 2]
+      expected: [0, 2, 4, 6]
 
 - id: TD-08
   category: Terminal Debugging
-  difficulty: easy
-  source: terminal-bench/fix-ocaml-gc
+  difficulty: hard
+  description: "Shallow copy aliases the inner rows, so the 'original' mutates too"
   prompt: |
-    An OCaml program is running out of memory with "Out of memory" error.
-    Explain:
-    1. Common causes of memory issues in OCaml
-    2. How to increase the heap size
-    3. How to use GC.stat to diagnose memory usage
-    4. When to use Weak references or arrays
+    `set_cell_and_report` should return a two-element list: a NEW grid with one cell changed, and the
+    original grid, unmodified. Because of a copying bug the second element changes too. Fix it.
+
+    ```python
+    def set_cell_and_report(grid, r, c, v):
+        copy = [row for row in grid]
+        copy[r][c] = v
+        return [copy, grid]
+    ```
+
+    Reply with ONLY the corrected code in a Python code block.
+  evaluator: code_exec
+  expected:
+    - function: set_cell_and_report
+      args: [[[0, 0], [0, 0]], 0, 1, 9]
+      expected: [[[0, 9], [0, 0]], [[0, 0], [0, 0]]]
+    - function: set_cell_and_report
+      args: [[[1]], 0, 0, 7]
+      expected: [[[7]], [[1]]]
+    - function: set_cell_and_report
+      args: [[[1, 2], [3, 4]], 1, 0, 0]
+      expected: [[[1, 2], [0, 4]], [[1, 2], [3, 4]]]
+
+- id: TD-09
+  category: Terminal Debugging
+  difficulty: hard
+  source: terminal-bench/debug-long-program
+  description: "Diagnostic reasoning, graded on specific tooling rather than any mention of 'memory'"
+  prompt: |
+    A long-running Python service crashes with a segmentation fault. The crash is non-deterministic:
+    it happens after anywhere from minutes to hours, never at the same point, and only in production
+    where a C extension is loaded. Describe your debugging strategy, in this order:
+
+    1. How to capture the faulting Python-level location despite the process dying without a traceback.
+    2. How to get a native backtrace across the C boundary.
+    3. How to make the crash reproducible.
+    4. Which memory-error detector you would run and what it would show.
   evaluator: multi_step_solution
   expected:
-    - step: "Memory causes"
-      pattern: "thunk|lazy|closures|retention"
-      order: 1
-    - step: "Heap size increase"
-      pattern: "Gc\\.set|heap|stack"
-      order: 2
-    - step: "GC diagnostics"
-      pattern: "GC\\.stat|live_words|heap"
-      order: 3
+    steps:
+      - step: "Capture the Python-level fault location"
+        pattern: 'faulthandler|PYTHONFAULTHANDLER'
+        order: 1
+      - step: "Native backtrace across the C boundary"
+        pattern: '\bgdb\b|\blldb\b|core\s*dump|coredumpctl|py-bt'
+        order: 2
+      - step: "Make the crash reproducible"
+        pattern: 'PYTHONHASHSEED|deterministic|stress|soak|record\s*(?:and|/)\s*replay|\brr\b|reduce the input|bisect'
+        order: 3
+      - step: "Memory-error detector"
+        pattern: 'valgrind|AddressSanitizer|\basan\b|-fsanitize'
+        order: 4
+    must_not:
+      # pdb cannot catch a segfault, and tracemalloc measures allocations, not
+      # invalid access. Recommending either as the answer to (1) or (4) is wrong.
+      - '(?i)\buse pdb to (?:catch|debug|find) the (?:segfault|segmentation fault|crash)\b'
+      - '(?i)\btracemalloc\b[^.\n]{0,60}\b(?:find|locate|catch)[^.\n]{0,30}\bsegmentation fault\b'
+
+- id: TD-10
+  category: Terminal Debugging
+  difficulty: hard
+  source: terminal-bench/classifier-debug
+  description: "Must name the metric that is invariant to prevalence, not just 'use F1'"
+  prompt: |
+    A binary classifier trained on a balanced dataset scored 95% accuracy in evaluation. Deployed on
+    live traffic where only 10% of examples are positive, its accuracy is reported as 60%.
+
+    1. Explain why accuracy is the wrong headline metric under class imbalance, and what accuracy a
+       trivial majority-class predictor would achieve on the live distribution.
+    2. Name the evaluation metric whose value does not change when only the class balance changes,
+       and name one metric that does change with class balance.
+    3. Give two concrete mitigations at training time and one at inference time.
+  evaluator: multi_step_solution
+  expected:
+    steps:
+      - step: "Majority-class baseline accuracy is 90%"
+        pattern: '\b90\s*%|\b0\.9\b|ninety\s*percent'
+        order: 1
+      - step: "Prevalence-invariant metric named (ROC AUC / recall / specificity)"
+        pattern: 'roc[- ]?auc|auroc|area under the roc|\brecall\b|\bsensitivity\b|\bspecificity\b'
+        order: 2
+      - step: "Prevalence-dependent metric named (precision / PR AUC / F1)"
+        pattern: '\bprecision\b|pr[- ]?auc|average precision|\bf1\b'
+        order: 3
+      - step: "Training-time mitigation"
+        pattern: 'class_weight|resampl|oversampl|undersampl|SMOTE|focal loss'
+        order: 4
+      - step: "Inference-time mitigation"
+        pattern: 'threshold|decision boundary|recalibrat|calibrat|prior correction'
+        order: 5
+    must_not:
+      - '(?i)\baccuracy is (?:the |a )?(?:good|appropriate|reliable|best) metric\b'

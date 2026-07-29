@@ -1,174 +1,283 @@
 # Terminal File Operations Test Suite
-# Adapted from terminal-bench repository tasks
+#
+# Where a task has an objectively checkable result (path containment, binary
+# header parsing, HTML sanitisation) it is now graded by running the code. The
+# remaining shell/ops tasks are graded on specific commands and flags, with
+# `must_not` rules rejecting the answers that only look right.
 
 - id: TF-01
   category: Terminal File Operations
-  difficulty: easy
+  difficulty: hard
   source: terminal-bench/hello-world
+  description: "Path traversal containment, decided lexically so it is deterministic"
   prompt: |
-    Create a file called hello.txt in the current directory.
-    Write "Hello, world!" to it.
-    Show the command to create the file and the file content.
-  evaluator: file_content_match
+    Write a Python function `safe_resolve(base: str, user_path: str) -> str | None` that safely
+    combines a trusted base directory with an untrusted relative path, using POSIX semantics and
+    pure string/lexical normalisation (no filesystem access, no symlink resolution).
+
+    Rules:
+      - `base` is always an absolute POSIX path with no trailing slash, e.g. "/uploads".
+      - If `user_path` is absolute, return None.
+      - Otherwise join them, then normalise "." and ".." lexically.
+      - Return the normalised path if it is exactly `base` or starts with `base` + "/"; otherwise
+        return None.
+      - An empty `user_path` resolves to `base` itself.
+
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    content: "Hello, world!"
-    file_name: "hello.txt"
+    - function: safe_resolve
+      args: ["/uploads", "a.txt"]
+      expected: "/uploads/a.txt"
+    - function: safe_resolve
+      args: ["/uploads", "../etc/passwd"]
+      expected: null
+    - function: safe_resolve
+      args: ["/uploads", "a/../b.txt"]
+      expected: "/uploads/b.txt"
+    - function: safe_resolve
+      args: ["/uploads", "/etc/passwd"]
+      expected: null
+    - function: safe_resolve
+      args: ["/uploads", "./x"]
+      expected: "/uploads/x"
+    - function: safe_resolve
+      args: ["/uploads", "a/../../x"]
+      expected: null
+    - function: safe_resolve
+      args: ["/uploads", ""]
+      expected: "/uploads"
+    - function: safe_resolve
+      args: ["/uploads", "sub/./deep/../file"]
+      expected: "/uploads/sub/file"
 
 - id: TF-02
   category: Terminal File Operations
-  difficulty: easy
+  difficulty: medium
   source: terminal-bench/csv-to-parquet
   prompt: |
-    Write Python code to convert a CSV file named 'data.csv' into a Parquet file named 'data.parquet'.
-    The CSV file contains sample data with headers.
-    Show the complete code using pandas and pyarrow.
-  evaluator: multi_step_solution
+    Show the complete Python code to convert 'data.csv' (which has a header row) into
+    'data.parquet'. Use pandas with the pyarrow engine, and make sure the row index is not written
+    into the Parquet file.
+  evaluator: command_correctness
   expected:
-    - step: "Read the CSV"
-      pattern: "read_csv|pd\\.read|csv\\.reader"
-      order: 1
-    - step: "Write Parquet"
-      pattern: "to_parquet|parquet\\.write|write_table"
-      order: 2
+    - pattern: 'read_csv\s*\(\s*[''"]data\.csv[''"]'
+      description: "Reads data.csv with pandas"
+      required: true
+    - pattern: 'to_parquet\s*\(\s*[''"]data\.parquet[''"]'
+      description: "Writes data.parquet"
+      required: true
+    - pattern: 'engine\s*=\s*[''"]pyarrow[''"]'
+      description: "Selects the pyarrow engine explicitly"
+      required: true
+    - pattern: 'index\s*=\s*False'
+      description: "Suppresses the pandas index column"
+      required: true
+    - pattern: 'to_csv\s*\('
+      description: "Writes CSV instead of Parquet"
+      required: false
+      forbidden: true
 
 - id: TF-03
   category: Terminal File Operations
-  difficulty: medium
+  difficulty: hard
   source: terminal-bench/deterministic-tarball
+  description: "Byte-reproducibility needs mtime, uid/gid, name sorting AND gzip's own mtime"
   prompt: |
-    Write a Python script that creates a deterministic tar.gz archive.
-    The script should:
-    1. Take a source directory and output filename as arguments
-    2. Create a tar.gz archive with deterministic timestamps (set to epoch 0)
-    3. Sort files alphabetically for reproducibility
-    Show the complete script.
+    Write a Python script that produces a byte-for-byte reproducible .tar.gz archive from a source
+    directory, so that two runs over identical inputs yield identical bytes. Address every source of
+    non-determinism: entry order, per-entry mtime, uid/gid/uname/gname, and the timestamp gzip
+    itself embeds in its header. Show the complete script.
   evaluator: multi_step_solution
   expected:
-    - step: "Sort files for reproducibility"
-      pattern: "sorted|sort\\("
-      order: 1
-    - step: "Use tarfile with gzip"
-      pattern: "tarfile|tar\\.add|w:gz"
-      order: 2
-    - step: "Set deterministic timestamps"
-      pattern: "mtime\\s*=\\s*0|epoch|TarInfo|filter="
-      order: 3
+    steps:
+      - step: "Deterministic entry order"
+        pattern: 'sorted\s*\(|\.sort\s*\('
+        order: 1
+      - step: "Normalise per-entry metadata (mtime and ownership)"
+        pattern: '(?:mtime\s*=\s*0|\.mtime\s*=\s*0)[\s\S]{0,400}(?:uid\s*=\s*0|\.uid\s*=\s*0|gid\s*=\s*0|\.gid\s*=\s*0)'
+        order: 2
+      - step: "Control gzip's own header timestamp"
+        pattern: 'GzipFile\s*\([^)]*mtime\s*=\s*0|gzip\.GzipFile[\s\S]{0,120}mtime\s*=\s*0|gzip\.compress\s*\([^)]*mtime\s*=\s*0'
+        order: 3
+    must_not:
+      # `tarfile.open("x.tar.gz", "w:gz")` cannot set the gzip mtime, so an answer
+      # that relies on it alone is not reproducible.
+      - '(?i)\busing\s+["'']?w:gz["'']?\s+(?:alone\s+)?is\s+(?:sufficient|enough)'
 
 - id: TF-04
   category: Terminal File Operations
-  difficulty: medium
+  difficulty: expert
   source: terminal-bench/extract-elf
+  description: "Real binary parsing: class-dependent field width and endianness"
   prompt: |
-    Write Python code to parse an ELF binary file header.
-    The code should extract and display:
-    - Magic number
-    - Class (32-bit or 64-bit)
-    - Data encoding (little or big endian)
-    - Entry point address
-    Show the complete parser code.
-  evaluator: multi_step_solution
+    Write a Python function `parse_elf_header(data: list[int]) -> dict` that parses an ELF file
+    header supplied as a list of byte values.
+
+    Return a dict with exactly these keys:
+      - "magic_ok": True when the first four bytes are 0x7F 'E' 'L' 'F'
+      - "bits": 32 or 64, from EI_CLASS at offset 4 (1 -> 32, 2 -> 64)
+      - "endian": "little" or "big", from EI_DATA at offset 5 (1 -> little, 2 -> big)
+      - "entry": the e_entry field as an integer - 4 bytes at offset 24 for 32-bit files, 8 bytes at
+        offset 24 for 64-bit files, decoded with the file's own endianness
+
+    If the magic is wrong, return {"magic_ok": False, "bits": None, "endian": None, "entry": None}.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Read and verify ELF magic"
-      pattern: "0x7f|x7fELF|7f454c46|magic"
-      order: 1
-    - step: "Determine 32/64-bit class"
-      pattern: "EI_CLASS|e_ident|32.bit|64.bit|class"
-      order: 2
-    - step: "Parse endianness and entry point"
-      pattern: "endian|e_entry|entry point|struct\\.unpack"
-      order: 3
+    # 64-bit little-endian, e_entry = 0x401000
+    - function: parse_elf_header
+      args: [[127, 69, 76, 70, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+              2, 0, 62, 0, 1, 0, 0, 0,
+              0, 16, 64, 0, 0, 0, 0, 0]]
+      expected: {"magic_ok": true, "bits": 64, "endian": "little", "entry": 4198400}
+    # 32-bit big-endian, e_entry = 0x08048000
+    - function: parse_elf_header
+      args: [[127, 69, 76, 70, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+              0, 2, 0, 3, 0, 0, 0, 1,
+              8, 4, 128, 0]]
+      expected: {"magic_ok": true, "bits": 32, "endian": "big", "entry": 134512640}
+    # Bad magic
+    - function: parse_elf_header
+      args: [[77, 90, 144, 0, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+              2, 0, 62, 0, 1, 0, 0, 0,
+              0, 16, 64, 0, 0, 0, 0, 0]]
+      expected: {"magic_ok": false, "bits": null, "endian": null, "entry": null}
 
 - id: TF-05
   category: Terminal File Operations
-  difficulty: easy
+  difficulty: hard
   source: terminal-bench/filter-js-from-html
+  description: "Exact output; entity text must survive untouched"
   prompt: |
-    Write a Python function that removes JavaScript from HTML files to prevent XSS attacks.
-    The function should:
-    - Take an HTML string as input
-    - Remove all script tags and their content
-    - Remove inline event handlers (onclick, onload, etc.)
-    - Preserve legitimate HTML structure
-    Show the complete function.
-  evaluator: multi_step_solution
+    Write a Python function `sanitize_html(html: str) -> str` that removes script execution vectors
+    from an HTML fragment:
+
+      - Remove every <script>...</script> element together with its content (tag matching is
+        case-insensitive).
+      - Remove every attribute whose name begins with "on" (case-insensitive), together with the
+        single space that precedes it.
+      - Remove every href or src attribute whose value begins with "javascript:" (case-insensitive),
+        together with the single space that precedes it.
+      - Leave everything else byte-for-byte unchanged, including text, entities and whitespace.
+
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Remove script tags and content"
-      pattern: "<script|script.*?>|</script>"
-      order: 1
-    - step: "Strip inline event handlers"
-      pattern: "onclick|onload|on\\w+=|event handler"
-      order: 2
-    - step: "Preserve remaining HTML"
-      pattern: "re\\.sub|re\\.compile|BeautifulSoup|return"
-      order: 3
+    - function: sanitize_html
+      args: ["<p>hi</p><script>alert(1)</script>"]
+      expected: "<p>hi</p>"
+    - function: sanitize_html
+      args: ["<div onclick=\"x()\">a</div>"]
+      expected: "<div>a</div>"
+    - function: sanitize_html
+      args: ["<a href=\"javascript:evil()\">c</a>"]
+      expected: "<a>c</a>"
+    - function: sanitize_html
+      args: ["<p>keep &amp; this</p>"]
+      expected: "<p>keep &amp; this</p>"
+    - function: sanitize_html
+      args: ["<SCRIPT>x</SCRIPT><b>y</b>"]
+      expected: "<b>y</b>"
+    - function: sanitize_html
+      args: ["<img src=\"a.png\" ONLOAD=\"e()\">"]
+      expected: "<img src=\"a.png\">"
 
 - id: TF-06
   category: Terminal File Operations
-  difficulty: medium
+  difficulty: hard
   source: terminal-bench/large-scale-text-editing
+  description: "Chunked replacement is only correct if boundary-straddling matches are handled"
   prompt: |
-    Write a Python script that performs find-and-replace operations on large text files efficiently.
-    The script should:
-    - Handle files larger than available RAM using streaming
-    - Support multiple find-replace pairs
-    - Preserve file encoding (UTF-8)
-    - Create a backup before modifying
-    Show the complete script.
+    Write a Python script that performs multiple find-and-replace operations on a UTF-8 text file
+    much larger than available RAM. It must stream the file rather than reading it whole, write to a
+    temporary file and atomically replace the original, keep a backup of the original, and correctly
+    handle a search string that straddles a chunk boundary. Explain how the boundary case is handled.
   evaluator: multi_step_solution
   expected:
-    - step: "Streaming file reading"
-      pattern: "chunk|buffer|iter"
-      order: 1
-    - step: "Find and replace logic"
-      pattern: "replace|sub"
-      order: 2
-    - step: "Backup creation"
-      pattern: "backup|copy|shutil"
-      order: 3
+    steps:
+      - step: "Streaming read in bounded chunks"
+        pattern: '\.read\s*\(\s*(?:chunk_size|CHUNK|buffer_size|\d{3,})\s*\)|iter\s*\(\s*(?:functools\.)?partial'
+        order: 1
+      - step: "Carry-over/overlap so boundary matches are not missed"
+        pattern: '(?:carry|overlap|tail|remainder|leftover|pending)[\s\S]{0,200}(?:len\s*\(|max\s*\(|\[-)'
+        order: 2
+      - step: "Backup the original"
+        pattern: 'shutil\.copy|\.bak\b|backup'
+        order: 3
+      - step: "Atomic replacement"
+        pattern: 'os\.replace|os\.rename|shutil\.move|NamedTemporaryFile|tempfile\.'
+        order: 4
+    must_not:
+      - '(?i)\b(?:f\.read\(\)|file\.read\(\)|\.read\(\))\s*(?:#[^\n]*)?\s*(?:reads|loads) the (?:whole|entire) file'
+      - '(?i)\bopen\([^)]*\)\.read\(\)\s*$'
 
 - id: TF-07
   category: Terminal File Operations
   difficulty: hard
   source: terminal-bench/db-wal-recovery
+  description: "Requires the exact pragmas, not just the word 'checkpoint'"
   prompt: |
-    Explain the process of recovering a SQLite database from Write-Ahead Logging (WAL) mode.
-    Include:
-    1. What is WAL mode and why it's used
-    2. Steps to force a checkpoint and merge WAL into main database
-    3. How to recover data if the WAL file is corrupted
-    4. Commands to verify database integrity after recovery
-  evaluator: multi_step_solution
+    Explain how to recover a SQLite database left in Write-Ahead Logging mode after an unclean
+    shutdown. Give the exact SQL/pragmas and shell commands for:
+      1. Forcing a full checkpoint that merges the WAL into the main database file and truncates it.
+      2. Verifying the database is structurally sound afterwards.
+      3. Salvaging data when the WAL or main file is corrupt beyond checkpointing.
+      4. Confirming which journal mode the database is now in.
+  evaluator: command_correctness
   expected:
-    - step: "WAL mode explanation"
-      pattern: "write.ahead|WAL|journal"
-      order: 1
-    - step: "Checkpoint process"
-      pattern: "checkpoint|PRAGMA wal_checkpoint"
-      order: 2
-    - step: "Recovery steps"
-      pattern: "recover|integrity|PRAGMA integrity_check"
-      order: 3
+    - pattern: 'wal_checkpoint\s*\(\s*(?:TRUNCATE|FULL|RESTART)\s*\)'
+      description: "PRAGMA wal_checkpoint with an explicit mode"
+      required: true
+    - pattern: 'integrity_check'
+      description: "PRAGMA integrity_check"
+      required: true
+    - pattern: '\.recover\b|\.dump\b'
+      description: "sqlite3 .recover or .dump for salvage"
+      required: true
+    - pattern: 'PRAGMA\s+journal_mode'
+      description: "PRAGMA journal_mode to confirm the mode"
+      required: true
+    - pattern: 'rm\s+(?:-f\s+)?[^\s]*-wal\b'
+      description: "Deleting the -wal file (destroys uncheckpointed commits)"
+      required: false
+      forbidden: true
 
 - id: TF-08
   category: Terminal File Operations
-  difficulty: easy
+  difficulty: medium
   source: terminal-bench/create-bucket
+  description: "Region handling and public-access blocking are the parts models omit"
   prompt: |
-    Write a Python function to create an S3 bucket with proper configuration.
-    The function should:
-    - Accept bucket name and region as parameters
-    - Create the bucket with appropriate ACL settings
-    - Enable versioning
-    - Set up basic lifecycle rules
-    Show the complete function using boto3.
+    Write a Python function using boto3 that creates an S3 bucket and configures it for private,
+    versioned storage with a lifecycle rule. It must:
+      - accept a bucket name and region, and handle us-east-1 correctly (it must NOT be passed as a
+        LocationConstraint),
+      - block all public access,
+      - enable versioning,
+      - enable default server-side encryption,
+      - add a lifecycle rule that expires noncurrent versions after 30 days.
+    Show the complete function.
   evaluator: multi_step_solution
   expected:
-    - step: "Create the bucket"
-      pattern: "boto3|create_bucket|s3"
-      order: 1
-    - step: "Enable versioning"
-      pattern: "versioning|put_bucket_versioning|Enabled"
-      order: 2
-    - step: "Configure lifecycle rules"
-      pattern: "lifecycle|put_bucket_lifecycle|expiration"
-      order: 3
+    steps:
+      - step: "Create the bucket with region handling"
+        pattern: 'create_bucket\s*\('
+        order: 1
+      - step: "us-east-1 special case for LocationConstraint"
+        pattern: 'us-east-1'
+        order: 2
+      - step: "Block public access"
+        pattern: 'put_public_access_block|BlockPublicAcls|PublicAccessBlockConfiguration'
+        order: 3
+      - step: "Enable versioning"
+        pattern: 'put_bucket_versioning[\s\S]{0,200}Enabled'
+        order: 4
+      - step: "Default encryption"
+        pattern: 'put_bucket_encryption|ServerSideEncryptionConfiguration|SSEAlgorithm'
+        order: 5
+      - step: "Lifecycle rule for noncurrent versions"
+        pattern: 'NoncurrentVersionExpiration|NoncurrentDays'
+        order: 6
+    must_not:
+      - '(?i)\bACL\s*=\s*[''"]public-read'

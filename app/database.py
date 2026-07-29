@@ -7,6 +7,59 @@ from app.config import DATABASE_PATH, DATA_DIR
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
+# Columns added after the initial release. `CREATE TABLE IF NOT EXISTS` in
+# schema.sql does not alter an existing table, so every added column needs an
+# idempotent ALTER here as well. Listed as (table, column, definition).
+MIGRATIONS: list[tuple[str, str, str]] = [
+    ("test_runs", "test_suite_hash", "TEXT"),
+    ("test_runs", "total_prompt_tokens", "INTEGER DEFAULT 0"),
+    ("test_runs", "total_completion_tokens", "INTEGER DEFAULT 0"),
+    ("test_runs", "weighted_score", "REAL DEFAULT 0.0"),
+    ("test_runs", "scored_questions", "INTEGER DEFAULT 0"),
+    ("test_runs", "error_count", "INTEGER DEFAULT 0"),
+    ("test_runs", "workers", "INTEGER DEFAULT 1"),
+    ("test_runs", "duration_ms", "REAL DEFAULT 0.0"),
+    ("test_runs", "latency_p50_ms", "REAL"),
+    ("test_runs", "latency_p95_ms", "REAL"),
+    ("test_runs", "latency_p99_ms", "REAL"),
+    ("test_runs", "ttft_p50_ms", "REAL"),
+    ("test_runs", "ttft_p95_ms", "REAL"),
+    ("test_runs", "output_tokens_per_sec", "REAL"),
+    ("test_runs", "perf_json", "TEXT"),
+    ("test_results", "prompt_tokens", "INTEGER DEFAULT 0"),
+    ("test_results", "completion_tokens", "INTEGER DEFAULT 0"),
+    ("test_results", "passed", "INTEGER DEFAULT 0"),
+    ("test_results", "pass_threshold", "REAL DEFAULT 1.0"),
+    ("test_results", "difficulty", "TEXT DEFAULT 'medium'"),
+    ("test_results", "weight", "REAL DEFAULT 1.0"),
+    ("test_results", "latency_ms", "REAL"),
+    ("test_results", "ttft_ms", "REAL"),
+    ("test_results", "request_ok", "INTEGER DEFAULT 1"),
+    ("benchmark_progress", "phase", "TEXT DEFAULT 'quality'"),
+]
+
+
+async def _apply_migrations(db: aiosqlite.Connection) -> None:
+    """Add any missing columns, then backfill `passed` for pre-migration rows."""
+    for table, column, definition in MIGRATIONS:
+        try:
+            await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        except Exception:
+            pass  # Column already exists.
+
+    # Rows written before `passed` existed default to 0, which would report every
+    # historical run as a total failure. Backfill them with the old 0.5 rule so
+    # old runs stay readable; new rows are written with the real threshold.
+    try:
+        await db.execute(
+            """UPDATE test_results
+                  SET passed = CASE WHEN score >= 0.5 THEN 1 ELSE 0 END,
+                      pass_threshold = 0.5
+                WHERE passed = 0 AND score >= 0.5"""
+        )
+    except Exception:
+        pass
+
 
 async def get_db() -> aiosqlite.Connection:
     """Get a database connection."""
@@ -25,29 +78,7 @@ async def init_db():
         schema = SCHEMA_PATH.read_text(encoding="utf-8")
         await db.executescript(schema)
 
-        # Migration: add test_suite_hash column if missing
-        try:
-            await db.execute("ALTER TABLE test_runs ADD COLUMN test_suite_hash TEXT")
-        except Exception:
-            pass  # Column already exists
-
-        # Migration: add token columns if missing
-        try:
-            await db.execute("ALTER TABLE test_runs ADD COLUMN total_prompt_tokens INTEGER DEFAULT 0")
-        except Exception:
-            pass
-        try:
-            await db.execute("ALTER TABLE test_runs ADD COLUMN total_completion_tokens INTEGER DEFAULT 0")
-        except Exception:
-            pass
-        try:
-            await db.execute("ALTER TABLE test_results ADD COLUMN prompt_tokens INTEGER DEFAULT 0")
-        except Exception:
-            pass
-        try:
-            await db.execute("ALTER TABLE test_results ADD COLUMN completion_tokens INTEGER DEFAULT 0")
-        except Exception:
-            pass
+        await _apply_migrations(db)
 
         # Seed admin user if not exists
         from app.config import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL

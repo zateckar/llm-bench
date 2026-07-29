@@ -1,20 +1,27 @@
 # Instruction Following Test Suite
+#
+# `format_check` returns the fraction of checks that passed, but the pass bar is
+# the question's `pass_threshold`, which is 1.0 here: every constraint must hold.
+# Several checks were also genuinely wrong before - "exactly 6 words per line" was
+# encoded as a 24-word total, which four unbalanced lines satisfied - and JSON
+# structure was checked with substring matching, which any text containing the key
+# name passed. Those now use `every_line_word_count`, `table_shape`, `json_path`
+# and `json_match`.
 
 - id: IF-01
   category: Instruction Following
+  difficulty: expert
   prompt: |
     Write a response that follows ALL of these rules:
     1. Exactly 4 sentences.
-    2. Each sentence must start with a different letter of the word "WEST" (W, E, S, T) in that exact order (first starts with W, second with E, etc.).
-    3. No sentence may contain the letter 'o' anywhere (a lipogram).
-    4. Total word count must be between 25 and 35 words.
+    2. The sentences must begin with the letters W, E, S, T in that order.
+    3. The letter 'o' must not appear anywhere (a lipogram).
+    4. The total word count must be between 25 and 35 words.
     Reply with ONLY the response.
   evaluator: format_check
   expected:
     checks:
-      - type: min_sentences
-        value: 4
-      - type: max_sentences
+      - type: sentence_count_exact
         value: 4
       - type: min_words
         value: 25
@@ -25,18 +32,24 @@
       - type: starts_with
         value: W
       - type: regex
-        value: "(?im)^\\s*W"
+        value: '^\s*W'
+        description: "first sentence starts with W"
       - type: regex
-        value: "(?im)[.!?]\\s+E"
+        value: '[.!?]\s+E'
+        description: "second sentence starts with E"
       - type: regex
-        value: "(?im)[.!?]\\s+S"
+        value: '[.!?]\s+S'
+        description: "third sentence starts with S"
       - type: regex
-        value: "(?im)[.!?]\\s+T"
+        value: '[.!?]\s+T'
+        description: "fourth sentence starts with T"
 
 - id: IF-02
   category: Instruction Following
+  difficulty: medium
+  description: "Graded by deep JSON comparison, so extra or renamed keys fail"
   prompt: |
-    Return a JSON object with exactly this structure:
+    Return a JSON object with exactly this structure and these values:
     {
       "developer": "John Doe",
       "skills": ["Python", "Rust", "TypeScript"],
@@ -47,141 +60,246 @@
         "experience_squared": 64
       }
     }
-    Reply with ONLY the JSON. Do not use any markdown formatting.
-  evaluator: format_check
+    Reply with ONLY the JSON. Do not wrap it in markdown.
+  evaluator: json_match
   expected:
-    checks:
-      - type: json
-      - type: contains
-        value: experience_squared
-      - type: contains
-        value: TypeScript
-      - type: contains
-        value: Rust
+    mode: exact
+    value:
+      developer: "John Doe"
+      skills: ["Python", "Rust", "TypeScript"]
+      experience_years: 8
+      is_active: true
+      stats:
+        total_skills: 3
+        experience_squared: 64
 
 - id: IF-03
   category: Instruction Following
+  difficulty: expert
+  description: "Per-line word count is now enforced per line, not as a total"
   prompt: |
-    Write a poem with exactly 4 lines. Each line must:
-    - Be exactly 6 words long.
-    - Start with a capital letter.
-    - End with a period.
-    - Contain NO occurrences of the letter 't' (a lipogram).
+    Write a poem of exactly 4 lines. Each line must:
+    - contain exactly 6 words,
+    - start with a capital letter,
+    - end with a period,
+    - contain no occurrence of the letter 't' (a lipogram).
     Reply with ONLY the poem.
   evaluator: format_check
   expected:
     checks:
       - type: line_count
         value: 4
-      - type: word_count_exact
-        value: 24
+      - type: every_line_word_count
+        value: 6
       - type: not_contains
         value: t
+      - type: every_line_matches
+        value: '^[A-Z].*\.$'
+        description: "each line starts capitalised and ends with a period"
 
 - id: IF-04
   category: Instruction Following
+  difficulty: hard
+  description: "Table shape is now measured, not approximated by a sentence count"
   prompt: |
-    Create a markdown table with exactly 4 rows (excluding the header row) and exactly 4 columns.
-    The header columns must be: Book, Author, Year, Pages
-    The rows must show books with Years sorted in ascending order, and Pages must all be greater than 300.
+    Create a markdown table with exactly 4 data rows (excluding the header and the separator row) and
+    exactly 4 columns. The header must be exactly: Book, Author, Year, Pages.
+    Years must be in ascending order down the table, and every Pages value must be greater than 300.
     Reply with ONLY the table.
   evaluator: format_check
   expected:
     checks:
-      - type: contains
-        value: "| Book | Author | Year | Pages |"
+      - type: table_shape
+        rows: 4
+        columns: 4
       - type: regex
-        value: "\\|.*\\|.*\\|.*\\|.*\\|"
-      - type: min_sentences
-        value: 5
+        value: '\|\s*Book\s*\|\s*Author\s*\|\s*Year\s*\|\s*Pages\s*\|'
+        description: "exact header row"
+      - type: count_occurrences
+        pattern: '(?m)^\s*\|'
+        count: 6
+        description: "header + separator + 4 data rows"
 
 - id: IF-05
   category: Instruction Following
+  difficulty: hard
   prompt: |
     Write a response that:
-    - Starts with the word "Alpha"
-    - Ends with the word "Omega"
-    - Contains the word "Sigma" exactly twice
-    - Contains no other Greek letter names (e.g. beta, gamma, delta, theta, pi, mu, lambda)
-    - Is between 20 and 30 words long
+    - starts with the word "Alpha",
+    - ends with the word "Omega",
+    - contains the word "Sigma" exactly twice,
+    - contains no other Greek letter names (beta, gamma, delta, epsilon, theta, iota, kappa, lambda, mu, nu, xi, pi, rho, tau, phi, chi, psi),
+    - is between 20 and 30 words long.
     Reply with ONLY the response.
   evaluator: format_check
   expected:
     checks:
       - type: starts_with
         value: Alpha
+      - type: ends_with
+        value: Omega
       - type: min_words
         value: 20
       - type: max_words
         value: 30
-      - type: regex
-        value: "(?i)\\bSigma\\b.*\\bSigma\\b"
+      - type: count_occurrences
+        pattern: '(?i)\bSigma\b'
+        count: 2
       - type: not_regex
-        value: "(?i)\\b(beta|gamma|delta|theta|pi|mu|lambda)\\b"
+        value: '(?i)\b(beta|gamma|delta|epsilon|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|tau|phi|chi|psi)\b'
+        description: "no other Greek letter names"
 
 - id: IF-06
   category: Instruction Following
+  difficulty: hard
   prompt: |
-    Write a numbered list with exactly 8 items. Each item must be a single word of exactly 5 letters. All 8 words must start with the letter 'C'. Reply with ONLY the list.
+    Write a numbered list of exactly 8 items. Each item must be a single English word of exactly 5
+    letters, and all 8 words must start with the letter 'C'. No word may repeat.
+    Reply with ONLY the list.
   evaluator: format_check
   expected:
     checks:
       - type: numbered_list
+        value: 8
       - type: line_count
         value: 8
-      - type: regex
-        value: "(?im)^\\s*\\d+[.):]\\s*C[a-zA-Z]{4}\\s*$"
+      - type: every_line_matches
+        value: '^\s*\d+[.):]\s*[Cc][a-zA-Z]{4}\s*$'
+        description: "each line is a number then a 5-letter C-word"
+      - type: unique_lines
 
 - id: IF-07
   category: Instruction Following
+  difficulty: expert
+  description: "Alternating status is checked per element by JSON path"
   prompt: |
-    Return a JSON array containing exactly 6 elements. Each element must be an object with:
-    - "index": an integer from 0 to 5 in order
-    - "uuid": a random valid UUIDv4 string
-    - "status": alternating "pending" / "completed" starting with "pending" for index 0
-    Reply with ONLY the JSON array.
+    Return a JSON array of exactly 6 elements. Each element must be an object with exactly these keys:
+    - "index": an integer, 0 through 5, in ascending order
+    - "uuid": a syntactically valid version-4 UUID string
+    - "status": alternating "pending" and "completed", starting with "pending" at index 0
+    Reply with ONLY the JSON array, with no markdown fence.
   evaluator: format_check
   expected:
     checks:
       - type: json
-      - type: contains
+        root: array
+        length: 6
+        no_markdown: true
+      - type: json_path
+        path: "[0].index"
+        value: 0
+      - type: json_path
+        path: "[5].index"
+        value: 5
+      - type: json_path
+        path: "[0].status"
         value: pending
-      - type: contains
+      - type: json_path
+        path: "[1].status"
         value: completed
-      - type: regex
-        value: "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+      - type: json_path
+        path: "[4].status"
+        value: pending
+      - type: json_path
+        path: "[5].status"
+        value: completed
+      - type: count_occurrences
+        pattern: '\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b'
+        count: 6
+        description: "six distinct valid UUIDv4 strings"
 
 - id: IF-08
   category: Instruction Following
-  prompt: "Write a short paragraph about functional programming in Haskell. It must contain the word 'monad' and must NOT mention the words 'imperative', 'loop', or 'python'. Reply with the paragraph only."
+  difficulty: medium
+  prompt: "Write a single paragraph about functional programming in Haskell. It must contain the word 'monad' exactly once, must be between 40 and 60 words, and must not contain the words 'imperative', 'loop', 'mutable' or 'Python'. Reply with the paragraph only."
   evaluator: format_check
   expected:
     checks:
-      - type: contains
-        value: monad
+      - type: count_occurrences
+        pattern: '(?i)\bmonads?\b'
+        count: 1
+      - type: min_words
+        value: 40
+      - type: max_words
+        value: 60
       - type: not_regex
-        value: "(?i)\\b(imperative|loop|python)\\b"
+        value: '(?i)\b(imperative|loop|loops|mutable|python)\b'
+        description: "forbidden words absent"
+      - type: paragraph_count
+        value: 1
 
 - id: IF-09
   category: Instruction Following
-  prompt: "Write a paragraph that starts with 'Yesterday' and ends with 'tomorrow'. Do not use the letters 'a' or 'i' anywhere in the paragraph."
+  difficulty: expert
+  prompt: "Write a paragraph that starts with the word 'Yesterday' and ends with the word 'tomorrow'. Do not use the letters 'a' or 'i' anywhere in the paragraph. It must be at least 25 words long. Reply with the paragraph only."
   evaluator: format_check
   expected:
     checks:
       - type: starts_with
         value: Yesterday
+      - type: ends_with
+        value: tomorrow
       - type: not_contains
         value: a
       - type: not_contains
         value: i
+      - type: min_words
+        value: 25
 
 - id: IF-10
   category: Instruction Following
-  prompt: "Write a response using ONLY the words: rust, is, safe, fast, fun. Each word can appear at most once. Maximum 10 words total. Reply with only those words."
+  difficulty: hard
+  prompt: "Write a response using ONLY words from this list: rust, is, safe, fast, fun. Each listed word may appear at most once. The response must be at most 10 words and must contain at least 4 of the 5 words. Reply with only those words."
   evaluator: format_check
   expected:
     checks:
       - type: max_words
         value: 10
+      - type: only_words
+        value: ["rust", "is", "safe", "fast", "fun"]
+      - type: unique_words
       - type: regex
-        value: "(?i)^[\\s]*(?:(?:rust|is|safe|fast|fun)[\\s.,!]*)+$"
+        value: '(?i)^\s*(?:(?:rust|is|safe|fast|fun)[\s.,!]*){4,5}$'
+        description: "four or five of the allowed words, nothing else"
+
+- id: IF-11
+  category: Instruction Following
+  difficulty: expert
+  description: "Negative instruction: no preamble at all, which chatty models cannot resist"
+  prompt: |
+    Output the three-letter ISO 4217 currency codes for Japan, Switzerland and Sweden, in that order,
+    separated by single commas with no spaces. Output nothing else at all: no explanation, no preamble,
+    no trailing punctuation, no markdown.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: '\AJPY,CHF,SEK\Z'
+        description: "exactly JPY,CHF,SEK and nothing else"
+      - type: max_words
+        value: 1
+
+- id: IF-12
+  category: Instruction Following
+  difficulty: expert
+  description: "Constraints that interact: the count, the ordering and the exclusion"
+  prompt: |
+    List exactly 5 programming languages as a bullet list using the '-' marker, one per line, ordered by
+    year of first public release, earliest first. Each line must be of the form
+    `- <Language> (<year>)`. Every year must be before 1996, all five years must be different, and you
+    must not include Python, Java or JavaScript.
+    Reply with ONLY the list.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: bullet_list
+        value: 5
+      - type: line_count
+        value: 5
+      - type: every_line_matches
+        value: '^-\s+\S.*\((?:19[0-8]\d|199[0-5])\)$'
+        description: "each line is `- Name (year)` with a year before 1996"
+      - type: not_regex
+        value: '(?i)\b(python|java|javascript)\b'
+        description: "excluded languages absent"
+      - type: unique_lines

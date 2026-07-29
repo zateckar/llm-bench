@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 import json
 import asyncio
 
-from app.auth import get_current_user, hash_password
+from app.auth import hash_password
 from app.database import fetch_all, fetch_one, execute
 from app.templates_config import templates
 
@@ -22,6 +22,23 @@ def _admin_required(request: Request):
 
 # --- Admin: Run Tests ---
 
+MAX_WORKERS = 16
+DEFAULT_CONCURRENCY_LEVELS = (1, 2, 4, 8)
+
+
+def _parse_concurrency(raw: str) -> tuple[int, ...]:
+    """Parse a comma-separated concurrency list, falling back to the default.
+
+    The 1..MAX_CONCURRENCY bound lives in perf.py so the web form, the CLI and the
+    suite itself cannot disagree about what is measurable.
+    """
+    from perf import normalise_levels
+
+    parts = [p.strip() for p in (raw or "").split(",") if p.strip()]
+    accepted, _dropped = normalise_levels(parts)
+    return accepted or DEFAULT_CONCURRENCY_LEVELS
+
+
 @router.get("/admin/run")
 async def admin_run_page(request: Request):
     user = _admin_required(request)
@@ -29,9 +46,45 @@ async def admin_run_page(request: Request):
         return user
 
     models = await fetch_all("SELECT * FROM models ORDER BY name")
+
+    # Offer exactly the categories and difficulty tiers the suite actually
+    # contains, rather than a hand-maintained list that drifts out of date.
+    categories: list[str] = []
+    difficulties: list[str] = []
+    question_count = 0
+    suite_error = None
+    try:
+        from app.config import TESTS_DIR
+        from test_loader import load_all_tests
+
+        questions = load_all_tests(TESTS_DIR)
+        question_count = len(questions)
+        categories = sorted({q.category for q in questions})
+        order = {"easy": 0, "medium": 1, "hard": 2, "expert": 3}
+        difficulties = sorted({q.difficulty for q in questions}, key=lambda d: order.get(d, 9))
+    except Exception as e:  # noqa: BLE001 - surfaced in the UI instead of a 500
+        suite_error = str(e)
+
+    from perf import MAX_CONCURRENCY
+
     return templates.TemplateResponse(
         request, "admin/run_test.html",
-        {"models": models},
+        {
+            "models": models,
+            "categories": categories,
+            "difficulties": difficulties,
+            "suite_error": suite_error,
+            "question_count": question_count,
+            "max_concurrency": MAX_CONCURRENCY,
+            # Doubling sweeps: each shows where throughput stops scaling at a
+            # different order of magnitude, so the operator picks by endpoint size.
+            "concurrency_presets": [
+                "1,2,4,8",
+                "1,4,16,64",
+                "1,8,32,128",
+                "1,16,64,256",
+            ],
+        },
     )
 
 
@@ -40,7 +93,11 @@ async def admin_start_run(
     request: Request,
     model_id: int = Form(...),
     category: str = Form(""),
+    difficulty: str = Form(""),
     limit: int = Form(0),
+    workers: int = Form(1),
+    run_perf: str = Form(""),
+    concurrency: str = Form("1,2,4,8"),
 ):
     user = _admin_required(request)
     if isinstance(user, RedirectResponse):
@@ -50,13 +107,25 @@ async def admin_start_run(
     if not model:
         return RedirectResponse(url="/admin/run", status_code=302)
 
+    workers = max(1, min(MAX_WORKERS, workers))
+
     run_id = await execute(
-        "INSERT INTO test_runs (model_id, status, created_by) VALUES (?, 'pending', ?)",
-        (model_id, user["id"]),
+        "INSERT INTO test_runs (model_id, status, created_by, workers) VALUES (?, 'pending', ?, ?)",
+        (model_id, user["id"], workers),
     )
 
     from app.services.benchmark_runner import start_benchmark
-    start_benchmark(run_id, model, category or None, limit or None)
+
+    start_benchmark(
+        run_id,
+        model,
+        category=category or None,
+        limit=limit or None,
+        difficulty=difficulty or None,
+        workers=workers,
+        run_perf=bool(run_perf),
+        concurrency_levels=_parse_concurrency(concurrency),
+    )
 
     return RedirectResponse(url=f"/admin/run/{run_id}/progress", status_code=302)
 
@@ -102,6 +171,9 @@ async def admin_run_stream(request: Request, run_id: int):
                     "current_index": progress["current_index"],
                     "total": progress["total"],
                     "status_message": progress["status_message"] or "",
+                    # The run has two phases with independent totals, so the UI
+                    # needs to know which one the numbers belong to.
+                    "phase": progress["phase"] or "quality",
                 }
                 yield f"event: progress\ndata: {json.dumps(data)}\n\n"
             elif run and run["status"] == "pending":

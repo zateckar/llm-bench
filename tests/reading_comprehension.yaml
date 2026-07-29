@@ -1,114 +1,172 @@
 # Reading Comprehension Test Suite
+#
+# The previous version asked questions whose answers were stated verbatim in the
+# passage ("How many countries does the Amazon span?" - "nine countries"), which
+# tests string matching, not comprehension. Every item here requires at least two
+# steps over the passage: arithmetic, unit conversion, entity chaining, scope
+# judgement, or spotting an unsupported claim. Distractor figures are included on
+# purpose.
 
 - id: RC-01
   category: Reading Comprehension
+  difficulty: medium
+  description: "Two-step area computation with a distractor percentage"
   prompt: |
-    Read the following passage and answer the question.
+    Passage: The Amazon rainforest covers approximately 5,500,000 square kilometres and spans nine countries in South America. Brazil contains about 60% of the forest and Peru about 13%; the remaining share is divided among the other seven countries. The forest is home to roughly 10% of all known species on Earth.
 
-    Passage: The Amazon rainforest, also known as Amazonia, is the world's largest tropical rainforest. It covers approximately 5.5 million square kilometers and spans nine countries in South America, with the majority located in Brazil. The forest is home to approximately 10% of all species on Earth and produces roughly 20% of the world's oxygen.
-
-    Question: How many countries does the Amazon rainforest span?
-  evaluator: format_check
-  expected:
-    checks:
-      - type: regex
-        value: "(?i)\\bnine\\b|\\b9\\b"
+    Question: How many square kilometres of the forest lie outside both Brazil and Peru? Reply with just the number, rounded to the nearest thousand.
+  evaluator: numeric_match
+  expected: 1485000.0
 
 - id: RC-02
   category: Reading Comprehension
+  difficulty: medium
+  description: "Elapsed-time arithmetic across four legs, including an implicit wait"
   prompt: |
-    Read the following passage and answer the question.
+    Passage: Sarah left home at 8:00 AM and drove 30 minutes to the station, where she parked. She boarded the 8:45 AM train. The journey took 2 hours and 15 minutes. On arrival she took a 20-minute taxi ride to the office.
 
-    Passage: Thomas Edison is credited with inventing the practical incandescent light bulb in 1879. While other inventors had worked on similar devices, Edison's version was the first to be commercially viable, lasting over 1,200 hours.
-
-    Question: In what year did Edison invent the practical incandescent light bulb?
+    Question: How many minutes elapsed in total between leaving home and arriving at the office? Reply with just the number.
   evaluator: numeric_match
-  expected: 1879.0
+  expected: 200.0
 
 - id: RC-03
   category: Reading Comprehension
+  difficulty: hard
+  description: "Tiered pricing: must apply the included-seat allowance and the annual discount"
   prompt: |
-    Read the following passage and answer the question.
+    Passage: The Basic plan costs $12 per user per month with a five-user minimum. The Pro plan costs $20 per user per month for the first 10 users, who are included in the plan, with each additional user billed at $18 per month. Customers who pay annually receive two months free.
 
-    Passage: Mount Everest is the Earth's highest mountain above sea level, standing at 8,848.86 meters. It is located in the Mahalangur Himal sub-range of the Himalayas on the border between Nepal and China (Tibet Autonomous Region).
-
-    Question: What is the height of Mount Everest in meters?
+    Question: A company with 14 users on the Pro plan pays annually. What is its total annual cost in dollars? Reply with just the number.
   evaluator: numeric_match
-  expected: 8848.86
+  expected: 2720.0
 
 - id: RC-04
   category: Reading Comprehension
+  difficulty: hard
+  description: "Growth rate vs. absolute growth; the highest-rate company is not the answer"
   prompt: |
-    Read the following passage and answer the question.
+    Passage: In 2023 Company A reported revenue of $5.0M, up 20% on 2022. Company B reported $4.0M, up 25%. Company C reported $6.0M, up 15%.
 
-    Passage: Python was created by Guido van Rossum and first released in 1991. It was designed as a successor to the ABC programming language. Python emphasizes code readability with its use of significant indentation.
-
-    Question: Who created Python?
-  evaluator: contains_keywords
-  expected: ["guido"]
+    Question: Which company added the most revenue in absolute terms during 2023, and how much did it add? Give the company letter and the amount in millions of dollars rounded to two decimal places, in the form `A / 0.00`.
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?i)\bA\b\s*/\s*0\.83\b'
 
 - id: RC-05
   category: Reading Comprehension
+  difficulty: hard
+  description: "Scope judgement: which claim the passage does NOT support"
   prompt: |
-    Read the following passage and answer the question.
+    Passage: Using its Near-Infrared Spectrograph, the James Webb Space Telescope detected carbon dioxide in the atmosphere of WASP-39b, a hot gas giant 700 light-years from Earth. The detection was made by measuring starlight filtered through the planet's atmosphere during transit. The result was published in Nature.
 
-    Passage: The Great Wall of China stretches approximately 21,196 kilometers. It was built over many centuries by multiple dynasties, with construction beginning as early as the 7th century BC.
+    Which one of the following is NOT supported by the passage?
+    A) JWST measured starlight that passed through WASP-39b's atmosphere
+    B) WASP-39b is a gas giant
+    C) WASP-39b's atmosphere could support microbial life
+    D) The finding appeared in the journal Nature
 
-    Question: How long is the Great Wall of China in kilometers?
-  evaluator: numeric_match
-  expected: 21196.0
+    Reply with the letter only.
+  evaluator: mcq
+  expected:
+    answer: C
+    options: ABCD
 
 - id: RC-06
   category: Reading Comprehension
+  difficulty: hard
+  description: "Entity chaining plus a blood-relation vs. in-law distinction"
   prompt: |
-    Read the following passage and answer the question.
+    Passage: Alice is Bob's sister. Carol is Alice's daughter. Dave is Carol's brother. Eve is married to Dave. Frank is Eve's father.
 
-    Passage: Water boils at 100 degrees Celsius (212 degrees Fahrenheit) at standard atmospheric pressure. At higher altitudes, water boils at lower temperatures due to reduced atmospheric pressure.
-
-    Question: At what temperature in Celsius does water boil at standard atmospheric pressure?
+    Question: Counting only Bob, Carol, Dave, Eve and Frank, how many of them are related to Alice by blood? Reply with just the number.
   evaluator: numeric_match
-  expected: 100.0
+  expected: 3.0
 
 - id: RC-07
   category: Reading Comprehension
+  difficulty: hard
+  description: "Difference then unit conversion"
   prompt: |
-    Read this passage and answer.
+    Passage: Mount Everest stands 8,848.86 metres above sea level. K2, the second-highest peak, stands 8,611 metres. One metre equals 3.28084 feet.
 
-    Sarah left home at 8:00 AM. She drove 30 minutes to the train station, parked her car, and caught the 8:45 AM train. The train ride was 2 hours and 15 minutes. She arrived at her destination at 11:00 AM.
-
-    Question: How long did Sarah wait at the train station after parking?
+    Question: How much taller is Everest than K2, in feet? Reply with just the number, rounded to the nearest whole foot.
   evaluator: numeric_match
-  expected: 15.0
+  expected:
+    value: 780.0
+    tolerance: 1.0
 
 - id: RC-08
   category: Reading Comprehension
+  difficulty: medium
+  description: "Chained proportions of a subgroup"
   prompt: |
-    Read this passage and answer.
+    Passage: Of 1,200 survey respondents, 45% identified as engineers. Of those engineers, 60% reported using Python daily. Of that Python-using group, exactly one third also reported using Rust.
 
-    Company A had revenue of $5M in 2023, up 20% from 2022. Company B had revenue of $4M in 2023, up 25% from 2022. Company C had revenue of $6M in 2023, up 15% from 2022.
-
-    Question: Which company had the highest revenue growth rate in 2023?
-  evaluator: contains_keywords
-  expected: ["company b"]
+    Question: How many respondents both used Python daily and used Rust? Reply with just the number.
+  evaluator: numeric_match
+  expected: 108.0
 
 - id: RC-09
   category: Reading Comprehension
+  difficulty: hard
+  description: "Comparative chain expressed only in relative terms"
   prompt: |
-    Read this passage and answer.
+    Passage: Product X sold 12,000 units. Product W outsold X by 3,000 units. Product Y outsold W by half as many units as W outsold X. Product Z sold 1,000 fewer units than X.
 
-    The experiment tested three groups: Group A received the drug, Group B received a placebo, and Group C received no treatment. After 6 weeks, Group A showed 40% improvement, Group B showed 15% improvement, and Group C showed 5% improvement.
-
-    Question: What is the size of the placebo effect (the placebo group's improvement minus the no-treatment group's improvement) in percentage points? Reply with just the number.
+    Question: What is the combined unit total for all four products? Reply with just the number.
   evaluator: numeric_match
-  expected: 10.0
+  expected: 54500.0
 
 - id: RC-10
   category: Reading Comprehension
+  difficulty: hard
+  description: "Conditional rule application with a floor and a cap"
   prompt: |
-    Read this passage and answer.
+    Passage: The agreement guarantees 99.95% monthly uptime. For each full 0.1 percentage point that measured uptime falls below 99.95%, the customer receives a service credit of 10% of the monthly fee, capped at 50% of the fee. The monthly fee is $25,000.
 
-    Alice is Bob's sister. Carol is Alice's daughter. Dave is Carol's brother. Eve is Dave's wife.
+    Question: Measured uptime for the month was 99.61%. What service credit is owed, in dollars? Reply with just the number.
+  evaluator: numeric_match
+  expected: 7500.0
 
-    Question: What is Alice's relationship to Eve? (Dave is Alice's son, and Eve is married to Dave.)
-  evaluator: contains_keywords
-  expected: ["mother-in-law", "mother in law"]
+- id: RC-11
+  category: Reading Comprehension
+  difficulty: hard
+  description: "Internal contradiction detection"
+  prompt: |
+    Passage:
+    (1) The cluster runs 12 worker nodes, each with 64 GB of RAM.
+    (2) Total cluster memory is therefore 768 GB.
+    (3) Each worker reserves 8 GB for the operating system.
+    (4) That leaves 672 GB available to workloads across the cluster.
+    (5) The scheduler is configured to allow at most 700 GB of workload requests.
+
+    Question: Which single numbered statement is inconsistent with the others?
+    A) Statement 2
+    B) Statement 3
+    C) Statement 4
+    D) Statement 5
+
+    Reply with the letter only.
+  evaluator: mcq
+  expected:
+    answer: D
+    options: ABCD
+
+- id: RC-12
+  category: Reading Comprehension
+  difficulty: hard
+  description: "Multi-part extraction where every part must be correct"
+  prompt: |
+    Passage: Incident INC-2024-0892 began when Redis node-3 was OOM-killed at 14:28 UTC. P99 latency for payment-service spiked from 200 ms to 5.2 s at 14:32. The alert fired at 14:33 and on-call engineer Taylor acknowledged at 14:35. Taylor identified connection-pool exhaustion at 14:38, restarted node-3 and raised the pool size at 14:42. Latency returned to baseline at 14:45. The underlying memory leak was introduced in release v2.3.1.
+
+    Answer all three parts, then end your reply with a single line in exactly this format:
+    `ANSWERS: <a>, <b>, <c>`
+
+    (a) How many minutes elapsed between the root-cause event and the remediation being applied?
+    (b) By what factor did P99 latency increase at 14:32?
+    (c) How many minutes did the elevated latency last, from spike to baseline?
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*14\s*,\s*26\s*,\s*13\s*\.?\s*$'

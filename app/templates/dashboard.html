@@ -101,8 +101,13 @@
                     <div class="text-right">
                         {% if run.status == 'completed' %}
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-pass">
-                            {{ run.passed_questions }}/{{ run.total_questions }} ({{ "%.0f"|format(run.avg_score * 100) }}%)
+                            {{ run.passed_questions }}/{{ run.scored_questions or run.total_questions }} ({{ "%.0f"|format(run.avg_score * 100) }}%)
                         </span>
+                        <p class="text-xs text-slate-500 mt-1">
+                            {%- if run.weighted_score %}{{ "%.0f"|format(run.weighted_score * 100) }}% weighted{% endif %}
+                            {%- if run.latency_p50_ms %} &middot; p50 {{ "%.0f"|format(run.latency_p50_ms) }} ms{% endif %}
+                            {%- if run.output_tokens_per_sec %} &middot; {{ "%.0f"|format(run.output_tokens_per_sec) }} tok/s{% endif %}
+                        </p>
                         {% elif run.status == 'running' %}
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-running">Running</span>
                         {% elif run.status == 'failed' %}

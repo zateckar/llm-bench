@@ -11,7 +11,6 @@ from pathlib import Path
 from app.config import HOST, PORT
 from app.database import init_db
 from app.auth import get_current_user
-from app.templates_config import templates
 
 logging.basicConfig(
     level=logging.INFO,

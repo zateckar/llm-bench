@@ -22,7 +22,10 @@
                     <th class="text-left">Model</th>
                     <th class="text-left">Status</th>
                     <th class="text-left">Score</th>
+                    <th class="text-left">Weighted</th>
                     <th class="text-left">Questions</th>
+                    <th class="text-left">p50 / p95</th>
+                    <th class="text-left">Throughput</th>
                     <th class="text-left">Suite</th>
                     <th class="text-left">Created</th>
                     <th class="text-right">Actions</th>
@@ -56,8 +59,34 @@
                         </span>
                         {% else %}-{% endif %}
                     </td>
+                    <td>
+                        {% if run.status == 'completed' and run.weighted_score %}
+                        <span class="text-sm text-slate-400" title="Average score weighted by question difficulty">
+                            {{ "%.1f"|format(run.weighted_score * 100) }}%
+                        </span>
+                        {% else %}-{% endif %}
+                    </td>
                     <td class="text-sm text-slate-300">
-                        {% if run.status == 'completed' %}{{ run.passed_questions }}/{{ run.total_questions }}{% else %}-{% endif %}
+                        {% if run.status == 'completed' %}
+                        {{ run.passed_questions }}/{{ run.scored_questions or run.total_questions }}
+                        {% if run.error_count %}
+                        <span class="text-xs text-amber-400" title="Transport errors, excluded from the score">+{{ run.error_count }} err</span>
+                        {% endif %}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="text-xs text-slate-400 whitespace-nowrap">
+                        {% if run.latency_p50_ms %}
+                        {{ "%.0f"|format(run.latency_p50_ms) }} / {{ "%.0f"|format(run.latency_p95_ms or 0) }} ms
+                        {% if (run.workers or 1) > 1 %}
+                        <span class="text-slate-600" title="Measured with {{ run.workers }} concurrent workers, so it includes queueing">&times;{{ run.workers }}</span>
+                        {% endif %}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="text-xs text-slate-400 whitespace-nowrap">
+                        {% if run.output_tokens_per_sec %}
+                        {{ "%.1f"|format(run.output_tokens_per_sec) }} tok/s
+                        {% if run.perf_json %}<span class="text-violet-400" title="A dedicated performance suite was run">&#9679;</span>{% endif %}
+                        {% else %}-{% endif %}
                     </td>
                     <td class="text-xs font-mono text-slate-500" title="{{ run.test_suite_hash or 'N/A' }}">{{ run.test_suite_hash or '-' }}</td>
                     <td class="text-sm text-slate-500">{{ run.created_at[:16] if run.created_at else '-' }}</td>
@@ -68,10 +97,10 @@
                             {% else %}
                             <a href="/runs/{{ run.id }}" class="btn-ghost text-xs px-2 py-1">View</a>
                             {% endif %}
-                            {% if user and user.role == 'admin' and run.error_count > 0 %}
+                            {% if user and user.role == 'admin' and run.evaluator_error_count > 0 %}
                             <form method="POST" action="/runs/{{ run.id }}/rerun-failed" class="inline"
                                   x-data
-                                  x-on:submit.prevent="if(confirm('Re-run {{ run.error_count }} errored questions?')) $el.submit()">
+                                  x-on:submit.prevent="if(confirm('Re-run {{ run.evaluator_error_count }} errored questions?')) $el.submit()">
                                 <button type="submit" class="btn-ghost text-xs px-2 py-1 text-amber-400 hover:text-amber-300">Re-run Errored</button>
                             </form>
                             {% endif %}

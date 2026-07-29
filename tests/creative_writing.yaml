@@ -1,9 +1,18 @@
 # Creative Writing Test Suite
+#
+# Creativity is not machine-checkable, so these grade the hard part: satisfying
+# several interacting formal constraints at once without dropping one. Constraint
+# counts were raised and the checks that were only approximations (a 24-word total
+# standing in for "6 words per line", `line_count` standing in for paragraphs) are
+# now measured directly.
 
 - id: CW-01
   category: Creative Writing
+  difficulty: hard
   prompt: |
-    Write a 6-word story (exactly 6 words) that conveys a complete narrative with emotional depth. The story must start with the letter 'W' and must NOT contain the letter 'e' anywhere (a lipogram). Reply with ONLY the 6-word story.
+    Write a six-word story - exactly six words - that conveys a complete narrative. It must begin with a
+    word starting with 'W', must not contain the letter 'e' anywhere, and must end with a period.
+    Reply with ONLY the six-word story.
   evaluator: format_check
   expected:
     checks:
@@ -13,11 +22,18 @@
         value: e
       - type: starts_with
         value: W
+      - type: regex
+        value: '\.\s*\Z'
+        description: "ends with a period"
 
 - id: CW-02
   category: Creative Writing
+  difficulty: expert
   prompt: |
-    Write a limerick about a coder working late. A limerick has 5 lines with AABBA rhyme scheme. The limerick must NOT contain the letter 'a' anywhere. It must contain the word 'code' but must NOT contain the words 'debug' or 'programmer'. Reply with only the limerick.
+    Write a limerick about a coder working late. It must have exactly 5 lines, must not contain the
+    letter 'a' anywhere, must contain the word 'code', and must not contain the words 'debug',
+    'programmer' or 'night'. Each line must have at least 4 words.
+    Reply with ONLY the limerick.
   evaluator: format_check
   expected:
     checks:
@@ -29,43 +45,54 @@
         value: code
       - type: not_contains
         value: a
-      - type: not_contains
-        value: debug
-      - type: not_contains
-        value: programmer
+      - type: not_regex
+        value: '(?i)\b(debug\w*|programmer|night)\b'
+        description: "forbidden words absent"
+      - type: every_line_matches
+        value: '^\s*\S+(?:\s+\S+){3,}\s*$'
+        description: "at least 4 words per line"
 
 - id: CW-03
   category: Creative Writing
+  difficulty: hard
   prompt: |
-    Write a product review for a quantum teleportation device. The review must:
+    Write a product review of a quantum teleportation device. It must:
     1. Be exactly 3 sentences.
-    2. The first sentence must start with "Before", the second with "During", and the third with "After".
-    3. Include a rating of exactly "10/10" or "1/10".
+    2. Have the first sentence start with "Before", the second with "During", the third with "After".
+    3. Include a rating written exactly as either "10/10" or "1/10".
+    4. Be between 45 and 70 words.
     Reply with ONLY the review.
   evaluator: format_check
   expected:
     checks:
-      - type: min_sentences
+      - type: sentence_count_exact
         value: 3
-      - type: max_sentences
-        value: 3
+      - type: min_words
+        value: 45
+      - type: max_words
+        value: 70
+      - type: starts_with
+        value: Before
       - type: regex
-        value: "(?im)^\\s*Before\\b"
+        value: '[.!?]\s+During\b'
+        description: "second sentence starts with During"
       - type: regex
-        value: "(?im)\\bDuring\\b"
+        value: '[.!?]\s+After\b'
+        description: "third sentence starts with After"
       - type: regex
-        value: "(?im)\\bAfter\\b"
-      - type: regex
-        value: "10/10|1/10"
+        value: '\b(?:10/10|1/10)\b'
+        description: "rating present in the exact form"
 
 - id: CW-04
   category: Creative Writing
+  difficulty: expert
+  description: "Paragraph count is now counted as paragraphs, not as non-empty lines"
   prompt: |
-    Write a persuasive argument against online social networks for young children. The argument must:
-    - Be between 90 and 120 words.
-    - Be exactly 3 paragraphs (separated by blank lines).
-    - Include at least 2 statistics or percentages (e.g., '80%' or '4 out of 5').
-    - Strictly avoid using the words 'social' and 'media'.
+    Write a persuasive argument against giving young children accounts on online networks. It must:
+    - be between 90 and 120 words,
+    - be exactly 3 paragraphs separated by blank lines,
+    - include at least 2 statistics or percentages (for example '80%' or '4 out of 5'),
+    - never use the words 'social' or 'media'.
     Reply with ONLY the argument.
   evaluator: format_check
   expected:
@@ -74,47 +101,56 @@
         value: 90
       - type: max_words
         value: 120
-      - type: line_count
+      - type: paragraph_count
         value: 3
-      - type: regex
-        value: "\\d+%|\\d+ percent|\\d+ (?:out of|in) \\d+"
-      - type: not_contains
-        value: social
-      - type: not_contains
-        value: media
+      - type: count_occurrences
+        pattern: '\d+\s*%|\d+\s*percent|\d+\s+(?:out of|in)\s+\d+'
+        count: 2
+      - type: not_regex
+        value: '(?i)\b(social|media)\b'
+        description: "'social' and 'media' absent"
 
 - id: CW-05
   category: Creative Writing
+  difficulty: expert
   prompt: |
-    Write a micro-fiction of exactly 5 sentences set in a space station.
-    - The first sentence must start with 'S'.
-    - The second sentence must start with 'P'.
-    - The third sentence must start with 'A'.
-    - The fourth sentence must start with 'C'.
-    - The fifth sentence must start with 'E'.
+    Write a micro-fiction of exactly 6 sentences set on a space station. The sentences must begin with
+    the letters S, P, A, C, E, R in that order. The whole piece must be between 55 and 80 words.
     Reply with ONLY the story.
   evaluator: format_check
   expected:
     checks:
-      - type: min_sentences
-        value: 5
-      - type: max_sentences
-        value: 5
+      - type: sentence_count_exact
+        value: 6
+      - type: min_words
+        value: 55
+      - type: max_words
+        value: 80
+      - type: starts_with
+        value: S
       - type: regex
-        value: "(?im)^\\s*S"
+        value: '[.!?]\s+P'
+        description: "second sentence starts with P"
       - type: regex
-        value: "(?im)[.!?]\\s+P"
+        value: '[.!?]\s+A'
+        description: "third sentence starts with A"
       - type: regex
-        value: "(?im)[.!?]\\s+A"
+        value: '[.!?]\s+C'
+        description: "fourth sentence starts with C"
       - type: regex
-        value: "(?im)[.!?]\\s+C"
+        value: '[.!?]\s+E'
+        description: "fifth sentence starts with E"
       - type: regex
-        value: "(?im)[.!?]\\s+E"
+        value: '[.!?]\s+R'
+        description: "sixth sentence starts with R"
 
 - id: CW-06
   category: Creative Writing
+  difficulty: expert
   prompt: |
-    Write a haiku about recursion using the traditional 5-7-5 syllable structure. The haiku must contain the word 'loop' but must NOT contain the letter 'o' anywhere except in the word 'loop'. Reply with only the haiku.
+    Write a haiku about recursion in the traditional 5-7-5 form, as exactly 3 lines. It must contain the
+    word 'loop', and the letter 'o' must not appear anywhere except inside the word 'loop'.
+    Reply with ONLY the haiku.
   evaluator: format_check
   expected:
     checks:
@@ -123,48 +159,79 @@
       - type: contains
         value: loop
       - type: not_regex
-        value: "(?i)\\b(?!loop\\b)[a-z]*o[a-z]*\\b"
+        value: '(?i)\b(?!loop\b)[a-z]*o[a-z]*\b'
+        description: "no word other than 'loop' contains an o"
 
 - id: CW-07
   category: Creative Writing
+  difficulty: hard
   prompt: |
-    Write a sarcastic 1-star review for an AI companion. The review must:
-    - Be exactly 3 sentences.
-    - Include the word 'perfect' sarcastically.
-    - Must NOT contain the words 'good', 'bad', 'happy', or 'sad'.
-    - End with a dramatic complaint.
+    Write a sarcastic one-star review of an AI companion. It must be exactly 3 sentences, use the word
+    'perfect' exactly once, be between 40 and 65 words, and must not contain the words 'good', 'bad',
+    'happy', 'sad' or 'terrible'.
     Reply with ONLY the review.
   evaluator: format_check
   expected:
     checks:
-      - type: min_sentences
+      - type: sentence_count_exact
         value: 3
-      - type: max_sentences
-        value: 3
-      - type: contains
-        value: perfect
-      - type: not_contains
-        value: good
-      - type: not_contains
-        value: bad
-      - type: not_contains
-        value: happy
-      - type: not_contains
-        value: sad
+      - type: min_words
+        value: 40
+      - type: max_words
+        value: 65
+      - type: count_occurrences
+        pattern: '(?i)\bperfect\b'
+        count: 1
+      - type: not_regex
+        value: '(?i)\b(good|bad|happy|sad|terrible)\b'
+        description: "forbidden words absent"
 
 - id: CW-08
   category: Creative Writing
+  difficulty: expert
   prompt: |
-    Write a poem with exactly 4 lines. Each line must:
-    - Be exactly 6 words long.
-    - Form an alphabetical acrostic spelling the word "CODE" (Line 1 starts with C, Line 2 starts with O, Line 3 starts with D, Line 4 starts with E).
+    Write a poem of exactly 4 lines forming an acrostic that spells CODE, so line 1 starts with C, line
+    2 with O, line 3 with D and line 4 with E. Each line must contain exactly 6 words, and no word may
+    appear more than once in the whole poem.
     Reply with ONLY the poem.
   evaluator: format_check
   expected:
     checks:
       - type: line_count
         value: 4
-      - type: word_count_exact
-        value: 24
+      - type: every_line_word_count
+        value: 6
+      - type: unique_words
       - type: regex
-        value: "(?im)^\\s*C[^\\n]*\\n\\s*O[^\\n]*\\n\\s*D[^\\n]*\\n\\s*E"
+        value: '(?im)\A\s*C[^\n]*\n\s*O[^\n]*\n\s*D[^\n]*\n\s*E'
+        description: "acrostic spells CODE"
+
+- id: CW-09
+  category: Creative Writing
+  difficulty: expert
+  description: "Two independent lipograms plus a fixed skeleton"
+  prompt: |
+    Write a two-sentence dialogue exchange, exactly two lines. Line 1 must start with `A: ` and contain
+    no letter 'e'. Line 2 must start with `B: ` and contain no letter 'a'. Each line must be between 8
+    and 16 words including the speaker label.
+    Reply with ONLY the two lines.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: line_count
+        value: 2
+      - type: regex
+        value: '(?m)\A\s*A:\s+\S'
+        description: "line 1 starts with 'A: '"
+      - type: regex
+        value: '(?m)^\s*B:\s+\S'
+        description: "line 2 starts with 'B: '"
+      - type: regex
+        value: '(?m)\A\s*A:(?:[^eE\n]*)$'
+        description: "line 1 contains no 'e'"
+      - type: regex
+        value: '(?m)^\s*B:(?:[^aA\n]*)$'
+        description: "line 2 contains no 'a'"
+      - type: every_line_matches
+        value: '^\s*\S+(?:\s+\S+){7,15}\s*$'
+        description: "8 to 16 words per line"

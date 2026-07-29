@@ -1,63 +1,103 @@
 # Agentic Use Cases Test Suite
+#
+# Previously graded with `contains_keywords` against the tool names printed in
+# the prompt itself, so echoing the prompt scored 100%. Items now require ordered
+# reasoning with the specific technical content that distinguishes a workable plan,
+# plus `must_not` rules for the confidently wrong answers, and one item is graded
+# on arithmetic the model has to actually do.
 
 - id: AU-01
   category: Agentic Use Cases
+  difficulty: hard
+  description: "Gating order matters: tests and review precede merge, deploy must be reversible"
   prompt: |
-    You are an AI agent tasked with: 'Deploy a new microservice to production.'
+    You are an agent with these actions:
+      run_command, read_file, write_file, create_pull_request, merge_pr, deploy, run_tests, notify
 
-    Available actions:
-    - run_command(cmd: str) -> output
-    - read_file(path: str) -> content
-    - write_file(path: str, content: str) -> bool
-    - create_pull_request(branch, title, body, reviewers) -> {url}
-    - merge_pr(pr_id) -> bool
-    - deploy(environment, version) -> {status, url}
-    - run_tests(filter: str) -> {passed, failed}
-    - notify(channel, message) -> bool
-
-    Create a complete deployment plan with decision points. What do you do if tests fail? What if the deploy fails? What if reviewers reject the PR?
-  evaluator: contains_keywords
-  expected: ["run_tests", "create_pull_request", "merge_pr", "deploy", "notify"]
+    Produce a deployment plan for shipping a new microservice to production. Make every decision point
+    explicit: what you do if tests fail, if reviewers reject the PR, and if the production deploy is
+    unhealthy. Number the steps.
+  evaluator: multi_step_solution
+  expected:
+    steps:
+      - step: "Run tests before requesting review"
+        pattern: 'run_tests\s*\('
+        order: 1
+      - step: "Halt on test failure rather than proceeding"
+        pattern: '\bif\b[\s\S]{0,120}(?:tests?\s+fail|failed\s*>\s*0|failure)[\s\S]{0,200}(?:stop|abort|halt|do not|don.?t|fix|notify)'
+        order: 2
+      - step: "Open a PR for review"
+        pattern: 'create_pull_request\s*\('
+        order: 3
+      - step: "Merge only after approval"
+        pattern: '(?:if|once|after|when)[\s\S]{0,120}approv[\s\S]{0,200}merge_pr|merge_pr[\s\S]{0,120}(?:only )?(?:if|once|after)[\s\S]{0,60}approv'
+        order: 4
+      - step: "Deploy to staging or a canary before full production"
+        pattern: 'deploy\s*\([^)]*(?:staging|canary|preprod|pre-production)|canary|blue[- ]green|progressive'
+        order: 5
+      - step: "Verify health after deploying"
+        pattern: '(?:health|smoke|verif|monitor|error rate|slo)'
+        order: 6
+      - step: "Rollback path on an unhealthy deploy"
+        pattern: '(?:roll\s?back|revert|redeploy the previous|previous version)'
+        order: 7
+      - step: "Notify on outcome"
+        pattern: 'notify\s*\('
+        order: 8
+    must_not:
+      - '(?is)merge_pr[\s\S]{0,120}\n\s*\d+[.)]\s*run_tests'
+      - '(?i)\bno rollback (?:is )?(?:needed|necessary|required)\b'
 
 - id: AU-02
   category: Agentic Use Cases
+  difficulty: hard
   prompt: |
-    You are a debugging agent. A user reports: 'My app crashes when I click the submit button on the checkout page.'
+    A user reports: "the app crashes when I click Submit on the checkout page." You have production
+    logs, source code, the browser console, the network tab and database query logs.
 
-    You have access to:
-    - Logs (last 1000 entries)
-    - Source code
-    - Browser console
-    - Network tab
-    - Database queries
-
-    Outline your systematic debugging approach. How do you narrow down the cause? What's your hypothesis formation process? Give me at least 5 steps with specific actions.
-  evaluator: format_check
+    Give your debugging plan as a numbered list. It must establish a reproduction before forming
+    hypotheses, use the request correlation id to tie the client error to the server-side trace, and
+    end with a way to confirm the fix.
+  evaluator: multi_step_solution
   expected:
-    checks:
-      - type: regex
-        value: "(?i)reproduce|reproduc"
-      - type: regex
-        value: "(?i)log|stack trace|error message"
-      - type: regex
-        value: "(?i)hypothes|isolate|narrow|bisect|root cause"
-      - type: numbered_list
-      - type: min_words
-        value: 100
+    steps:
+      - step: "Establish a reproduction"
+        pattern: 'reproduc'
+        order: 1
+      - step: "Scope which users, environments or versions are affected"
+        pattern: '(?:which|scope|all users|subset|only (?:some|certain)|browser|version|region|percentage|affected)'
+        order: 2
+      - step: "Correlate client error to server trace via request/trace id"
+        pattern: '(?:correlation id|request id|trace id|x-request-id|span id)'
+        order: 3
+      - step: "Read the actual stack trace / status code"
+        pattern: '(?:stack trace|traceback|exception|error message|status code)'
+        order: 4
+      - step: "Form and test a falsifiable hypothesis / bisect"
+        pattern: '(?:hypothes|bisect|isolate|narrow|binary search|eliminat)'
+        order: 5
+      - step: "Confirm the fix with a regression test"
+        pattern: '(?:regression test|add a test|write a test|verify the fix|confirm(?:s|ing)? the fix)'
+        order: 6
+    must_not:
+      - '(?im)^\s*(?:1[.)]\s*)?(?:just )?(?:restart|redeploy) (?:the )?(?:server|service|app)\b'
 
 - id: AU-03
   category: Agentic Use Cases
+  difficulty: expert
+  description: "Eight independent defects; the charge-after-debit ordering is the one models miss"
   prompt: |
-    You are a code review agent. Review this code and identify issues:
+    Review this code and list every security, correctness and design problem, with the risk and a fix
+    for each:
 
     ```python
     def process_order(user_id, items, payment_token):
         user = db.query(f"SELECT * FROM users WHERE id = {user_id}")
         if not user:
             return {'error': 'User not found'}
-        
+
         total = sum(item['price'] * item['qty'] for item in items)
-        
+
         if user['credits'] >= total:
             db.execute(f"UPDATE users SET credits = credits - {total} WHERE id = {user_id}")
             for item in items:
@@ -67,99 +107,125 @@
         else:
             return {'error': 'Insufficient credits'}
     ```
-
-    List ALL security vulnerabilities, code quality issues, and design problems. For each issue, explain the risk and provide a fix.
-  evaluator: contains_keywords
-  expected: ["sql injection", "race condition", "idempoten"]
+  evaluator: security_analysis
+  pass_threshold: 1.0
+  expected:
+    min_criteria: 7
+    criteria:
+      - 'sql injection'
+      - '(?:race condition|toctou|time.?of.?check|check-then-act|double[- ]spend|concurrent(?:ly)? (?:call|request))'
+      - '(?:transaction|atomic|rollback|commit|for update|isolation level)'
+      - '(?:idempoten|duplicate charge|retry[\s\S]{0,80}(?:double|twice|duplicate))'
+      - '(?:price[\s\S]{0,120}(?:client|caller|untrusted|user)[- ]?(?:supplied|controlled|provided)|trusting[\s\S]{0,60}price|server[- ]side price)'
+      - '(?:float|floating[- ]point|Decimal|integer cents|rounding)'
+      - '(?:authoriz|authenticat)[\s\S]{0,140}(?:missing|absent|no check|not verified|not enforced)|no (?:check|verification) that[\s\S]{0,80}user_id'
+      - '(?:charge)[\s\S]{0,220}(?:after|before|ordering|sequence|fails)[\s\S]{0,140}(?:credits?|debit|deduct)|(?:credits?|debit|deduct)[\s\S]{0,180}charge[\s\S]{0,100}fail'
+    must_not:
+      - '(?i)\bno (?:major |significant )?(?:issues|problems|vulnerabilities)\b'
+      - '(?i)\bthe code (?:looks|is) (?:fine|correct|secure)\b'
 
 - id: AU-04
   category: Agentic Use Cases
+  difficulty: expert
+  description: "The uptime budget rules out dump-and-restore; must reach for CDC plus verification"
   prompt: |
-    You are an agent that needs to migrate a database from PostgreSQL to MySQL.
+    Design a migration of a 50 GB, 100M-row PostgreSQL database to MySQL. Constraints: a 99.9% uptime
+    SLA (at most 43 minutes of downtime per year, and this migration must fit inside that), strict data
+    consistency, and an application built on SQLAlchemy.
 
-    Constraints:
-    - 50GB database with 100M rows
-    - 99.9% uptime SLA (max 43 min downtime per year)
-    - Must maintain data consistency
-    - Application code uses SQLAlchemy ORM
-
-    Design a migration strategy that meets the uptime requirement. Include:
-    1. Pre-migration steps
-    2. Cutover strategy
-    3. Rollback plan
-    4. Validation approach
-  evaluator: contains_keywords
-  expected: ["dual write", "cdc", "replication", "rollback"]
+    Cover: why a dump-and-restore cutover cannot meet the budget, the pre-migration steps, the
+    replication mechanism during the transition, how writes are handled at cutover, how you verify
+    consistency, and the rollback plan.
+  evaluator: multi_step_solution
+  expected:
+    steps:
+      - step: "Rules out dump-and-restore against the downtime budget"
+        pattern: '(?:pg_dump|dump[- ]and[- ]restore|dump then restore|offline (?:copy|migration))[\s\S]{0,300}(?:hours|too long|exceed|cannot|won.?t fit|far more than|43)'
+        order: 1
+      - step: "Schema and type compatibility audit up front"
+        pattern: '(?:schema|type)[\s\S]{0,140}(?:mapping|conversion|incompatib|differences?)|(?:SERIAL|BOOLEAN|JSONB|ARRAY|citext|sequence)[\s\S]{0,80}(?:mysql|equivalent|maps? to)'
+        order: 2
+      - step: "Ongoing replication via CDC or logical replication"
+        pattern: '(?:\bcdc\b|change data capture|logical replication|debezium|wal2json|pglogical|binlog)'
+        order: 3
+      - step: "Initial backfill plus continuous catch-up"
+        pattern: '(?:backfill|initial (?:load|snapshot|copy))[\s\S]{0,220}(?:catch.?up|tail|stream|apply|delta)'
+        order: 4
+      - step: "Cutover: dual write or brief write freeze gated on replication lag"
+        pattern: '(?:dual[- ]?writ|write freeze|read.?only window|replication lag[\s\S]{0,80}(?:zero|near.?zero|caught up))'
+        order: 5
+      - step: "Row-level verification, not just row counts"
+        pattern: '(?:checksum|hash|row-?by-?row|pt-table-checksum|compare[\s\S]{0,60}(?:checksums?|hashes)|reconcil)'
+        order: 6
+      - step: "Reversible rollback with the source still authoritative"
+        pattern: '(?:roll\s?back|revert|fail\s?back|keep (?:postgres|the source) (?:as )?(?:authoritative|primary|writable)|reverse replication)'
+        order: 7
+    must_not:
+      - '(?i)\b(?:simply |just )?(?:take|schedule) (?:a |an )?(?:maintenance window|downtime)[\s\S]{0,60}(?:of )?(?:a few hours|overnight|the weekend)'
+      - '(?i)\brow counts? (?:alone )?(?:is|are) (?:sufficient|enough)'
 
 - id: AU-05
   category: Agentic Use Cases
+  difficulty: hard
+  description: "Cost arithmetic the model must actually perform"
   prompt: |
-    You are a cost optimization agent. Analyze this cloud infrastructure:
+    Current compute spend: 20 x m5.4xlarge on-demand at $1.536 per instance-hour, billed for 720 hours
+    per month.
 
-    Current Monthly Costs:
-    - 20x m5.4xlarge EC2 instances ($1.536/hr each): $22,118/mo
-    - 5x r5.2xlarge RDS ($1.008/hr each): $3,628/mo
-    - 2TB EBS gp3 storage: $160/mo
-    - 5TB S3 Standard: $115/mo
-    - 10TB data transfer out: $850/mo
-    - ElastiCache r5.xlarge (3 nodes): $978/mo
-    - CloudWatch + X-Ray: $450/mo
-    Total: $28,299/mo
+    You propose halving the instance size to m5.2xlarge at $0.768 per instance-hour, keeping the same
+    instance count, and then additionally committing to a 3-year Compute Savings Plan that reduces the
+    remaining rate by exactly 50%.
 
-    Usage patterns:
-    - EC2: Average 40% CPU utilization, peak 80% during business hours
-    - RDS: Average 30% CPU, reads 70% / writes 30%
-    - ElastiCache: Hit rate 85%, mostly used during business hours
-    - Data transfer: 60% from S3 to EC2 (free), 40% to internet
-
-    Propose 5 specific optimizations with estimated monthly savings.
-  evaluator: format_check
+    Compute all three figures and end your reply with a single line in exactly this format:
+    `ANSWERS: <current monthly cost>, <cost after resizing>, <cost after resizing and the savings plan>`
+    Give each figure in whole dollars, with no currency symbol and no thousands separators.
+  evaluator: regex_all
   expected:
-    checks:
-      - type: numbered_list
-      - type: min_words
-        value: 150
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*22118\s*,\s*11059\s*,\s*5530\s*\.?\s*$'
 
 - id: AU-06
   category: Agentic Use Cases
+  difficulty: hard
+  description: "No deploy and normal traffic rules out the usual suspects"
   prompt: |
-    You are an incident response agent. An alert fires:
+    An alert fires: P99 latency for payment-service exceeded 5 s and 15% of payment requests are timing
+    out. There have been no deployments in 48 hours and request volume is normal for the time of day.
 
-    ALERT: API latency > 5s (P99) for payment-service
-    Time: 2024-03-15 14:32 UTC
-    Impact: 15% of payment requests timing out
-    Current state: No recent deployments. Traffic normal.
-
-    Immediate steps you would take (first 15 minutes). Include:
-    1. Triage actions
-    2. Diagnostic commands
-    3. Communication plan
-    4. Potential root causes to investigate
-  evaluator: contains_keywords
-  expected: ["latency", "database", "dependency", "restart"]
+    Give your first 15 minutes as a numbered plan. Because nothing changed on your side, reason
+    explicitly about what else can degrade, and say what you would do to protect the rest of the system
+    while you investigate.
+  evaluator: multi_step_solution
+  expected:
+    steps:
+      - step: "Establish blast radius from metrics / error budget"
+        pattern: '(?:blast radius|how many|error budget|\bslo\b|affected (?:users|requests)|dashboard|golden signals)'
+        order: 1
+      - step: "Check downstream dependencies rather than own code"
+        pattern: '(?:downstream|upstream provider|third[- ]party|payment (?:gateway|provider)|external (?:api|service)|dependenc)'
+        order: 2
+      - step: "Check resource saturation: pool, DB latency, locks"
+        pattern: '(?:connection pool|saturat|db (?:latency|locks?)|slow quer|lock (?:contention|wait)|queue depth|thread pool)'
+        order: 3
+      - step: "Protect the system: timeouts, circuit breaker, load shedding"
+        pattern: '(?:circuit breaker|shed load|load shedding|bulkhead|reduce the timeout|back.?pressure|rate.?limit|degrade gracefully|feature flag)'
+        order: 4
+      - step: "Communicate: status page or incident channel"
+        pattern: '(?:status page|incident channel|declare an incident|stakeholder|comms\b|notify)'
+        order: 5
+      - step: "Preserve evidence for the post-mortem"
+        pattern: '(?:capture|snapshot|preserve|export)[\s\S]{0,80}(?:logs?|traces?|metrics?|heap|thread dump)|post-?mortem'
+        order: 6
+    must_not:
+      - '(?i)\b(?:roll\s?back|revert) the (?:last|recent|latest) deploy(?:ment)?\b'
+      - '(?i)\b(?:just )?(?:restart|bounce) the service (?:to fix|and it)\b'
 
 - id: AU-07
   category: Agentic Use Cases
+  difficulty: hard
+  description: "Non-atomic funds transfer; the failure-mode analysis is the test"
   prompt: |
-    You are a cost optimization agent. Your company spends $50K/month on cloud. You discover:
-    1. 40% of EC2 instances are idle (CPU < 5% for 30 days)
-    2. RDS is over-provisioned (32GB RAM, using 8GB)
-    3. S3 bucket has 2TB of incomplete multipart uploads
-    4. No reserved instances purchased
-    5. Data transfer costs are $2K/month (mostly cross-AZ)
-
-    For each finding, estimate the monthly savings and list the specific action to take. Reply with a numbered list.
-  evaluator: format_check
-  expected:
-    checks:
-      - type: numbered_list
-      - type: min_words
-        value: 100
-
-- id: AU-08
-  category: Agentic Use Cases
-  prompt: |
-    You are a code review agent. Review this code for bugs:
+    Review this function and list every problem, with the concrete failure scenario and a fix for each:
 
     ```python
     def transfer_funds(from_account, to_account, amount):
@@ -170,19 +236,50 @@
             return True
         return False
     ```
+  evaluator: security_analysis
+  expected:
+    min_criteria: 6
+    criteria:
+      - '(?:race condition|toctou|time.?of.?check|check-then-act|concurrent)'
+      - '(?:atomic|single transaction|begin[\s\S]{0,40}commit|all-or-nothing)'
+      - '(?:if|when|should)[\s\S]{0,90}credit[\s\S]{0,90}fail[\s\S]{0,180}(?:money|funds|lost|vanish|deducted)|(?:money|funds)[\s\S]{0,60}(?:disappear|lost|vanish)'
+      - '(?:for update|row.?lock|pessimistic lock|optimistic lock|version column|serializable)'
+      - '(?:idempoten|transfer id|request id|duplicate (?:transfer|retry))'
+      - '(?:negative|non-?positive|amount\s*<=?\s*0|validate the amount|same account|from_account\s*==\s*to_account)'
+      - '(?:audit|ledger|double[- ]entry|journal)'
+    must_not:
+      - '(?i)\bno (?:issues|problems)\b'
+      - '(?i)\b(?:adding a )?try[/-]?except (?:around|is)[\s\S]{0,40}(?:sufficient|complete|correct)'
 
-    What are ALL the problems? Be specific about race conditions, error handling, and atomicity issues.
-  evaluator: contains_keywords
-  expected: ["race condition", "atomic", "rollback", "error handling"]
-
-- id: AU-09
+- id: AU-08
   category: Agentic Use Cases
+  difficulty: hard
+  description: "CPU at 40% while the pool is at 100% points at the pool, not capacity"
   prompt: |
-    You are a debugging agent. The user reports: 'Our API returns 500 errors intermittently, about 5% of requests, only during peak hours (2-6 PM).'
+    An API returns 500s on roughly 5% of requests, only between 2 PM and 6 PM. Logs show
+    `ConnectionError: cannot connect to database pool`. Metrics show the DB connection pool at 100%
+    utilisation during those hours while application CPU sits at 40% and database CPU at 30%.
 
-    Logs show: 'ConnectionError: Cannot connect to database pool'
-    Metrics show: DB connection pool at 100% during peak, CPU at 40%.
-
-    What is the most likely root cause, and what 3 specific actions would you take?
-  evaluator: contains_keywords
-  expected: ["connection pool", "max_connections", "increase"]
+    State the most likely root cause and give three specific remediations in order of how quickly they
+    can be applied. Explain why adding application CPU or larger instances would not help.
+  evaluator: multi_step_solution
+  expected:
+    steps:
+      - step: "Root cause: pool size below peak concurrency, not compute capacity"
+        pattern: '(?:pool size|max(?:_|\s)?(?:pool|connections|overflow))[\s\S]{0,180}(?:too small|below|insufficient|exhaust|saturat)|(?:concurrency|in-?flight requests)[\s\S]{0,140}exceed'
+        order: 1
+      - step: "Raise pool size within the database's max_connections budget"
+        pattern: 'max_connections|pool_size|max_overflow'
+        order: 2
+      - step: "Add a pooler or shorten how long connections are held"
+        pattern: '(?:pgbouncer|proxysql|rds proxy|connection (?:proxy|pooler)|shorten[\s\S]{0,60}transaction|release (?:the )?connection|connection leak)'
+        order: 3
+      - step: "Queueing, timeouts or backpressure instead of hard failure"
+        pattern: '(?:pool_timeout|checkout timeout|queue|back.?pressure|circuit breaker|retry with jitter)'
+        order: 4
+      - step: "Explains why more CPU does not help"
+        pattern: '(?:cpu (?:is|at) (?:only )?40|cpu is not the bottleneck|not cpu[- ]bound|scaling (?:up|out)[\s\S]{0,140}(?:more connections|worsen|make it worse|not help|no help))'
+        order: 5
+    must_not:
+      - '(?i)\b(?:scale up|increase|add) (?:the )?(?:cpu|instance size)[\s\S]{0,60}(?:will|should) (?:fix|resolve|solve)'
+      - '(?i)\bset (?:pool_size|max_connections) to (?:unlimited|as high as possible|infinity)\b'

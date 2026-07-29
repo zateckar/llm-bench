@@ -1,107 +1,269 @@
 # Logical Reasoning Test Suite
+#
+# Design notes:
+#  - No bare Yes/No answers. A binary question is a coin flip, so a weak model
+#    scores 50% on it without reasoning at all.
+#  - Every answer is a specific value (a count, a probability, an ordering) that
+#    can be checked exactly, so there is no partial credit to drift over.
+#  - Problems are drawn from puzzles with a single well-established answer.
 
 - id: LR-01
   category: Logical Reasoning
-  prompt: "Five houses in a row (positions 1-5 from the left) are painted green, white, blue, red, and yellow. The green house is immediately to the left of the white house. The blue house is in position 1. The red house is in position 5. The yellow house is not next to the white house. Which position is the green house in? Reply with just the number."
+  difficulty: hard
+  description: "Bridge-and-torch scheduling; the greedy answer (19) is wrong"
+  prompt: |
+    Four people must cross a bridge at night. They have one torch, the bridge holds at most two people at a time, and anyone crossing must carry the torch. Their individual crossing times are 1, 2, 5 and 10 minutes; a pair crosses at the slower person's pace.
+    What is the minimum total time, in minutes, for all four to get across?
+    Reply with just the number.
   evaluator: numeric_match
-  expected: 3.0
+  expected: 17.0
 
 - id: LR-02
   category: Logical Reasoning
-  prompt: "A farmer needs to transport a wolf, a goat, and a cabbage across a river. The boat can carry only the farmer and one item. The wolf eats the goat if left alone, and the goat eats the cabbage if left alone. What is the minimum number of river crossings needed? Reply with just the number."
+  difficulty: medium
+  prompt: |
+    A farmer must transport a wolf, a goat and a cabbage across a river. The boat carries the farmer plus at most one item. The wolf eats the goat if left alone with it, and the goat eats the cabbage if left alone with it.
+    What is the minimum number of river crossings (counting every trip in either direction) needed?
+    Reply with just the number.
   evaluator: numeric_match
   expected: 7.0
 
 - id: LR-03
   category: Logical Reasoning
-  prompt: "Three people check into a hotel room that costs $30. They each pay $10. The manager realizes the room costs $25 and gives $5 to the bellboy to return. The bellboy keeps $2 and gives $1 back to each guest. Now each guest paid $9 (total $27), the bellboy has $2. That's $29. Where is the missing dollar?"
-  evaluator: format_check
-  expected:
-    checks:
-      - type: regex
-        value: "(?i)trick|misleading|fallacy|already included|no missing|faulty|flawed|incorrect.*addition|should not be added"
+  difficulty: hard
+  description: "Two-egg problem; requires the triangular-number insight, not binary search"
+  prompt: |
+    You have two identical glass balls and a 100-storey building. A ball breaks if dropped from floor N or above, and survives any drop below N (the same unknown N for both balls). Once a ball breaks it cannot be reused.
+    You must determine N exactly. What is the minimum number of drops that guarantees success in the worst case?
+    Reply with just the number.
+  evaluator: numeric_match
+  expected: 14.0
 
 - id: LR-04
   category: Logical Reasoning
+  difficulty: hard
   prompt: |
-    You have 12 identical-looking balls. One is either heavier or lighter than the rest (you don't know which). Using a balance scale exactly 3 times, can you always find the odd ball AND determine if it's heavier or lighter? Answer Yes or No.
-  evaluator: exact_match
-  expected: "Yes"
+    You have a balance scale and may use it exactly 3 times. Among a set of otherwise identical balls, exactly one is a different weight, and you must identify which ball it is AND whether it is heavier or lighter than the rest.
+    What is the largest number of balls for which this is always possible?
+    Reply with just the number.
+  evaluator: numeric_match
+  expected: 12.0
 
 - id: LR-05
   category: Logical Reasoning
+  difficulty: medium
   prompt: |
-    There are 3 boxes: one contains only apples, one contains only oranges, and one contains both. All boxes are mislabeled. You can pick one fruit from one box. What should you pick from which box to correctly label all boxes? Reply with: box label + fruit to pick.
-  evaluator: contains_keywords
-  expected: ["both", "apple", "orange"]
+    At a gathering, every person shook hands with every other person exactly once. A total of 66 handshakes took place.
+    How many people were at the gathering? Reply with just the number.
+  evaluator: numeric_match
+  expected: 12.0
 
 - id: LR-06
   category: Logical Reasoning
+  difficulty: expert
+  description: "Jeep/camel problem; needs the multi-depot transfer argument"
   prompt: |
-    A man looks at a portrait and says: "Brothers and sisters have I none, but that man's father is my father's son." Who is in the portrait? Reply with the relationship.
-  evaluator: contains_keywords
-  expected: ["son", "my son"]
+    A trader has 3000 bananas and a camel. The market is 1000 km away. The camel can carry at most 1000 bananas at a time and eats exactly 1 banana per kilometre travelled, in either direction. The trader may set down bananas anywhere and make as many trips as desired.
+    What is the maximum number of bananas that can be delivered to the market?
+    Reply with just the number.
+  evaluator: numeric_match
+  expected: 533.0
 
 - id: LR-07
   category: Logical Reasoning
+  difficulty: hard
   prompt: |
-    What comes next in the sequence: 1, 11, 21, 1211, 111221, ?
-    (Hint: Look at how each number describes the previous one)
-  evaluator: contains_keywords
-  expected: ["312211"]
+    You have 1000 bottles of wine; exactly one is poisoned. You also have test strips: a strip dipped in any mixture of wines turns red if and only if at least one poisoned drop is present. All strips are used simultaneously in a single round of testing, and each may be dipped in any subset of the bottles.
+    What is the minimum number of test strips that guarantees identifying the poisoned bottle?
+    Reply with just the number.
+  evaluator: numeric_match
+  expected: 10.0
 
 - id: LR-08
   category: Logical Reasoning
+  difficulty: hard
   prompt: |
-    You have 8 identical-looking coins. One is counterfeit and heavier. Using a balance scale exactly 2 times, can you always find the counterfeit coin? Answer Yes or No.
-  evaluator: exact_match
-  expected: "Yes"
+    There are 100 lamps numbered 1 to 100, all switched off. You make 100 passes. On pass k you toggle every lamp whose number is a multiple of k.
+    After all 100 passes, how many lamps are on? Reply with just the number.
+  evaluator: numeric_match
+  expected: 10.0
 
 - id: LR-09
   category: Logical Reasoning
+  difficulty: medium
   prompt: |
-    If the day before yesterday was Thursday, what day will it be 3 days after tomorrow? Reply with just the day name.
-  evaluator: contains_keywords
-  expected: ["monday"]
+    What is the next term in this sequence: 1, 11, 21, 1211, 111221, 312211, ?
+    Reply with only the term.
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '\b13112221\b'
 
 - id: LR-10
   category: Logical Reasoning
+  difficulty: hard
   prompt: |
-    A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. How much does the ball cost? Reply with just the amount in cents (e.g. 5 for 5 cents).
+    You have an unmarked 3-litre jug and an unmarked 5-litre jug, and an unlimited water supply. You must end up with exactly 4 litres in one of the jugs.
+    Counting each of the following as one operation - filling a jug completely from the supply, emptying a jug completely, or pouring from one jug into the other until the source is empty or the destination is full - what is the minimum number of operations required?
+    Reply with just the number.
   evaluator: numeric_match
-  expected: 5.0
+  expected: 6.0
 
 - id: LR-11
   category: Logical Reasoning
+  difficulty: expert
+  description: "Cheryl's birthday: requires reasoning about what others know"
   prompt: |
-    If it takes 5 machines 5 minutes to make 5 widgets, how long would it take 100 machines to make 100 widgets? Reply with just the number (in minutes).
-  evaluator: numeric_match
-  expected: 5.0
+    Albert and Bernard want to know Cheryl's birthday. Cheryl gives them this list of 10 possible dates:
+
+    May 15, May 16, May 19
+    June 17, June 18
+    July 14, July 16
+    August 14, August 15, August 17
+
+    Cheryl then tells Albert only the month and tells Bernard only the day.
+
+    Albert: "I don't know when Cheryl's birthday is, but I know that Bernard doesn't know either."
+    Bernard: "At first I didn't know when Cheryl's birthday is, but now I do."
+    Albert: "Then I know when Cheryl's birthday is too."
+
+    What is Cheryl's birthday? Reply with the month and day only.
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?i)(july\D{0,10}\b16\b|\b16\b\D{0,10}july)'
+    must_not:
+      - '(?i)\b(may|june|august)\D{0,10}\b\d{1,2}\b\s*(?:is|as)\s*(?:the|cheryl)'
 
 - id: LR-12
   category: Logical Reasoning
+  difficulty: medium
   prompt: |
-    In a room of 23 people, what is the approximate probability (as a percentage) that at least two people share a birthday? Reply with just the number (e.g. 50 for 50%).
+    Three ants sit on the three corners of a triangle. Simultaneously, each ant picks one of the two adjacent corners uniformly at random and walks along that edge to it.
+    What is the probability that no two ants meet (neither at a corner nor along an edge)? Express the answer as a decimal.
+    Reply with just the number.
   evaluator: numeric_match
-  expected: 50.0
+  expected: 0.25
 
 - id: LR-13
   category: Logical Reasoning
-  prompt: "If some A are B, and all B are C, which one of these statements must be true? A) All A are C  B) Some A are C  C) No A are C  D) All C are A. Reply with the letter only."
-  evaluator: exact_match
-  expected: "B"
+  difficulty: medium
+  description: "Quantifier reasoning; the tempting answer (Some A are C) is invalid"
+  prompt: |
+    Given only these two premises:
+      (i) All bloops are razzies.
+      (ii) Some razzies are lazzies.
+
+    Which one of the following MUST be true?
+    A) Some bloops are lazzies
+    B) Some lazzies are razzies
+    C) All lazzies are bloops
+    D) No bloops are lazzies
+
+    Reply with the letter only.
+  evaluator: mcq
+  expected:
+    answer: B
+    options: ABCD
 
 - id: LR-14
   category: Logical Reasoning
-  prompt: "What comes next in the sequence: 2, 6, 12, 20, 30, ?"
+  difficulty: hard
+  prompt: |
+    What is the next term in this sequence: 4, 9, 25, 49, 121, 169, ?
+    Reply with just the number.
   evaluator: numeric_match
-  expected: 42.0
+  expected: 289.0
 
 - id: LR-15
   category: Logical Reasoning
-  prompt: "If it is raining, the ground is wet. The ground is wet. Is it necessarily raining? Answer Yes, No, or Cannot be determined."
-  evaluator: format_check
+  difficulty: medium
+  description: "Affirming the consequent"
+  prompt: |
+    Premise 1: If it is raining, then the ground is wet.
+    Premise 2: The ground is wet.
+
+    Which one of the following is a valid conclusion?
+    A) It is raining
+    B) It is not raining
+    C) Nothing about whether it is raining can be concluded
+    D) It is not the case that the ground is wet
+
+    Reply with the letter only.
+  evaluator: mcq
   expected:
-    checks:
-      - type: regex
-        value: "(?i)not necessarily|cannot be determined|can't be determined|\\bno\\b"
+    answer: C
+    options: ABCD
+
+- id: LR-16
+  category: Logical Reasoning
+  difficulty: medium
+  description: "Must locate the invalid step, not merely gesture at a trick"
+  prompt: |
+    Three guests check into a room costing $30 and each pays $10. The manager realises the room actually costs $25 and sends the bellboy back with $5. The bellboy keeps $2 and returns $1 to each guest. Now each guest paid $9, for a total of $27, and the bellboy has $2, giving $29.
+
+    Explain precisely which arithmetic step is invalid and why. State what the $27 actually consists of.
+  evaluator: regex_all
+  expected:
+    patterns:
+      # Must identify that adding the bellboy's $2 to the $27 is the error.
+      - '(?i)(should not|shouldn.?t|must not|cannot|incorrect|invalid|wrong|error|mistake|fallac)[\s\S]{0,120}\badd'
+      # Must state that the $27 already contains the bellboy's $2.
+      - '(?i)\$?27[\s\S]{0,160}(already includes|includes the|consists of|is made up of|comprises|\$?25[\s\S]{0,20}\+?[\s\S]{0,20}\$?2)'
+      - '(?i)\$?25\b'
+    must_not:
+      # A response that concludes a dollar really is missing has not solved it.
+      - '(?i)\b(?:a |one )?dollar is (?:genuinely |really |actually )?missing\b'
+      - '(?i)\bthe missing dollar (?:is|went) (?:to|with) the bellboy\b'
+
+- id: LR-17
+  category: Logical Reasoning
+  difficulty: hard
+  prompt: |
+    100 prisoners stand in a line, each wearing a black or white hat. Each prisoner sees the hats of everyone in front of them but not their own or those behind. Starting from the back of the line, each prisoner in turn says "black" or "white"; everyone hears every guess. A prisoner is freed if the colour they say matches their own hat. The prisoners agree on a strategy beforehand but hats are assigned adversarially.
+    Using the optimal strategy, what is the largest number of prisoners that can be guaranteed to be freed?
+    Reply with just the number.
+  evaluator: numeric_match
+  expected: 99.0
+
+- id: LR-18
+  category: Logical Reasoning
+  difficulty: medium
+  prompt: |
+    A game show has 4 closed doors; exactly one hides a car. You pick one door. The host, who knows where the car is, then opens two of the other three doors, both revealing goats. You may keep your door or switch to the one remaining closed door.
+    What is the probability of winning the car if you switch? Express the answer as a decimal.
+    Reply with just the number.
+  evaluator: numeric_match
+  expected: 0.75
+
+- id: LR-19
+  category: Logical Reasoning
+  difficulty: hard
+  description: "Constraint satisfaction with a unique solution"
+  prompt: |
+    Five runners - A, B, C, D and E - finished a race with no ties. All of the following are true:
+      - A finished before B.
+      - C finished after D.
+      - E finished before A but after D.
+      - B did not finish last.
+
+    List all five runners in finishing order, first to last, separated by commas.
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?i)\bD\b\W+\bE\b\W+\bA\b\W+\bB\b\W+\bC\b'
+
+- id: LR-20
+  category: Logical Reasoning
+  difficulty: hard
+  description: "Cognitive-reflection items: the intuitive answer is wrong for each"
+  prompt: |
+    Answer all three, then give a final line in exactly this format: `ANSWERS: <a>, <b>, <c>`
+
+    (a) A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. How many cents does the ball cost?
+    (b) If 5 machines take 5 minutes to make 5 widgets, how many minutes do 100 machines take to make 100 widgets?
+    (c) Lily pads double in area each day and cover a lake in 48 days. On which day is the lake half covered?
+  evaluator: regex_all
+  expected:
+    patterns:
+      - '(?im)^\s*ANSWERS:\s*5\s*,\s*5\s*,\s*47\s*\.?\s*$'

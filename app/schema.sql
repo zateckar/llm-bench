@@ -36,6 +36,20 @@ CREATE TABLE IF NOT EXISTS test_runs (
     test_suite_hash TEXT,
     total_prompt_tokens INTEGER DEFAULT 0,
     total_completion_tokens INTEGER DEFAULT 0,
+    -- Quality
+    weighted_score REAL DEFAULT 0.0,   -- difficulty-weighted average score
+    scored_questions INTEGER DEFAULT 0, -- questions that produced a model answer
+    error_count INTEGER DEFAULT 0,      -- transport failures, excluded from scores
+    -- Performance
+    workers INTEGER DEFAULT 1,          -- concurrent workers used for the run
+    duration_ms REAL DEFAULT 0.0,       -- wall clock for the question phase
+    latency_p50_ms REAL,
+    latency_p95_ms REAL,
+    latency_p99_ms REAL,
+    ttft_p50_ms REAL,
+    ttft_p95_ms REAL,
+    output_tokens_per_sec REAL,         -- effective throughput for this run
+    perf_json TEXT,                     -- serialised PerfReport, when the perf suite ran
     FOREIGN KEY (model_id) REFERENCES models(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
@@ -54,9 +68,22 @@ CREATE TABLE IF NOT EXISTS test_results (
     question_index INTEGER,
     prompt_tokens INTEGER DEFAULT 0,
     completion_tokens INTEGER DEFAULT 0,
+    -- Pass/fail is decided by the question's own threshold, not a global 0.5,
+    -- so it is stored rather than re-derived in every query.
+    passed INTEGER DEFAULT 0,
+    pass_threshold REAL DEFAULT 1.0,
+    difficulty TEXT DEFAULT 'medium',
+    weight REAL DEFAULT 1.0,
+    -- Per-request performance
+    latency_ms REAL,
+    ttft_ms REAL,
+    request_ok INTEGER DEFAULT 1,       -- 0 when the call failed at the transport layer
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (run_id) REFERENCES test_runs(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_test_results_run ON test_results(run_id);
+CREATE INDEX IF NOT EXISTS idx_test_results_run_category ON test_results(run_id, category);
 
 -- Active benchmark sessions (for progress tracking)
 CREATE TABLE IF NOT EXISTS benchmark_progress (
@@ -65,5 +92,6 @@ CREATE TABLE IF NOT EXISTS benchmark_progress (
     current_index INTEGER DEFAULT 0,
     total INTEGER DEFAULT 0,
     status_message TEXT,
+    phase TEXT DEFAULT 'quality',
     FOREIGN KEY (run_id) REFERENCES test_runs(id)
 );

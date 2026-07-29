@@ -44,9 +44,12 @@ async def compare_page(request: Request):
             )
             if run:
                 categories = await fetch_all(
-                    """SELECT category, COUNT(*) as total,
-                              SUM(CASE WHEN score >= 0.5 THEN 1 ELSE 0 END) as passed,
-                              AVG(score) as avg_score
+                    """SELECT category,
+                              COUNT(*) as total,
+                              SUM(request_ok) as scored,
+                              SUM(passed) as passed,
+                              AVG(CASE WHEN request_ok = 1 THEN score END) as avg_score,
+                              AVG(latency_ms) as avg_latency_ms
                        FROM test_results WHERE run_id = ?
                        GROUP BY category ORDER BY category""",
                     (rid,),

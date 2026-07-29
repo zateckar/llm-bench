@@ -1,31 +1,58 @@
 #!/usr/bin/env python3
-"""LLM Quality & Accuracy Benchmark.
+"""LLM Quality, Accuracy & Performance Benchmark.
 
 Benchmarks a remote OpenAI-compatible LLM across multiple quality categories
-using curated questions and rule-based evaluation. Produces a markdown report.
+using curated questions and rule-based evaluation, and measures latency,
+throughput and concurrency behaviour of the endpoint. Produces a markdown report.
 
 Questions are loaded from YAML files in the tests/ directory.
 Evaluators are defined in evaluators.py.
+Performance measurement lives in perf.py.
 
 Usage:
-    pip install requests python-dotenv pyyaml
-    python benchmark.py [--category CATEGORY] [--limit N]
+    python benchmark.py                          # quality suite
+    python benchmark.py --perf                   # quality suite + performance suite
+    python benchmark.py --perf-only              # performance suite only
+    python benchmark.py --category "Security" --limit 5
+    python benchmark.py --workers 4              # run questions concurrently
+    python benchmark.py --concurrency 1,2,4,8,16 # concurrency levels to sweep
 """
 
+from __future__ import annotations
+
+import argparse
+import hashlib
 import json
 import logging
 import os
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
 from dotenv import load_dotenv
 
 from evaluators import EVALUATORS
-from models import CategoryResult, Question, Result, TokenUsage
-from test_loader import load_all_tests, compute_test_suite_hash
+from llm_client import ChatClient, ClientConfig
+from models import (
+    CategoryResult,
+    LatencyStats,
+    PerfReport,
+    Question,
+    RequestMetrics,
+    Result,
+    TokenUsage,
+)
+from perf import (
+    MAX_CONCURRENCY,
+    PerfConfig,
+    format_perf_console,
+    format_perf_markdown,
+    run_perf_suite,
+)
+from test_loader import SuiteError, compute_test_suite_hash, load_all_tests
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,112 +66,63 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
+ROOT = Path(__file__).parent
+TESTS_DIR = ROOT / "tests"
+CACHE_FILE = ROOT / ".benchmark_cache.json"
+
 BASE_URL = os.getenv("OPENAI_BASE_URL", "").rstrip("/")
 API_KEY = os.getenv("OPENAI_KEY", "")
 MODEL = os.getenv("OPENAI_MODEL", "unknown")
 
-if not BASE_URL or not API_KEY:
-    print("ERROR: OPENAI_BASE_URL and OPENAI_KEY must be set in .env")
-    sys.exit(1)
-
-ENDPOINT = f"{BASE_URL}/chat/completions"
 MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "4096"))
 # For a quality benchmark, default to deterministic decoding so results are
 # reproducible. Override with OPENAI_TEMPERATURE / OPENAI_SEED if desired.
 TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0"))
-SEED_ENV = os.getenv("OPENAI_SEED")
-SEED = int(SEED_ENV) if SEED_ENV else None
-MAX_RETRIES = 3
-RETRY_DELAY = 2.0
+_SEED_ENV = os.getenv("OPENAI_SEED")
+SEED = int(_SEED_ENV) if _SEED_ENV else None
+REQUEST_TIMEOUT = float(os.getenv("OPENAI_TIMEOUT", "180"))
+STREAM = os.getenv("OPENAI_STREAM", "true").lower() not in ("0", "false", "no")
+
+
+def build_client_config() -> ClientConfig:
+    return ClientConfig(
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        model=MODEL,
+        max_tokens=MAX_TOKENS,
+        temperature=TEMPERATURE,
+        seed=SEED,
+        timeout=REQUEST_TIMEOUT,
+        stream=STREAM,
+    )
+
 
 # ---------------------------------------------------------------------------
 # Cache
 # ---------------------------------------------------------------------------
 
-CACHE_FILE = Path(__file__).parent / ".benchmark_cache.json"
+_cache_lock = threading.Lock()
 
 
 def load_cache() -> dict:
     if CACHE_FILE.exists():
-        return json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+        try:
+            return json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            logger.warning("Cache file is corrupt; starting from an empty cache")
     return {}
 
 
-def save_cache(cache: dict):
+def save_cache(cache: dict) -> None:
     CACHE_FILE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
-
-
-# ---------------------------------------------------------------------------
-# API
-# ---------------------------------------------------------------------------
-
-
-def call_llm(prompt: str, system_prompt: str | None = None) -> tuple[str, TokenUsage]:
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": prompt})
-
-    payload = {
-        "model": MODEL,
-        "messages": messages,
-        "max_tokens": MAX_TOKENS,
-        "temperature": TEMPERATURE,
-    }
-    if SEED is not None:
-        payload["seed"] = SEED
-    headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
-
-    last_error = "unknown error"
-    for attempt in range(MAX_RETRIES):
-        try:
-            resp = requests.post(ENDPOINT, json=payload, headers=headers, timeout=120)
-            resp.raise_for_status()
-            data = resp.json()
-            content = data["choices"][0]["message"].get("content")
-            if content is None:
-                content = data["choices"][0]["message"].get("reasoning", "")
-            content = content.strip() if content else ""
-            usage = data.get("usage", {})
-            tokens = TokenUsage(
-                prompt_tokens=usage.get("prompt_tokens", 0),
-                completion_tokens=usage.get("completion_tokens", 0),
-            )
-            return content, tokens
-        except requests.exceptions.HTTPError:
-            status = resp.status_code
-            last_error = f"HTTP {status}"
-            # Every attempt counts toward MAX_RETRIES, including 429s, so a
-            # sustained rate limit can never loop forever.
-            if attempt < MAX_RETRIES - 1:
-                wait = RETRY_DELAY * (2 ** attempt)
-                label = "Rate limited" if status == 429 else f"HTTP {status}"
-                print(f"  {label}, retrying in {wait:.0f}s...")
-                time.sleep(wait)
-            else:
-                return f"[API ERROR: HTTP {status}]", TokenUsage()
-        except Exception as e:
-            last_error = str(e)
-            if attempt < MAX_RETRIES - 1:
-                wait = RETRY_DELAY * (2 ** attempt)
-                print(f"  Error: {e}, retrying in {wait:.0f}s...")
-                time.sleep(wait)
-            else:
-                return f"[API ERROR: {e}]", TokenUsage()
-    return f"[API ERROR: max retries exceeded: {last_error}]", TokenUsage()
-
-
-# ---------------------------------------------------------------------------
-# Benchmark runner
-# ---------------------------------------------------------------------------
 
 
 def question_fingerprint(q: Question) -> str:
     """Stable hash of the parts of a question that affect its result.
 
     Including this in the cache key means editing a prompt, evaluator, expected
-    value, or system prompt automatically invalidates the stale cached result.
-    Decoding parameters are included too, since they change the model output.
+    value, threshold or system prompt automatically invalidates the stale cached
+    result. Decoding parameters are included too, since they change the output.
     """
     payload = json.dumps(
         {
@@ -152,78 +130,162 @@ def question_fingerprint(q: Question) -> str:
             "system_prompt": q.system_prompt,
             "evaluator": q.evaluator,
             "expected": q.expected,
+            "pass_threshold": q.pass_threshold,
             "temperature": TEMPERATURE,
             "seed": SEED,
-            "max_tokens": MAX_TOKENS,
+            "max_tokens": q.max_tokens or MAX_TOKENS,
         },
         sort_keys=True,
         default=str,
     )
-    import hashlib
-
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
-def run_benchmark(questions: list[Question]) -> list[CategoryResult]:
-    """Run all questions and return categorized results."""
-    categories: dict[str, CategoryResult] = {}
-    total = len(questions)
-    cache = load_cache()
+# ---------------------------------------------------------------------------
+# Benchmark runner
+# ---------------------------------------------------------------------------
 
-    for i, q in enumerate(questions, 1):
-        if q.category not in categories:
-            categories[q.category] = CategoryResult(name=q.category)
 
-        # Check cache. The key includes a fingerprint of the question + decoding
-        # params, so a stale entry is never reused after a test is edited.
-        cache_key = f"{MODEL}:{q.id}:{question_fingerprint(q)}"
-        if cache_key in cache:
-            cached = cache[cache_key]
-            tokens = TokenUsage(
-                prompt_tokens=cached.get("prompt_tokens", 0),
-                completion_tokens=cached.get("completion_tokens", 0),
-            )
-            result = Result(
-                question=q,
-                response=cached["response"],
-                score=cached["score"],
-                detail=cached["detail"],
-                tokens=tokens,
-            )
-            categories[q.category].results.append(result)
-            status = "PASS" if result.score >= 0.5 else "FAIL"
-            print(f"[{i}/{total}] {q.category} — {q.id}: CACHED {status} ({result.score:.0%})")
-            continue
+def evaluate(q: Question, response: str) -> tuple[float, str]:
+    """Score a response, converting evaluator crashes into a visible error."""
+    evaluator = EVALUATORS.get(q.evaluator)
+    if evaluator is None:
+        return 0.0, f"Unknown evaluator: {q.evaluator}"
+    try:
+        score, detail = evaluator(response, q.expected)
+    except Exception as e:  # noqa: BLE001 - a bad fixture must not kill the run
+        logger.warning("Evaluator error for %s: %s", q.id, e, exc_info=True)
+        return 0.0, f"Evaluator error: {e}"
+    return max(0.0, min(1.0, float(score))), detail
 
-        print(f"[{i}/{total}] {q.category} — {q.id}: {q.prompt[:60]}...", end=" ", flush=True)
 
-        response, tokens = call_llm(q.prompt, q.system_prompt)
-        evaluator = EVALUATORS[q.evaluator]
-        try:
-            score, detail = evaluator(response, q.expected)
-        except Exception as e:
-            logger.warning("Evaluator error for %s: %s", q.id, e)
-            score, detail = 0.0, f"Evaluator error: {e}"
+def run_one(q: Question, client: ChatClient, cache: dict) -> Result:
+    """Run (or replay from cache) a single question."""
+    cache_key = f"{MODEL}:{q.id}:{question_fingerprint(q)}"
+    with _cache_lock:
+        cached = cache.get(cache_key)
 
-        result = Result(question=q, response=response, score=score, detail=detail, tokens=tokens)
-        categories[q.category].results.append(result)
+    if cached:
+        metrics = RequestMetrics(
+            latency_ms=cached.get("latency_ms", 0.0),
+            ttft_ms=cached.get("ttft_ms"),
+            completion_tokens=cached.get("completion_tokens", 0),
+            prompt_tokens=cached.get("prompt_tokens", 0),
+            ok=cached.get("ok", True),
+        )
+        # Re-score from the cached response: evaluator fixes take effect without
+        # re-spending tokens, and the fingerprint already covers fixture edits.
+        score, detail = evaluate(q, cached["response"])
+        return Result(
+            question=q,
+            response=cached["response"],
+            score=score,
+            detail=detail,
+            tokens=TokenUsage(metrics.prompt_tokens, metrics.completion_tokens),
+            metrics=metrics,
+            cached=True,
+        )
 
+    response, tokens, metrics = client.complete(
+        q.prompt, q.system_prompt, max_tokens=q.max_tokens
+    )
+
+    if metrics.ok:
+        score, detail = evaluate(q, response)
+    else:
+        # A transport failure is not a wrong answer; keep it out of the quality
+        # numbers and surface it separately.
+        score, detail = 0.0, f"Request failed: {metrics.error}"
+
+    result = Result(
+        question=q,
+        response=response,
+        score=score,
+        detail=detail,
+        tokens=tokens,
+        metrics=metrics,
+    )
+
+    if metrics.ok:
         # Persist after each real API call so a mid-run crash keeps prior work.
-        # This only runs on cache misses (i.e. alongside a network call that
-        # dominates runtime), so the JSON rewrite cost is negligible here.
-        cache[cache_key] = {
-            "response": response,
-            "score": score,
-            "detail": detail,
-            "prompt_tokens": tokens.prompt_tokens,
-            "completion_tokens": tokens.completion_tokens,
-        }
-        save_cache(cache)
+        with _cache_lock:
+            cache[cache_key] = {
+                "response": response,
+                "score": score,
+                "detail": detail,
+                "prompt_tokens": tokens.prompt_tokens,
+                "completion_tokens": tokens.completion_tokens,
+                "latency_ms": metrics.latency_ms,
+                "ttft_ms": metrics.ttft_ms,
+                "ok": True,
+            }
+            save_cache(cache)
 
-        status = "PASS" if score >= 0.5 else "FAIL"
-        print(f"{status} ({score:.0%}) [tokens: {tokens.prompt_tokens}+{tokens.completion_tokens}]")
+    return result
 
-    return list(categories.values())
+
+def _status_line(index: int, total: int, result: Result) -> str:
+    q = result.question
+    if result.is_transport_error:
+        status = "ERROR"
+    else:
+        status = "PASS" if result.passed else "FAIL"
+    bits = [f"[{index}/{total}] {q.category} — {q.id}: {status} ({result.score:.0%})"]
+    if result.cached:
+        bits.append("cached")
+    else:
+        bits.append(f"{result.metrics.latency_ms:.0f}ms")
+        if result.metrics.ttft_ms is not None:
+            bits.append(f"ttft {result.metrics.ttft_ms:.0f}ms")
+        bits.append(f"{result.tokens.prompt_tokens}+{result.tokens.completion_tokens} tok")
+    return bits[0] + "  [" + " · ".join(bits[1:]) + "]"
+
+
+def run_benchmark(
+    questions: list[Question],
+    client_config: ClientConfig,
+    workers: int = 1,
+) -> tuple[list[CategoryResult], float]:
+    """Run all questions and return (categorized results, wall-clock seconds).
+
+    With ``workers > 1`` questions run concurrently. That both shortens the run
+    and exercises the endpoint under load, but per-question latency will include
+    server-side queueing - use the dedicated perf suite for clean latency numbers.
+    """
+    cache = load_cache()
+    total = len(questions)
+    results: list[Result | None] = [None] * total
+    print_lock = threading.Lock()
+    started = time.perf_counter()
+
+    shared_client = ChatClient(client_config)
+
+    def work(index: int, q: Question) -> None:
+        # One client per worker: sessions are not documented as thread-safe.
+        client = ChatClient(client_config) if workers > 1 else shared_client
+        result = run_one(q, client, cache)
+        results[index] = result
+        with print_lock:
+            print(_status_line(index + 1, total, result), flush=True)
+
+    if workers > 1:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for i, q in enumerate(questions):
+                pool.submit(work, i, q)
+    else:
+        for i, q in enumerate(questions):
+            work(i, q)
+
+    elapsed = time.perf_counter() - started
+
+    categories: dict[str, CategoryResult] = {}
+    for result in results:
+        if result is None:
+            continue
+        categories.setdefault(result.question.category, CategoryResult(name=result.question.category))
+        categories[result.question.category].results.append(result)
+
+    return list(categories.values()), elapsed
 
 
 # ---------------------------------------------------------------------------
@@ -238,16 +300,59 @@ def truncate(text: str, max_len: int = 120) -> str:
     return text
 
 
-def generate_report(categories: list[CategoryResult], test_suite_hash: str = "") -> str:
+def _fmt_ms(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value / 1000:.2f} s" if value >= 1000 else f"{value:.0f} ms"
+
+
+def collect_run_latency(categories: list[CategoryResult]) -> tuple[LatencyStats, LatencyStats]:
+    """Latency distribution across every freshly executed question."""
+    latencies, ttfts = [], []
+    for c in categories:
+        for r in c.results:
+            if r.cached or not r.metrics.ok:
+                continue
+            if r.metrics.latency_ms:
+                latencies.append(r.metrics.latency_ms)
+            if r.metrics.ttft_ms is not None:
+                ttfts.append(r.metrics.ttft_ms)
+    return LatencyStats.from_samples(latencies), LatencyStats.from_samples(ttfts)
+
+
+def generate_report(
+    categories: list[CategoryResult],
+    test_suite_hash: str = "",
+    elapsed_s: float = 0.0,
+    perf: PerfReport | None = None,
+    workers: int = 1,
+) -> str:
     """Generate a markdown report from results."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    total_questions = sum(c.total for c in categories)
-    total_passed = sum(c.passed for c in categories)
-    overall_pct = sum(c.score_pct * c.total for c in categories) / total_questions if total_questions else 0
+
+    scored = [r for c in categories for r in c.scored]
+    all_results = [r for c in categories for r in c.results]
+    total_questions = len(all_results)
+    total_scored = len(scored)
+    total_errors = total_questions - total_scored
+    total_passed = sum(1 for r in scored if r.passed)
+
+    avg_score = (sum(r.score for r in scored) / total_scored * 100) if total_scored else 0.0
+    total_weight = sum(r.question.effective_weight for r in scored)
+    weighted = (
+        sum(r.score * r.question.effective_weight for r in scored) / total_weight * 100
+        if total_weight else 0.0
+    )
 
     total_prompt = sum(c.tokens.prompt_tokens for c in categories)
     total_completion = sum(c.tokens.completion_tokens for c in categories)
     total_tokens = total_prompt + total_completion
+
+    latency, ttft = collect_run_latency(categories)
+    fresh_completion = sum(
+        r.tokens.completion_tokens for r in all_results if not r.cached and r.metrics.ok
+    )
+    run_throughput = fresh_completion / elapsed_s if elapsed_s else 0.0
 
     lines = [
         f"# LLM Benchmark Report — {MODEL}",
@@ -256,104 +361,154 @@ def generate_report(categories: list[CategoryResult], test_suite_hash: str = "")
         f"**Endpoint**: {BASE_URL}",
         f"**Model**: {MODEL}",
         f"**Temperature**: {TEMPERATURE}" + (f" · **Seed**: {SEED}" if SEED is not None else ""),
-        f"**Test Suite Version**: `{test_suite_hash}`" if test_suite_hash else "",
+        f"**Concurrent workers**: {workers}",
+    ]
+    if test_suite_hash:
+        lines.append(f"**Test Suite Version**: `{test_suite_hash}`")
+
+    # A --perf-only run has no quality results; emit just the performance section
+    # rather than a page of zeroes that reads like a total failure.
+    if not categories:
+        lines += ["", "---", ""]
+        if perf is not None:
+            lines.append(format_perf_markdown(perf))
+        else:
+            lines.append("_No questions were run and no performance suite was requested._")
+        return "\n".join(lines)
+
+    lines += [
         "",
         "---",
         "",
-        f"## Overall Score: {total_passed}/{total_questions} questions passed ({overall_pct:.1f}% average accuracy)",
+        f"## Overall: {total_passed}/{total_scored} passed "
+        f"({avg_score:.1f}% average score, {weighted:.1f}% difficulty-weighted)",
         "",
-        "## Token Usage Summary",
+        "A question passes only when it reaches its own `pass_threshold` "
+        "(1.0 unless stated otherwise), so partial credit never counts as a pass.",
         "",
-        f"- **Total tokens**: {total_tokens:,}",
-        f"- **Input tokens**: {total_prompt:,}",
-        f"- **Output tokens**: {total_completion:,}",
+    ]
+    if total_errors:
+        lines += [
+            f"> **{total_errors} request(s) failed at the transport layer** and are "
+            "excluded from the percentages above. They are listed under "
+            "*Infrastructure Errors*.",
+            "",
+        ]
+
+    lines += [
+        "## Run Summary",
+        "",
+        f"- **Wall clock**: {elapsed_s:.1f} s",
+        f"- **Total tokens**: {total_tokens:,} ({total_prompt:,} in + {total_completion:,} out)",
+        f"- **Effective output throughput for this run**: {run_throughput:.1f} tok/s",
+        f"- **Request latency**: p50 {_fmt_ms(latency.p50)} · p95 {_fmt_ms(latency.p95)} "
+        f"· p99 {_fmt_ms(latency.p99)} · max {_fmt_ms(latency.max)}",
+        f"- **Time to first token**: p50 {_fmt_ms(ttft.p50)} · p95 {_fmt_ms(ttft.p95)}",
         "",
         "## Category Breakdown",
         "",
-        "| Category | Score | Questions | Avg Accuracy | Input Tokens | Output Tokens | Total Tokens |",
-        "|----------|-------|-----------|--------------|--------------|---------------|--------------|",
+        "| Category | Passed | Avg Score | Weighted | p50 Latency | Input Tok | Output Tok |",
+        "|----------|--------|-----------|----------|-------------|-----------|------------|",
     ]
 
-    for c in categories:
+    for c in sorted(categories, key=lambda x: x.name):
         t = c.tokens
         lines.append(
-            f"| {c.name} | {c.passed}/{c.total} | {c.total} | {c.score_pct:.1f}% | {t.prompt_tokens:,} | {t.completion_tokens:,} | {t.total_tokens:,} |"
+            f"| {c.name} | {c.passed}/{len(c.scored)} | {c.score_pct:.1f}% | "
+            f"{c.weighted_score_pct:.1f}% | {_fmt_ms(c.median_latency_ms)} | "
+            f"{t.prompt_tokens:,} | {t.completion_tokens:,} |"
         )
 
-    lines.extend(["", "---", "", "## Detailed Results", ""])
+    if perf is not None:
+        lines += ["", "---", "", format_perf_markdown(perf)]
 
-    for c in categories:
-        lines.append(f"### {c.name}")
-        lines.append("")
-        lines.append("| # | ID | Question | Score | Input | Output | Detail |")
-        lines.append("|---|-----|----------|-------|-------|--------|--------|")
+    lines += ["---", "", "## Detailed Results", ""]
 
+    for c in sorted(categories, key=lambda x: x.name):
+        lines += [
+            f"### {c.name}",
+            "",
+            "| # | ID | Difficulty | Question | Result | Score | Latency | Detail |",
+            "|---|----|-----------|----------|--------|-------|---------|--------|",
+        ]
         for i, r in enumerate(c.results, 1):
-            status = "PASS" if r.score >= 0.5 else "FAIL"
-            q_short = truncate(r.question.prompt, 60)
+            if r.is_transport_error:
+                status = "ERROR"
+            else:
+                status = "PASS" if r.passed else "FAIL"
             lines.append(
-                f"| {i} | {r.question.id} | {q_short} | {status} ({r.score:.0%}) | {r.tokens.prompt_tokens:,} | {r.tokens.completion_tokens:,} | {truncate(r.detail, 80)} |"
+                f"| {i} | {r.question.id} | {r.question.difficulty} | "
+                f"{truncate(r.question.prompt, 50)} | {status} | {r.score:.0%} | "
+                f"{'cached' if r.cached else _fmt_ms(r.metrics.latency_ms)} | "
+                f"{truncate(r.detail, 90)} |"
             )
-
         lines.append("")
 
-    # Sample responses
-    lines.extend(["---", "", "## Sample Responses", ""])
+    # Failures, with the actual response, are the useful part of the report.
+    failures = [r for r in scored if not r.passed]
+    if failures:
+        lines += ["---", "", f"## Failures ({len(failures)})", ""]
+        for r in failures[:40]:
+            lines += [
+                f"### {r.question.id} — {r.question.category} ({r.question.difficulty})",
+                "",
+                f"**Prompt**: {truncate(r.question.prompt, 400)}",
+                "",
+                f"**Score**: {r.score:.0%} (needed {r.question.pass_threshold:.0%}) — {r.detail}",
+                "",
+                "**Response**:",
+                "```",
+                r.response[:800],
+                "```",
+                "",
+            ]
+        if len(failures) > 40:
+            lines.append(f"_...and {len(failures) - 40} more failures._")
+            lines.append("")
 
-    for c in categories:
-        for r in c.results[:2]:
-            lines.append(f"### {r.question.id} — {c.name}")
-            lines.append("")
-            lines.append(f"**Prompt**: {r.question.prompt[:200]}")
-            lines.append("")
-            lines.append(f"**Response**:")
-            lines.append("```")
-            lines.append(r.response[:500])
-            lines.append("```")
-            lines.append("")
-            lines.append(f"**Score**: {'PASS' if r.score >= 0.5 else 'FAIL'} ({r.score:.0%}) — {r.detail}")
-            lines.append("")
+    transport_errors = [r for c in categories for r in c.results if r.is_transport_error]
+    if transport_errors:
+        lines += ["---", "", f"## Infrastructure Errors ({len(transport_errors)})", ""]
+        for r in transport_errors:
+            lines.append(f"- `{r.question.id}` ({r.question.category}): {r.detail}")
+        lines.append("")
 
-    # Summary
-    lines.extend(["---", "", "## Summary & Observations", ""])
+    lines += ["---", "", "## Summary & Observations", ""]
 
-    strengths = [c for c in categories if c.score_pct >= 70]
-    weaknesses = [c for c in categories if c.score_pct < 50]
+    strengths = [c for c in categories if c.score_pct >= 70 and c.scored]
+    weaknesses = [c for c in categories if c.score_pct < 50 and c.scored]
 
     if strengths:
         lines.append("**Strengths**:")
-        for c in strengths:
-            lines.append(f"- {c.name}: {c.score_pct:.1f}%")
+        lines += [f"- {c.name}: {c.score_pct:.1f}%" for c in sorted(strengths, key=lambda c: -c.score_pct)]
         lines.append("")
-
     if weaknesses:
         lines.append("**Weaknesses**:")
-        for c in weaknesses:
-            lines.append(f"- {c.name}: {c.score_pct:.1f}%")
+        lines += [f"- {c.name}: {c.score_pct:.1f}%" for c in sorted(weaknesses, key=lambda c: c.score_pct)]
         lines.append("")
-
     if not strengths and not weaknesses:
-        lines.append("- Performance is fairly uniform across categories.")
+        lines += ["- Performance is fairly uniform across categories.", ""]
+
+    by_difficulty: dict[str, list[Result]] = {}
+    for r in scored:
+        by_difficulty.setdefault(r.question.difficulty, []).append(r)
+    if by_difficulty:
+        lines += ["**By difficulty**:", ""]
+        for tier in ("easy", "medium", "hard", "expert"):
+            group = by_difficulty.get(tier)
+            if not group:
+                continue
+            passed = sum(1 for r in group if r.passed)
+            lines.append(f"- {tier}: {passed}/{len(group)} passed ({passed / len(group) * 100:.0f}%)")
         lines.append("")
 
-    # Error pattern analysis
-    fail_by_category = {}
-    for c in categories:
-        fails = [r for r in c.results if r.score < 0.5]
-        if fails:
-            fail_by_category[c.name] = fails
-
-    if fail_by_category:
-        lines.append("**Error Patterns**:")
-        for cat_name, fails in fail_by_category.items():
-            lines.append(f"- {cat_name}:")
-            for r in fails:
-                lines.append(f"  - {r.question.id}: {r.detail[:100]}")
-        lines.append("")
-
-    lines.append(f"**Total API calls**: {total_questions}")
-    lines.append(f"**Total tokens consumed**: {total_tokens:,} ({total_prompt:,} input + {total_completion:,} output)")
-    lines.append(f"**Evaluation method**: Rule-based scoring (no second LLM)")
+    lines += [
+        f"**Total API calls**: {sum(1 for r in all_results if not r.cached)} "
+        f"({sum(1 for r in all_results if r.cached)} replayed from cache)",
+        f"**Total tokens consumed**: {total_tokens:,} "
+        f"({total_prompt:,} input + {total_completion:,} output)",
+        "**Evaluation method**: Rule-based scoring (no second LLM)",
+    ]
 
     return "\n".join(lines)
 
@@ -363,76 +518,176 @@ def generate_report(categories: list[CategoryResult], test_suite_hash: str = "")
 # ---------------------------------------------------------------------------
 
 
-def parse_args():
-    """Parse command line arguments."""
-    args = sys.argv[1:]
-    category = None
-    limit = None
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Benchmark an OpenAI-compatible LLM endpoint for quality and performance.",
+    )
+    parser.add_argument("--category", help="only run questions in this category")
+    parser.add_argument("--difficulty", help="only run questions of this difficulty tier")
+    parser.add_argument("--limit", type=int, help="run at most N questions")
+    parser.add_argument(
+        "--workers", type=int, default=1,
+        help="run this many questions concurrently (default 1)",
+    )
+    parser.add_argument(
+        "--perf", action="store_true",
+        help="also run the performance suite (latency, throughput, concurrency)",
+    )
+    parser.add_argument(
+        "--perf-only", action="store_true",
+        help="run only the performance suite and skip the quality questions",
+    )
+    parser.add_argument(
+        "--concurrency", default="1,2,4,8",
+        help=f"comma-separated concurrency levels for the sweep, each 1-{MAX_CONCURRENCY} "
+             "(default 1,2,4,8)",
+    )
+    parser.add_argument(
+        "--perf-requests", type=int, default=8,
+        help="requests per concurrency level (default 8)",
+    )
+    parser.add_argument(
+        "--perf-samples", type=int, default=8,
+        help="serial latency samples (default 8)",
+    )
+    parser.add_argument(
+        "--no-cache", action="store_true",
+        help="ignore the response cache and re-query the model",
+    )
+    parser.add_argument(
+        "--report", default="report.md", help="path for the markdown report",
+    )
+    return parser.parse_args(argv)
 
-    i = 0
-    while i < len(args):
-        if args[i] == "--category" and i + 1 < len(args):
-            category = args[i + 1]
-            i += 2
-        elif args[i] == "--limit" and i + 1 < len(args):
-            limit = int(args[i + 1])
-            i += 2
-        else:
-            print(f"Unknown argument: {args[i]}")
-            print("Usage: python benchmark.py [--category CATEGORY] [--limit N]")
-            sys.exit(1)
 
-    return category, limit
+def _parse_levels(raw: str) -> tuple[int, ...]:
+    """Parse --concurrency into bounded, de-duplicated levels.
+
+    Bad input fails loudly here rather than being silently dropped by the suite:
+    a typo that halves the sweep would otherwise look like a real result.
+    """
+    levels = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            value = int(part)
+        except ValueError:
+            raise SystemExit(f"Invalid concurrency level: {part!r}")
+        if not 1 <= value <= MAX_CONCURRENCY:
+            raise SystemExit(
+                f"Concurrency level {value} is out of range; must be between 1 and "
+                f"{MAX_CONCURRENCY}."
+            )
+        levels.append(value)
+    if not levels:
+        raise SystemExit("No concurrency levels given")
+    return tuple(sorted(set(levels)))
 
 
-def main():
-    category, limit = parse_args()
+def main() -> None:
+    args = parse_args()
 
-    # Load questions from YAML files
-    questions = load_all_tests(Path(__file__).parent / "tests")
-
-    if not questions:
-        print("ERROR: No questions found in tests/ directory")
+    if not BASE_URL or not API_KEY:
+        print("ERROR: OPENAI_BASE_URL and OPENAI_KEY must be set in .env")
         sys.exit(1)
 
-    # Filter by category if specified
-    if category:
-        questions = [q for q in questions if q.category.lower() == category.lower()]
-        if not questions:
-            print(f"ERROR: No questions found for category '{category}'")
-            sys.exit(1)
+    if args.no_cache and CACHE_FILE.exists():
+        CACHE_FILE.unlink()
 
-    # Apply limit if specified
-    if limit:
-        questions = questions[:limit]
+    client_config = build_client_config()
+    workers = max(1, args.workers)
 
     print(f"LLM Benchmark — {MODEL}")
     print(f"Endpoint: {BASE_URL}")
-    test_suite_hash = compute_test_suite_hash(Path(__file__).parent / "tests")
-    print(f"Test Suite Version: {test_suite_hash}")
-    print(f"Running {len(questions)} questions across {len(set(q.category for q in questions))} categories...\n")
 
-    start = time.time()
-    categories = run_benchmark(questions)
-    elapsed = time.time() - start
+    categories: list[CategoryResult] = []
+    elapsed = 0.0
+    test_suite_hash = ""
 
-    report = generate_report(categories, test_suite_hash)
-    report_path = Path(__file__).parent / "report.md"
+    if not args.perf_only:
+        try:
+            questions = load_all_tests(TESTS_DIR)
+        except SuiteError as e:
+            print("ERROR: the test suite is invalid:\n" + str(e))
+            sys.exit(2)
+
+        if not questions:
+            print("ERROR: No questions found in tests/ directory")
+            sys.exit(1)
+
+        if args.category:
+            questions = [q for q in questions if q.category.lower() == args.category.lower()]
+            if not questions:
+                print(f"ERROR: No questions found for category '{args.category}'")
+                sys.exit(1)
+        if args.difficulty:
+            questions = [q for q in questions if q.difficulty == args.difficulty.lower()]
+            if not questions:
+                print(f"ERROR: No questions found for difficulty '{args.difficulty}'")
+                sys.exit(1)
+        if args.limit:
+            questions = questions[: args.limit]
+
+        test_suite_hash = compute_test_suite_hash(TESTS_DIR)
+        print(f"Test Suite Version: {test_suite_hash}")
+        print(
+            f"Running {len(questions)} questions across "
+            f"{len(set(q.category for q in questions))} categories "
+            f"with {workers} worker(s)...\n"
+        )
+        categories, elapsed = run_benchmark(questions, client_config, workers=workers)
+
+    perf_report: PerfReport | None = None
+    if args.perf or args.perf_only:
+        perf_config = PerfConfig(
+            concurrency_levels=_parse_levels(args.concurrency),
+            requests_per_level=args.perf_requests,
+            serial_samples=args.perf_samples,
+        )
+        print(f"\nRunning performance suite (~{perf_config.total_requests()} requests)...")
+
+        def progress(phase: str, done: int, total: int) -> None:
+            print(f"  [{done}/{total}] {phase}", end="\r", flush=True)
+
+        perf_report = run_perf_suite(client_config, perf_config, progress=progress)
+        print(" " * 60, end="\r")
+        print(format_perf_console(perf_report))
+
+    report = generate_report(
+        categories, test_suite_hash, elapsed_s=elapsed, perf=perf_report, workers=workers
+    )
+    report_path = Path(args.report)
+    if not report_path.is_absolute():
+        report_path = ROOT / report_path
     report_path.write_text(report, encoding="utf-8")
 
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 60}")
     print(f"Completed in {elapsed:.1f}s")
     print(f"Report saved to: {report_path}")
 
-    # Print summary
-    total_q = sum(c.total for c in categories)
-    total_p = sum(c.passed for c in categories)
-    print(f"\nOverall: {total_p}/{total_q} questions passed")
-    for c in categories:
-        t = c.tokens
-        print(f"  {c.name}: {c.passed}/{c.total} ({c.score_pct:.0f}%) | {t.prompt_tokens:,} in + {t.completion_tokens:,} out = {t.total_tokens:,} tokens")
-    total_t = sum(c.tokens.total_tokens for c in categories)
-    print(f"\nTotal tokens consumed: {total_t:,}")
+    if perf_report is not None:
+        perf_path = report_path.with_suffix(".perf.json")
+        perf_path.write_text(json.dumps(perf_report.to_dict(), indent=2), encoding="utf-8")
+        print(f"Perf JSON saved to: {perf_path}")
+
+    if categories:
+        scored = [r for c in categories for r in c.scored]
+        passed = sum(1 for r in scored if r.passed)
+        errors = sum(c.errors for c in categories)
+        print(f"\nOverall: {passed}/{len(scored)} questions passed"
+              + (f"  ({errors} transport error(s) excluded)" if errors else ""))
+        for c in sorted(categories, key=lambda x: x.name):
+            t = c.tokens
+            print(
+                f"  {c.name}: {c.passed}/{len(c.scored)} ({c.score_pct:.0f}% score, "
+                f"{c.weighted_score_pct:.0f}% weighted) | "
+                f"p50 {_fmt_ms(c.median_latency_ms)} | "
+                f"{t.prompt_tokens:,} in + {t.completion_tokens:,} out"
+            )
+        total_t = sum(c.tokens.total_tokens for c in categories)
+        print(f"\nTotal tokens consumed: {total_t:,}")
 
 
 if __name__ == "__main__":

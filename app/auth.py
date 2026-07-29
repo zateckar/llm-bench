@@ -5,7 +5,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from fastapi import Request, HTTPException
 from fastapi.responses import RedirectResponse
 
-from app.config import SECRET_KEY, OIDC_ENABLED, COOKIE_SECURE
+from app.config import SECRET_KEY, COOKIE_SECURE
 from app.database import fetch_one
 
 serializer = URLSafeTimedSerializer(SECRET_KEY)

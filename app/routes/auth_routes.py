@@ -5,7 +5,6 @@ from fastapi.responses import RedirectResponse
 
 from app.auth import (
     verify_password,
-    create_session_token,
     set_session_cookie,
     clear_session_cookie,
     get_current_user,

@@ -1,11 +1,16 @@
 """Run detail routes."""
 
+import json
+import logging
+
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from app.auth import get_current_user, require_admin
 from app.database import fetch_all, fetch_one, execute
 from app.templates_config import templates
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -15,15 +20,32 @@ def _is_evaluator_error(detail: str) -> bool:
     return detail.startswith("Evaluator error:") or detail.startswith("Unknown evaluator:")
 
 
+def _parse_perf(raw: str | None) -> dict | None:
+    """Decode the stored performance report, tolerating a partial/failed write."""
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        logger.warning("Could not decode perf_json for a run; ignoring it")
+        return None
+    return data if isinstance(data, dict) else None
+
+
 @router.get("/runs")
 async def runs_list(request: Request):
     user = await get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=302)
 
+    # `evaluator_error_count` is deliberately distinct from test_runs.error_count:
+    # the former counts suite/evaluator bugs, the latter counts transport failures.
     runs = await fetch_all(
         """SELECT tr.*, m.name as model_name, m.model_id,
-                  (SELECT COUNT(*) FROM test_results WHERE run_id = tr.id AND (detail LIKE 'Evaluator error:%' OR detail LIKE 'Unknown evaluator:%')) as error_count
+                  (SELECT COUNT(*) FROM test_results
+                    WHERE run_id = tr.id
+                      AND (detail LIKE 'Evaluator error:%' OR detail LIKE 'Unknown evaluator:%')
+                  ) as evaluator_error_count
            FROM test_runs tr
            JOIN models m ON tr.model_id = m.id
            ORDER BY tr.id DESC"""
@@ -54,8 +76,13 @@ async def run_detail(request: Request, run_id: int):
     categories = await fetch_all(
         """SELECT category,
                   COUNT(*) as total,
-                  SUM(CASE WHEN score >= 0.5 THEN 1 ELSE 0 END) as passed,
-                  AVG(score) as avg_score
+                  SUM(request_ok) as scored,
+                  SUM(passed) as passed,
+                  AVG(CASE WHEN request_ok = 1 THEN score END) as avg_score,
+                  SUM(CASE WHEN request_ok = 1 THEN score * weight END) /
+                      NULLIF(SUM(CASE WHEN request_ok = 1 THEN weight END), 0) as weighted_score,
+                  AVG(latency_ms) as avg_latency_ms,
+                  MAX(latency_ms) as max_latency_ms
            FROM test_results WHERE run_id = ?
            GROUP BY category ORDER BY category""",
         (run_id,),
@@ -74,13 +101,33 @@ async def run_detail(request: Request, run_id: int):
             results_by_category[cat] = []
         results_by_category[cat].append(r)
 
-    # Find evaluator errors only (not score failures)
+    # Evaluator/suite bugs and transport failures are different problems from a
+    # wrong answer, and are surfaced separately so they are not read as quality.
     evaluator_errors = await fetch_all(
         """SELECT * FROM test_results
            WHERE run_id = ? AND (detail LIKE 'Evaluator error:%' OR detail LIKE 'Unknown evaluator:%')
            ORDER BY category, question_index""",
         (run_id,),
     )
+    transport_errors = await fetch_all(
+        """SELECT * FROM test_results
+           WHERE run_id = ? AND request_ok = 0
+           ORDER BY category, question_index""",
+        (run_id,),
+    )
+
+    difficulty_rows = await fetch_all(
+        """SELECT difficulty,
+                  COUNT(*) as total,
+                  SUM(request_ok) as scored,
+                  SUM(passed) as passed,
+                  AVG(CASE WHEN request_ok = 1 THEN score END) as avg_score
+           FROM test_results WHERE run_id = ?
+           GROUP BY difficulty""",
+        (run_id,),
+    )
+    tier_order = {"easy": 0, "medium": 1, "hard": 2, "expert": 3}
+    difficulty_rows.sort(key=lambda r: tier_order.get(r["difficulty"], 9))
 
     return templates.TemplateResponse(
         request, "run_detail.html",
@@ -89,6 +136,9 @@ async def run_detail(request: Request, run_id: int):
             "categories": categories,
             "results_by_category": results_by_category,
             "evaluator_errors": evaluator_errors,
+            "transport_errors": transport_errors,
+            "difficulty_rows": difficulty_rows,
+            "perf": _parse_perf(run.get("perf_json")),
         },
     )
 
@@ -96,7 +146,7 @@ async def run_detail(request: Request, run_id: int):
 @router.post("/runs/{run_id}/delete")
 async def delete_run(request: Request, run_id: int):
     try:
-        user = await require_admin(request)
+        await require_admin(request)
     except Exception:
         return RedirectResponse(url="/login", status_code=302)
 
@@ -125,10 +175,14 @@ async def rerun_failed(request: Request, run_id: int):
     if not original_run:
         return RedirectResponse(url="/runs", status_code=302)
 
-    # Find evaluator/system errors only (not quality/score failures)
+    # Re-run only the questions that failed for an infrastructure reason - an
+    # evaluator crash or a transport error - never questions the model got wrong.
     error_results = await fetch_all(
-        """SELECT test_id FROM test_results
-           WHERE run_id = ? AND (detail LIKE 'Evaluator error:%' OR detail LIKE 'Unknown evaluator:%')""",
+        """SELECT DISTINCT test_id FROM test_results
+           WHERE run_id = ?
+             AND (request_ok = 0
+                  OR detail LIKE 'Evaluator error:%'
+                  OR detail LIKE 'Unknown evaluator:%')""",
         (run_id,),
     )
 

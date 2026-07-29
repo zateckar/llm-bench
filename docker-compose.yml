@@ -1,8 +1,7 @@
 services:
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/zateckar/llm-bench:main
     ports:
       - "8000:8000"
     volumes:

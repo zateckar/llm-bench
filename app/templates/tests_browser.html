@@ -5,8 +5,18 @@
 <div class="space-y-6">
     <div>
         <h1 class="text-2xl font-bold text-white">Test Browser</h1>
-        <p class="text-slate-400 mt-1">Browse test categories and individual tests</p>
+        <p class="text-slate-400 mt-1">
+            Browse test categories, individual questions and the exact fixture each one is graded against
+        </p>
     </div>
+
+    {% if suite_error %}
+    <div class="card p-4 bg-red-900/20 border border-red-800/50">
+        <p class="text-sm font-medium text-red-400">The test suite failed to load</p>
+        <pre class="mt-2 text-xs text-slate-300 whitespace-pre-wrap">{{ suite_error }}</pre>
+        <p class="mt-2 text-xs text-slate-500">Run <code>python validate_suite.py</code> for the full diagnosis.</p>
+    </div>
+    {% endif %}
 
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <!-- Category sidebar -->
@@ -47,6 +57,11 @@
                                 @click="expanded['{{ test.id }}'] = !expanded['{{ test.id }}']">
                             <div class="flex items-center gap-3">
                                 <span class="font-mono text-xs text-slate-500 w-14">{{ test.id }}</span>
+                                <span class="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide
+                                    {% if test.difficulty == 'expert' %}bg-violet-900/50 text-violet-300
+                                    {% elif test.difficulty == 'hard' %}bg-amber-900/50 text-amber-300
+                                    {% elif test.difficulty == 'easy' %}bg-slate-800 text-slate-400
+                                    {% else %}bg-blue-900/50 text-blue-300{% endif %}">{{ test.difficulty }}</span>
                                 <span class="text-sm text-slate-300">{{ test.prompt[:100] }}{% if test.prompt|length > 100 %}...{% endif %}</span>
                             </div>
                             <div class="flex items-center gap-2">
@@ -79,13 +94,19 @@
                                     <div class="bg-slate-950 rounded-lg p-4">
                                         <p class="text-sm font-medium text-blue-400">{{ test.evaluator }}</p>
                                         <p class="text-xs text-slate-400 mt-1">{{ evaluator_descriptions.get(test.evaluator, 'Custom evaluator.') }}</p>
+                                        <p class="text-xs text-slate-500 mt-2">
+                                            Passes at {{ "%.0f%%"|format(test.pass_threshold * 100) }}
+                                            &middot; difficulty weight {{ test.weight }}
+                                            {%- if test.description %} &middot; {{ test.description }}{% endif %}
+                                            {%- if test.source %} &middot; source: {{ test.source }}{% endif %}
+                                        </p>
                                     </div>
                                 </div>
 
                                 <!-- Expected output -->
                                 <div>
-                                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Expected Output</h4>
-                                    <div class="bg-slate-950 rounded-lg p-4 text-sm text-slate-300 font-mono overflow-auto max-h-40 scrollbar-thin">{{ test.expected }}</div>
+                                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Grading Fixture</h4>
+                                    <pre class="bg-slate-950 rounded-lg p-4 text-xs text-slate-300 font-mono overflow-auto max-h-60 scrollbar-thin whitespace-pre-wrap">{{ test.expected }}</pre>
                                 </div>
                             </div>
                         </div>

@@ -1,171 +1,318 @@
 # Terminal System Administration Test Suite
-# Adapted from terminal-bench repository tasks
+#
+# These remain prose/command answers, but the grading now demands the specific
+# commands, flags and config keys that distinguish someone who has done the task
+# from someone recalling topic words. `must_not` patterns reject the confidently
+# wrong advice models reach for (deleting the WAL, tcp_tw_recycle, chmod -R for
+# ACL inheritance, "just free up more disk space").
 
 - id: TS-01
   category: Terminal System Admin
   difficulty: medium
   source: terminal-bench/broken-networking
+  description: "Must isolate the layer, in order, with concrete commands"
   prompt: |
-    A Linux server has lost network connectivity. The server was working yesterday but today
-    it cannot reach external websites. The server can ping localhost and 127.0.0.1.
-    Provide a complete troubleshooting guide with:
-    1. Diagnostic commands to run in order
-    2. Common causes and their solutions
-    3. How to verify each fix worked
+    A Linux server can ping 127.0.0.1 but cannot reach any external host by name or by IP. It worked
+    yesterday. Give a diagnostic sequence that isolates the failing layer, working outward from the
+    interface. For each step give the exact command and state what result would clear that layer.
   evaluator: multi_step_solution
   expected:
-    - step: "Check interface status"
-      pattern: "ip link|ifconfig|interface"
-      order: 1
-    - step: "Check routing"
-      pattern: "ip route|route|gateway|default"
-      order: 2
-    - step: "Check DNS"
-      pattern: "dig|nslookup|/etc/resolv.conf|nameserver"
-      order: 3
-    - step: "Check firewall"
-      pattern: "iptables|firewall|ufw|nftables"
-      order: 4
+    steps:
+      - step: "Interface state and address"
+        pattern: 'ip (?:-\w+ )?(?:link|addr|a\b)|ifconfig'
+        order: 1
+      - step: "Routing table / default gateway"
+        pattern: 'ip route|route -n|netstat -rn|default (?:via|gw|gateway)'
+        order: 2
+      - step: "Reach the gateway by IP (isolates L3 from DNS)"
+        pattern: 'ping\s+(?:-c\s*\d+\s+)?(?:\d{1,3}\.){3}\d{1,3}|ping\s+(?:-c\s*\d+\s+)?\$?\{?gateway'
+        order: 3
+      - step: "DNS resolution"
+        pattern: 'dig\b|nslookup|host\b|resolv\.conf|resolvectl|systemd-resolve'
+        order: 4
+      - step: "Firewall / packet filter"
+        pattern: 'iptables|nft\b|nftables|ufw\b|firewall-cmd'
+        order: 5
+    must_not:
+      - '(?i)\breboot the server (?:first|to fix)\b'
 
 - id: TS-02
   category: Terminal System Admin
   difficulty: medium
   source: terminal-bench/home-server-https
+  description: "Renewal automation and the reload hook are the parts usually omitted"
   prompt: |
-    You need to set up HTTPS for a home web server using Let's Encrypt.
-    The server is running nginx on Ubuntu and serves content on port 80.
-    Provide:
-    1. Complete setup steps from start to finish
-    2. How to obtain and install the SSL certificate
-    3. How to configure nginx for HTTPS
-    4. How to set up auto-renewal
-  evaluator: multi_step_solution
+    Set up HTTPS with Let's Encrypt for an nginx server on Ubuntu currently serving HTTP on port 80.
+    Give the complete command sequence, the nginx configuration changes, how renewal is automated,
+    how nginx is reloaded after a renewal, and how to test that renewal works without consuming rate
+    limit quota.
+  evaluator: command_correctness
   expected:
-    - step: "Install certbot"
-      pattern: "certbot|apt install|snap"
-      order: 1
-    - step: "Obtain certificate"
-      pattern: "certbot.*nginx|certonly|--nginx"
-      order: 2
-    - step: "Configure nginx"
-      pattern: "ssl_certificate|443|listen.*ssl"
-      order: 3
-    - step: "Auto-renewal"
-      pattern: "renew|cron|timer|systemd"
-      order: 4
+    - pattern: '\bcertbot\b'
+      description: "Uses certbot"
+      required: true
+    - pattern: 'certbot\s+(?:--nginx|certonly|run\b)|--nginx\b'
+      description: "Invokes the nginx plugin or certonly"
+      required: true
+    - pattern: 'ssl_certificate(?:_key)?\s'
+      description: "nginx ssl_certificate directives"
+      required: true
+    - pattern: 'listen\s+443'
+      description: "nginx listens on 443"
+      required: true
+    - pattern: 'certbot(?:\.timer|\s+renew)|systemctl\s+(?:list-timers|status|enable)\s+.*certbot|snap\.certbot\.renew'
+      description: "Automated renewal via timer/cron"
+      required: true
+    - pattern: '--dry-run'
+      description: "certbot renew --dry-run to test without hitting rate limits"
+      required: true
+    - pattern: 'deploy-hook|renew-hook|post-hook|systemctl reload nginx|nginx -s reload'
+      description: "Reloads nginx after renewal"
+      required: true
 
 - id: TS-03
   category: Terminal System Admin
-  difficulty: medium
+  difficulty: hard
   source: terminal-bench/acl-permissions-inheritance
+  description: "Default ACLs are the mechanism; chmod -R is the wrong answer"
   prompt: |
-    You have a directory structure where subdirectories are not inheriting
-    the ACL permissions set on the parent directory.
-    Explain:
-    1. How Linux ACLs work
-    2. The difference between default ACLs and access ACLs
-    3. How to set up proper ACL inheritance
-    4. Provide commands to fix the inheritance issue
+    New subdirectories under /srv/shared are not picking up the ACL set on the parent. Explain the
+    difference between an access ACL and a default ACL, and give the exact commands to (a) make all
+    newly created entries inherit the group's rw access and (b) fix the permissions on entries that
+    already exist. Note explicitly whether existing files are affected by setting a default ACL.
   evaluator: multi_step_solution
   expected:
-    - step: "ACL explanation"
-      pattern: "ACL|access control|setfacl|getfacl"
-      order: 1
-    - step: "Default vs access ACLs"
-      pattern: "default|inherit|d:"
-      order: 2
-    - step: "Fix commands"
-      pattern: "setfacl.*-d|default.*mask|recursive"
-      order: 3
+    steps:
+      - step: "Inspect the current ACLs"
+        pattern: 'getfacl'
+        order: 1
+      - step: "Set a default ACL for inheritance"
+        pattern: 'setfacl\s+(?:-R\s+)?-[dm]{1,2}\b[\s\S]{0,60}(?:d:|default:)|setfacl[\s\S]{0,40}-d\s+-m'
+        order: 2
+      - step: "Apply recursively to existing entries"
+        pattern: 'setfacl\s+-R\b'
+        order: 3
+      - step: "States that a default ACL does not retro-apply"
+        pattern: '(?:does not|doesn.?t|will not|won.?t)[\s\S]{0,80}(?:existing|already|retroactiv)|only[\s\S]{0,40}newly created'
+        order: 4
+    must_not:
+      - '(?i)\bchmod\s+-R\b[\s\S]{0,80}(?:fixes|solves|is the fix for)[\s\S]{0,40}inherit'
+      - '(?i)\bACLs?\s+(?:are|is)\s+inherited\s+automatically\b'
 
 - id: TS-04
   category: Terminal System Admin
-  difficulty: easy
+  difficulty: hard
   source: terminal-bench/cron-broken-network
+  description: "The percent-sign escaping rule is the discriminator nobody guesses"
   prompt: |
-    A cron job that runs a backup script is failing silently.
-    The script works when run manually from the command line.
-    Explain why cron jobs might fail and how to debug them.
-    Include specific examples of common issues.
+    A backup script runs correctly from an interactive shell but fails silently under cron. Explain
+    every likely cause and how to diagnose each. Cover, specifically:
+      1. Why the environment differs and how to see cron's actual environment.
+      2. Where cron's own log entries live and how to capture the script's stdout and stderr.
+      3. The special character that must be escaped inside a crontab command line, and how to escape it.
+      4. Why a script that relies on the current working directory breaks under cron.
   evaluator: multi_step_solution
   expected:
-    - step: "Environment differences"
-      pattern: "PATH|environment|env|variables"
-      order: 1
-    - step: "Log checking"
-      pattern: "mail|/var/log|syslog|cron.log"
-      order: 2
-    - step: "Debugging techniques"
-      pattern: "output|redirect|2>&1|MAILTO"
-      order: 3
+    steps:
+      - step: "Environment/PATH difference and how to dump cron's env"
+        pattern: '\bPATH\b[\s\S]{0,300}(?:env\s*>|/usr/bin/env|printenv|set >)'
+        order: 1
+      - step: "Cron log location"
+        pattern: '/var/log/(?:syslog|cron|messages)|journalctl\s+-u\s+cron'
+        order: 2
+      - step: "Capture stdout and stderr"
+        pattern: '2\s*>\s*&\s*1|>>?\s*\S+\s+2>&1|MAILTO'
+        order: 3
+      - step: "Percent signs must be escaped in crontab"
+        pattern: '(?:\\%|escap\w*[\s\S]{0,60}(?:percent|%)|(?:percent|%)[\s\S]{0,60}escap)'
+        order: 4
+      - step: "Working directory is not the script's directory"
+        pattern: '(?:working directory|\bcwd\b|\bcd\b\s+/|HOME\b|relative path)'
+        order: 5
 
 - id: TS-05
   category: Terminal System Admin
   difficulty: hard
   source: terminal-bench/hdfs-deployment
+  description: "Requires the actual property names, not just the file names"
   prompt: |
-    You need to deploy a 3-node Hadoop HDFS cluster.
-    Provide:
-    1. Prerequisites and system requirements
-    2. Step-by-step configuration files (core-site.xml, hdfs-site.xml)
-    3. How to format the namenode
-    4. How to verify the cluster is working
-    5. Common issues and troubleshooting steps
+    Deploy a 3-node Hadoop HDFS cluster (1 NameNode, 2 DataNodes). Give the prerequisites, the exact
+    property names and values you would put in core-site.xml and hdfs-site.xml, the command to format
+    the NameNode, how to start the cluster, and how to verify both DataNodes have registered.
   evaluator: multi_step_solution
   expected:
-    - step: "Prerequisites"
-      pattern: "java|JDK|ssh|hosts"
-      order: 1
-    - step: "Configuration files"
-      pattern: "core-site|hdfs-site|fs\\.defaultFS"
-      order: 2
-    - step: "Format namenode"
-      pattern: "hdfs namenode -format|namenode"
-      order: 3
-    - step: "Verification"
-      pattern: "hdfs dfs|jps|dfsadmin"
-      order: 4
+    steps:
+      - step: "Prerequisites: JDK and passwordless SSH"
+        pattern: '(?:jdk|java)[\s\S]{0,200}(?:ssh-keygen|passwordless|authorized_keys|password-?less)'
+        order: 1
+      - step: "core-site.xml fs.defaultFS"
+        pattern: 'fs\.defaultFS'
+        order: 2
+      - step: "hdfs-site.xml replication and data dirs"
+        pattern: 'dfs\.replication[\s\S]{0,400}dfs\.(?:datanode\.data\.dir|namenode\.name\.dir)'
+        order: 3
+      - step: "Format the NameNode"
+        pattern: 'hdfs\s+namenode\s+-format'
+        order: 4
+      - step: "Verify DataNode registration"
+        pattern: 'dfsadmin\s+-report|hdfs\s+dfsadmin|:9870|:50070'
+        order: 5
+    must_not:
+      - '(?i)hdfs\s+namenode\s+-format[\s\S]{0,120}(?:every|each) (?:time|restart|boot)'
 
 - id: TS-06
   category: Terminal System Admin
   difficulty: easy
   source: terminal-bench/configure-git-webserver
+  description: "Must not expose the server on all interfaces by default"
   prompt: |
-    Set up a simple static file web server using Python for a Git repository.
-    The server should:
-    - Serve files from the current directory on port 8080
-    - Support directory listing
-    - Handle common MIME types correctly
-    Provide the complete command or script to set this up.
+    Serve the files in the current directory over HTTP on port 8080 using only the Python standard
+    library, reachable from this machine only (not from the network). Give the exact command.
   evaluator: command_correctness
   expected:
-    - pattern: "python.*-m.*http\\.server|SimpleHTTPServer"
-      description: "Python HTTP server command"
+    - pattern: 'python3?\s+-m\s+http\.server'
+      description: "python -m http.server"
       required: true
-    - pattern: "\\b8080\\b"
-      description: "Port specification (8080)"
+    - pattern: '\b8080\b'
+      description: "Port 8080 specified"
       required: true
+    - pattern: '--bind\s+(?:127\.0\.0\.1|localhost|::1)|-b\s+(?:127\.0\.0\.1|localhost)'
+      description: "Bound to loopback only"
+      required: true
+    - pattern: '--bind\s+0\.0\.0\.0'
+      description: "Binds to every interface"
+      required: false
+      forbidden: true
 
 - id: TS-07
   category: Terminal System Admin
-  difficulty: medium
+  difficulty: hard
   source: terminal-bench/decommissioning-service-with-sensitive-data
+  description: "Crypto-shredding, backup coverage and legal hold are the real requirements"
   prompt: |
-    You need to decommission a service that handles sensitive data.
-    List all the steps required to safely decommission the service,
-    including data handling, access revocation, and cleanup procedures.
-    Follow GDPR and security best practices.
+    Decommission a service that stores personal data, following GDPR and security best practice. Give
+    the ordered steps, covering: what to check before deleting anything, how access is revoked, how
+    the data itself is destroyed (including data already in backups and snapshots), how destruction is
+    evidenced, and what must be retained.
   evaluator: multi_step_solution
   expected:
-    - step: "Data backup/archival"
-      pattern: "backup|archive|encrypt|export"
-      order: 1
-    - step: "Access revocation"
-      pattern: "revoke|disable|delete.*user|remove.*access"
-      order: 2
-    - step: "Data deletion"
-      pattern: "delete|destroy|wipe|shred|sanitiz"
-      order: 3
-    - step: "Documentation"
-      pattern: "document|audit|log|certificate"
-      order: 4
+    steps:
+      - step: "Check retention obligations / legal hold before deleting"
+        pattern: '(?:legal hold|litigation hold|retention (?:policy|requirement|obligation|schedule)|statutory retention|regulatory retention)'
+        order: 1
+      - step: "Revoke access and rotate credentials"
+        pattern: '(?:revok|disable|deprovision)[\s\S]{0,200}(?:credential|key|token|IAM|account|access)|rotat\w+[\s\S]{0,60}(?:key|secret|credential)'
+        order: 2
+      - step: "Destroy the data, including backups and snapshots"
+        pattern: '(?:backup|snapshot)[\s\S]{0,200}(?:delet|destro|purg|expir|shred)|(?:delet|destro|purg)[\s\S]{0,200}(?:backup|snapshot)'
+        order: 3
+      - step: "Crypto-shredding / key destruction for encrypted-at-rest data"
+        pattern: '(?:crypto[- ]?shred|destroy(?:ing)? the (?:encryption )?key|key destruction|delete the (?:KMS |CMK )?key|revoke the (?:KMS |data )?key)'
+        order: 4
+      - step: "Evidence of destruction"
+        pattern: '(?:certificate of destruction|destruction (?:certificate|record|log)|audit (?:log|trail|record)|attestation|evidence)'
+        order: 5
+      - step: "Retain the processing/deletion record"
+        pattern: '(?:record of processing|ROPA|deletion (?:record|log|register)|retain[\s\S]{0,60}(?:record|log|evidence))'
+        order: 6
+    must_not:
+      - '(?i)\b(?:simply |just )?(?:delete|terminate) the (?:instance|volume|database)[\s\S]{0,60}(?:and (?:you.?re|it.?s) done|is (?:sufficient|enough))'
+
+- id: TS-08
+  category: Terminal System Admin
+  difficulty: hard
+  description: "df/du divergence: an unlinked file still held open by a process"
+  prompt: |
+    A production host reports its root filesystem 100% full. `df -h /` shows 0 bytes available, but
+    `du -sh /` totals only about half the filesystem size, and deleting log files has not returned any
+    space. Explain the most likely cause and give the exact commands to confirm it and to reclaim the
+    space without rebooting.
+  evaluator: multi_step_solution
+  expected:
+    steps:
+      - step: "Identifies a deleted-but-still-open file held by a process"
+        pattern: '(?:delet|unlink)\w*[\s\S]{0,120}(?:still (?:open|held)|open (?:file|by)|file (?:handle|descriptor))|open[\s\S]{0,60}(?:deleted|unlinked) file'
+        order: 1
+      - step: "Confirms with lsof (or /proc/*/fd)"
+        pattern: 'lsof\s+(?:\+L1|-nP\s*\|\s*grep|\|\s*grep\s+(?:-i\s+)?deleted)|/proc/\d*\*?/fd|lsof\s+\+L1'
+        order: 2
+      - step: "Reclaims by restarting the holder or truncating its fd, not by deleting more files"
+        pattern: '(?:systemctl restart|kill -HUP|restart(?:ing)? the (?:process|service)|:\s*>\s*/proc/\d+/fd/\d+|truncate[\s\S]{0,40}/proc/)'
+        order: 3
+    must_not:
+      - '(?i)(?:free up (?:more )?space|delete more (?:files|logs))[\s\S]{0,40}(?:will|should) (?:fix|resolve|solve)'
+      - '(?i)\byou (?:must|need to|have to) reboot\b'
+
+- id: TS-09
+  category: Terminal System Admin
+  difficulty: hard
+  description: "tcp_tw_recycle is removed from modern kernels and was always unsafe behind NAT"
+  prompt: |
+    A busy reverse proxy starts failing outbound connections with "Cannot assign requested address"
+    during traffic peaks, and `ss -s` shows tens of thousands of sockets in TIME-WAIT. Explain the
+    mechanism causing this, and give the specific, safe remediations - including the exact sysctl or
+    socket options involved - and state which commonly suggested setting you would NOT use and why.
+  evaluator: multi_step_solution
+  expected:
+    steps:
+      - step: "Identifies ephemeral port exhaustion as the mechanism"
+        pattern: '(?:ephemeral port|source port|local port)[\s\S]{0,80}exhaust|exhaust\w*[\s\S]{0,60}(?:ephemeral|local|source) port'
+        order: 1
+      - step: "Widen the ephemeral port range"
+        pattern: 'net\.ipv4\.ip_local_port_range'
+        order: 2
+      - step: "Reduce socket churn: keep-alive / connection pooling"
+        pattern: '(?:keep-?alive|connection pool|upstream keepalive|reuse (?:the )?connections?)'
+        order: 3
+      - step: "Names tcp_tw_reuse or SO_REUSEADDR as the safe knob"
+        pattern: 'net\.ipv4\.tcp_tw_reuse|SO_REUSEADDR|SO_REUSEPORT'
+        order: 4
+      - step: "Rejects tcp_tw_recycle explicitly"
+        pattern: 'tcp_tw_recycle[\s\S]{0,200}(?:not|never|avoid|removed|deprecated|unsafe|NAT)|(?:not|never|avoid|removed|deprecated|unsafe)[\s\S]{0,80}tcp_tw_recycle'
+        order: 5
+    must_not:
+      - '(?i)(?:set|enable|use)\s+(?:net\.ipv4\.)?tcp_tw_recycle\s*=?\s*1?\b(?![\s\S]{0,200}(?:not|never|avoid|removed|deprecated|unsafe))'
+
+- id: TS-10
+  category: Terminal System Admin
+  difficulty: hard
+  description: "systemd sandboxing directives, not generic 'run as non-root' advice"
+  prompt: |
+    Write a hardened systemd service unit for a Python web application that listens on port 8443. It
+    must run as a dedicated unprivileged user, be restarted on failure with rate limiting, have a
+    read-only view of the filesystem apart from one writable state directory, be unable to gain new
+    privileges, have a private /tmp, and have kernel tunables and control groups made read-only to it.
+    Give the complete unit file.
+  evaluator: command_correctness
+  expected:
+    - pattern: '(?m)^\s*User\s*='
+      description: "Runs as a dedicated user"
+      required: true
+    - pattern: '(?m)^\s*NoNewPrivileges\s*=\s*(?:yes|true|1)'
+      description: "NoNewPrivileges=yes"
+      required: true
+    - pattern: '(?m)^\s*ProtectSystem\s*=\s*(?:strict|full)'
+      description: "ProtectSystem=strict"
+      required: true
+    - pattern: '(?m)^\s*PrivateTmp\s*=\s*(?:yes|true|1)'
+      description: "PrivateTmp=yes"
+      required: true
+    - pattern: '(?m)^\s*(?:StateDirectory|ReadWritePaths)\s*='
+      description: "A single writable state directory"
+      required: true
+    - pattern: '(?m)^\s*ProtectKernelTunables\s*=\s*(?:yes|true|1)'
+      description: "ProtectKernelTunables=yes"
+      required: true
+    - pattern: '(?m)^\s*ProtectControlGroups\s*=\s*(?:yes|true|1)'
+      description: "ProtectControlGroups=yes"
+      required: true
+    - pattern: '(?m)^\s*Restart\s*=\s*on-failure'
+      description: "Restart=on-failure"
+      required: true
+    - pattern: '(?m)^\s*(?:StartLimitIntervalSec|StartLimitBurst|RestartSec)\s*='
+      description: "Restart rate limiting"
+      required: true
+    - pattern: '(?m)^\s*User\s*=\s*root\s*$'
+      description: "Runs as root"
+      required: false
+      forbidden: true

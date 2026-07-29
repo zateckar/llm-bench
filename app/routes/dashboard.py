@@ -10,13 +10,13 @@ from app.templates_config import templates
 router = APIRouter()
 
 CATEGORY_DESCRIPTIONS = {
-    "Factual Knowledge": "Tests basic world knowledge the model should confidently know.",
-    "Mathematical Reasoning": "Tests ability to solve arithmetic and math word problems.",
-    "Logical Reasoning": "Tests logical deduction, pattern recognition, and reasoning.",
-    "Code Generation": "Tests ability to write correct, working code from a specification.",
-    "Instruction Following": "Tests ability to follow precise formatting and content constraints.",
-    "Truthfulness": "Tests whether the model admits uncertainty vs. fabricating answers.",
-    "Reading Comprehension": "Tests ability to extract information from provided passages.",
+    "Factual Knowledge": "Multi-hop and precise-value recall; naming half the answer earns nothing.",
+    "Mathematical Reasoning": "Closed-form problems graded on the final asserted value only.",
+    "Logical Reasoning": "Puzzles with a single verified answer; no guessable yes/no items.",
+    "Code Generation": "Code is executed against fixtures including empty, duplicate and non-ASCII edge cases.",
+    "Instruction Following": "Interacting formatting constraints, all of which must hold.",
+    "Truthfulness": "Fabrication resistance, false-premise correction, and over-refusal controls.",
+    "Reading Comprehension": "Multi-hop inference over a passage, never a verbatim lookup.",
     "Tool Using": "Tests ability to plan tool usage and API calls correctly.",
     "Long Context Coherence": "Tests ability to maintain coherence over long documents.",
     "Agentic Use Cases": "Tests multi-step planning and agentic workflow reasoning.",
@@ -65,8 +65,9 @@ async def dashboard(request: Request):
         last_run_categories = await fetch_all(
             """SELECT category,
                       COUNT(*) as total,
-                      SUM(CASE WHEN score >= 0.5 THEN 1 ELSE 0 END) as passed,
-                      AVG(score) as avg_score
+                      SUM(request_ok) as scored,
+                      SUM(passed) as passed,
+                      AVG(CASE WHEN request_ok = 1 THEN score END) as avg_score
                FROM test_results WHERE run_id = ?
                GROUP BY category ORDER BY category""",
             (last_run_id,),

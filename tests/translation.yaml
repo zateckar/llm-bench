@@ -1,58 +1,200 @@
 # Translation Test Suite
+#
+# Checking for one or two vocabulary items in the target language told you almost
+# nothing - a partial or ungrammatical rendering passed. Each item now checks the
+# specific constructions that a real translation must produce (agreement, case,
+# idiom rather than calque, register) and rejects the untranslated source or the
+# common literal error.
 
 - id: TR-01
   category: Translation
-  prompt: "Translate to French: 'The quick brown fox jumps over the lazy dog.' Reply with only the translation."
-  evaluator: contains_keywords
-  expected: ["renard", "brun", "chien"]
-
-- id: TR-02
-  category: Translation
-  prompt: "Translate to Spanish: 'Artificial intelligence is transforming how we work and live.' Reply with only the translation."
+  difficulty: medium
+  prompt: "Translate into French: 'The quick brown fox jumps over the lazy dog.' Reply with only the translation."
   evaluator: format_check
   expected:
     checks:
       - type: regex
-        value: "(?i)inteligencia artificial"
+        value: '(?i)renard'
+        description: "fox"
       - type: regex
-        value: "(?i)transform|cambia|revoluciona"
+        value: '(?i)\b(?:brun|marron)\b'
+        description: "brown"
+      - type: regex
+        value: '(?i)chien'
+        description: "dog"
+      - type: regex
+        value: '(?i)(?:saute|bondit|franchit)'
+        description: "verb conjugated in the third person singular"
+      - type: regex
+        value: '(?i)paresseux'
+        description: "lazy, agreeing with the masculine noun"
+      - type: not_regex
+        value: '(?i)\b(?:fox|dog|jumps)\b'
+        description: "no untranslated English left in"
+
+- id: TR-02
+  category: Translation
+  difficulty: medium
+  prompt: "Translate into Spanish: 'Artificial intelligence is transforming how we work and live.' Reply with only the translation."
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: '(?i)inteligencia artificial'
+        description: "artificial intelligence"
+      - type: regex
+        value: '(?i)(?:est[áa] transformando|transforma|est[áa] cambiando|cambia|revoluciona)'
+        description: "transforming, correctly conjugated"
+      - type: regex
+        value: '(?i)(?:trabajamos|vivimos|trabajar y vivir)'
+        description: "how we work and live"
+      - type: not_regex
+        value: '(?i)\b(?:intelligence|transforming|work|live)\b'
+        description: "no untranslated English left in"
 
 - id: TR-03
   category: Translation
+  difficulty: hard
+  description: "German requires the genitive construction and correct compound nouns"
   prompt: |
-    Translate this English text to German:
+    Translate this English text into German:
 
-    'Machine learning models require large datasets for training. The quality of the training data directly impacts model performance.'
+    'Machine learning models require large datasets for training. The quality of the training data
+    directly affects model performance.'
 
     Reply with only the German translation.
   evaluator: format_check
   expected:
     checks:
       - type: regex
-        value: "(?i)maschinelles lernen|maschinellen lernens"
+        value: '(?i)maschinelle[nms]?\s+lernen|maschinellen\s+lernens'
+        description: "machine learning"
       - type: regex
-        value: "(?i)daten"
+        value: '(?i)(?:datens[äa]tze|datenmengen|trainingsdaten)'
+        description: "datasets as a compound noun"
       - type: regex
-        value: "(?i)modell"
+        value: '(?i)modell'
+        description: "model"
+      - type: regex
+        value: '(?i)(?:qualit[äa]t)'
+        description: "quality"
+      - type: regex
+        value: '(?i)(?:beeinflusst|wirkt sich|auswirkung|beeinträchtigt|bestimmt)'
+        description: "affects, correctly conjugated"
+      - type: not_regex
+        value: '(?i)\b(?:machine learning|datasets|quality|performance)\b'
+        description: "no untranslated English left in"
 
 - id: TR-04
   category: Translation
-  prompt: "Translate to Japanese: 'Thank you for your help.' Reply with only the Japanese text."
-  evaluator: contains_keywords
-  expected: ["ありがとう"]
+  difficulty: hard
+  description: "Japanese politeness register: the plain form is a wrong answer here"
+  prompt: "Translate into polite (masu-form) Japanese: 'Thank you very much for your help with yesterday's meeting.' Reply with only the Japanese text."
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: 'ありがとう'
+        description: "thanks"
+      - type: regex
+        value: '(?:ございます|ございました)'
+        description: "polite register"
+      - type: regex
+        value: '(?:昨日|きのう)'
+        description: "yesterday"
+      - type: regex
+        value: '(?:会議|ミーティング|打ち合わせ)'
+        description: "meeting"
+      - type: not_regex
+        value: '(?i)\b(?:thank you|meeting|yesterday)\b'
+        description: "no untranslated English left in"
 
 - id: TR-05
   category: Translation
+  difficulty: hard
   prompt: |
-    Translate from Chinese to English: '深度学习是机器学习的一个子领域，它试图模仿人脑的工作方式。'
+    Translate this Chinese text into English:
+
+    '深度学习是机器学习的一个子领域，它试图模仿人脑的工作方式。'
 
     Reply with only the English translation.
   evaluator: format_check
   expected:
     checks:
       - type: regex
-        value: "(?i)deep learning"
+        value: '(?i)deep learning'
+        description: "deep learning"
       - type: regex
-        value: "(?i)machine learning"
+        value: '(?i)machine learning'
+        description: "machine learning"
       - type: regex
-        value: "(?i)brain|mind"
+        value: '(?i)(?:sub-?field|subfield|subset|branch|sub-?discipline)'
+        description: "subfield relation"
+      - type: regex
+        value: '(?i)(?:human brain|brain)'
+        description: "the human brain"
+      - type: regex
+        value: '(?i)(?:mimic|imitate|emulate|replicate|model)'
+        description: "attempts to mimic"
+      - type: not_regex
+        value: '[一-鿿]'
+        description: "no untranslated Chinese characters left in"
+
+- id: TR-06
+  category: Translation
+  difficulty: expert
+  description: "Idiom: a literal word-for-word rendering is the wrong answer"
+  prompt: |
+    Translate this English sentence into natural French. It contains an idiom; render the meaning
+    idiomatically rather than word for word.
+
+    'After the merger fell through, the CEO had to bite the bullet and announce the layoffs.'
+
+    Reply with only the French translation.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: '(?i)(?:fusion|rapprochement)'
+        description: "the merger"
+      - type: regex
+        value: '(?i)(?:échou|échec|tomb[ée]e? à l.eau|avort|n.a pas abouti)'
+        description: "fell through"
+      - type: regex
+        value: '(?i)(?:licenciement|suppressions? de postes|mise[s]? à pied)'
+        description: "layoffs"
+      - type: not_regex
+        value: '(?i)mordre\s+(?:la|une)\s+balle'
+        description: "does not translate 'bite the bullet' literally"
+      - type: not_regex
+        value: '(?i)\b(?:merger|layoffs|bullet)\b'
+        description: "no untranslated English left in"
+
+- id: TR-07
+  category: Translation
+  difficulty: expert
+  description: "Czech requires correct case endings, not just the right vocabulary"
+  prompt: |
+    Translate into Czech: 'The engineers tested the new database on three servers.'
+    Reply with only the Czech translation.
+  evaluator: format_check
+  expected:
+    checks:
+      - type: regex
+        value: '(?i)(?:inžený[řr]i|inžený[řr]e|inžený[řr]ů)'
+        description: "engineers"
+      - type: regex
+        value: '(?i)(?:otestovali|testovali|vyzkoušeli|zkoušeli)'
+        description: "tested, past tense plural"
+      - type: regex
+        value: '(?i)(?:databázi|databáze)'
+        description: "database in the accusative"
+      - type: regex
+        value: '(?i)(?:t[řr]ech|t[řr]i)'
+        description: "three"
+      - type: regex
+        value: '(?i)(?:serverech|serverech|serverů|servery)'
+        description: "servers in the locative"
+      - type: not_regex
+        value: '(?i)\b(?:engineers|database|servers|tested)\b'
+        description: "no untranslated English left in"

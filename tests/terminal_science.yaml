@@ -1,201 +1,291 @@
 # Terminal Scientific Computing Test Suite
-# Adapted from terminal-bench repository tasks
+#
+# Previously every item here was "explain topic X" graded against patterns like
+# "attention|weight|softmax|query|key" - a paragraph of jargon scored full marks.
+# Each item now targets the computational core of its topic and is graded by
+# running the code, except the two where the difficulty genuinely is the
+# reasoning, which are graded on named assumptions and specific methods.
 
 - id: TN-01
   category: Terminal Science
   difficulty: hard
   source: terminal-bench/cartpole-rl-training
+  description: "Numerical stability: the naive exp/sum implementation overflows"
   prompt: |
-    You need to train a reinforcement learning agent on the CartPole-v1 environment.
-    The agent should achieve a mean reward of over 300 over 100 episodes.
-    Provide:
-    1. The complete training code using PyTorch
-    2. The Agent class with select_action, save, and load methods
-    3. Explanation of the algorithm choice
-    4. How to verify the trained model works
-  evaluator: multi_step_solution
+    Write a Python function `stable_softmax(logits: list[float]) -> list[float]` that computes the
+    softmax of a vector. It must be numerically stable: it must return correct probabilities even for
+    logits with magnitudes around 1000, where a naive exp-then-normalise implementation overflows to
+    inf and yields nan. Do not use numpy or scipy.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Algorithm and environment"
-      pattern: "CartPole|policy gradient|REINFORCE|DQN|actor.critic|PPO"
-      order: 1
-    - step: "Agent class with required methods"
-      pattern: "select_action|class .*Agent|def save|def load"
-      order: 2
-    - step: "Training loop"
-      pattern: "episode|reward|optimizer|backward|loss"
-      order: 3
+    - function: stable_softmax
+      args: [[0.0, 0.0]]
+      expected: [0.5, 0.5]
+      tolerance: 1.0e-9
+    - function: stable_softmax
+      args: [[1000.0, 1000.0]]
+      expected: [0.5, 0.5]
+      tolerance: 1.0e-9
+    - function: stable_softmax
+      args: [[1.0, 2.0, 3.0]]
+      expected: [0.09003057317038046, 0.24472847105479764, 0.6652409557748218]
+      tolerance: 1.0e-9
+    - function: stable_softmax
+      args: [[-1000.0, -1000.0, -1000.0]]
+      expected: [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]
+      tolerance: 1.0e-9
+    - function: stable_softmax
+      args: [[0.0]]
+      expected: [1.0]
+      tolerance: 1.0e-12
 
 - id: TN-02
   category: Terminal Science
   difficulty: hard
   source: terminal-bench/dna-assembly
+  description: "Golden Gate assembly reduced to its checkable core: BsaI site detection"
   prompt: |
-    Design primers for Golden Gate assembly using BsaI-HF v2 enzyme.
-    Given these sequences:
-    - input: circular plasmid
-    - egfp: linear DNA encoding EGFP protein
-    - flag: linear DNA encoding FLAG protein with GS linkers
-    - snap: linear DNA encoding SNAP protein
-    - output: desired circular plasmid
+    Golden Gate assembly with BsaI requires knowing where the enzyme cuts. BsaI recognises GGTCTC
+    and, on the opposite strand, GAGACC.
 
-    The primers must:
-    - Have annealing regions 15-45 nucleotides long
-    - Melting temperature between 58-72°C
-    - Forward/reverse pairs within 5°C of each other
-    - Include BsaI cut sites for Golden Gate assembly
+    Write two Python functions:
+      - `reverse_complement(seq: str) -> str` for an uppercase DNA string over A, C, G, T.
+      - `find_bsai_sites(seq: str) -> list[int]` returning the sorted 0-based start indices of every
+        occurrence of GGTCTC or GAGACC in the sequence, including overlapping occurrences.
 
-    Explain the primer design process and provide example primers.
-  evaluator: multi_step_solution
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Melting temperature calculation"
-      pattern: "melting|Tm|tm|primer3"
-      order: 1
-    - step: "BsaI cut sites"
-      pattern: "BsaI|GAGACC|GGTCTC|cut site"
-      order: 2
-    - step: "Primer design"
-      pattern: "forward|reverse|anneal|5'|3'"
-      order: 3
+    - function: reverse_complement
+      args: ["ATGC"]
+      expected: "GCAT"
+    - function: reverse_complement
+      args: [""]
+      expected: ""
+    - function: reverse_complement
+      args: ["AATT"]
+      expected: "AATT"
+    - function: reverse_complement
+      args: ["GGTCTC"]
+      expected: "GAGACC"
+    - function: find_bsai_sites
+      args: ["AAAGGTCTCAAA"]
+      expected: [3]
+    - function: find_bsai_sites
+      args: ["GAGACCTTT"]
+      expected: [0]
+    - function: find_bsai_sites
+      args: ["GGTCTCGAGACC"]
+      expected: [0, 6]
+    - function: find_bsai_sites
+      args: ["AAAA"]
+      expected: []
 
 - id: TN-03
   category: Terminal Science
   difficulty: medium
   source: terminal-bench/chem-property-targeting
+  description: "Boundary conditions of the Rule of Five are inclusive"
   prompt: |
-    You're optimizing a molecule for better binding affinity to a target protein.
-    Describe the computational chemistry approach including:
-    1. How to calculate binding free energy
-    2. Methods for lead optimization
-    3. How to balance potency with ADMET properties
-    4. Tools and software commonly used
-  evaluator: multi_step_solution
+    Lipinski's Rule of Five flags a compound when any of these thresholds is exceeded: molecular
+    weight above 500 Da, cLogP above 5, more than 5 hydrogen-bond donors, more than 10 hydrogen-bond
+    acceptors. Values exactly at a threshold are NOT violations.
+
+    Write a Python function `lipinski_violations(mw: float, logp: float, hbd: int, hba: int) -> int`
+    returning how many of the four criteria are violated.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Binding free energy"
-      pattern: "free energy|docking|scoring|MM-PBSA|MM-GBSA"
-      order: 1
-    - step: "Lead optimization"
-      pattern: "SAR|structure.activity|QSAR|pharmacophore"
-      order: 2
-    - step: "ADMET"
-      pattern: "ADMET|absorption|metabolism|toxicity|Lipinski"
-      order: 3
+    - function: lipinski_violations
+      args: [300.0, 2.0, 2, 5]
+      expected: 0
+    - function: lipinski_violations
+      args: [600.0, 6.0, 6, 11]
+      expected: 4
+    - function: lipinski_violations
+      args: [500.0, 5.0, 5, 10]
+      expected: 0
+    - function: lipinski_violations
+      args: [501.0, 5.0, 5, 10]
+      expected: 1
+    - function: lipinski_violations
+      args: [499.0, 5.1, 5, 11]
+      expected: 2
 
 - id: TN-04
   category: Terminal Science
-  difficulty: medium
+  difficulty: hard
   source: terminal-bench/attention-mil
+  description: "Attention pooling: a weighted sum whose weights must be a stable softmax"
   prompt: |
-    Explain Attention-based Multiple Instance Learning (Attention-MIL) for histopathology image analysis.
-    Include:
-    1. The problem it solves (bag-level classification)
-    2. How attention mechanism works in this context
-    3. Mathematical formulation of the attention layer
-    4. Advantages over simple mean-pooling
-    5. Python implementation outline using PyTorch
-  evaluator: multi_step_solution
+    In attention-based Multiple Instance Learning, a bag-level representation is the attention-weighted
+    sum of its instance features, where the attention weights are a softmax over per-instance scores.
+
+    Write a Python function `attention_pooling(features: list[list[float]], scores: list[float]) -> list[float]`
+    returning the pooled feature vector. `features[i]` is the feature vector of instance i and
+    `scores[i]` its attention score. The softmax must be numerically stable for scores around 1000.
+    Do not use numpy.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "MIL explanation"
-      pattern: "multiple instance|bag|instance|histopatholog"
-      order: 1
-    - step: "Attention mechanism"
-      pattern: "attention|weight|softmax|query|key"
-      order: 2
-    - step: "Mathematical formulation"
-      pattern: "alpha|z_i|h_i|sum|aggregate"
-      order: 3
+    - function: attention_pooling
+      args: [[[1.0, 2.0], [3.0, 4.0]], [0.0, 0.0]]
+      expected: [2.0, 3.0]
+      tolerance: 1.0e-9
+    - function: attention_pooling
+      args: [[[1.0, 0.0], [0.0, 1.0]], [1000.0, 0.0]]
+      expected: [1.0, 0.0]
+      tolerance: 1.0e-9
+    - function: attention_pooling
+      args: [[[5.0]], [42.0]]
+      expected: [5.0]
+      tolerance: 1.0e-12
+    - function: attention_pooling
+      args: [[[0.0, 0.0], [10.0, 20.0]], [0.0, 1000.0]]
+      expected: [10.0, 20.0]
+      tolerance: 1.0e-9
 
 - id: TN-05
   category: Terminal Science
-  difficulty: medium
+  difficulty: expert
   source: terminal-bench/causal-inference-r
+  description: "Graded on naming the identifying assumptions, not on listing method names"
   prompt: |
-    Explain causal inference methods for observational studies in R.
-    Cover:
-    1. The difference between correlation and causation
-    2. Propensity score matching
-    3. Instrumental variables
-    4. Difference-in-differences
-    5. Provide R code examples for each method
+    You have observational data and want a causal effect estimate. For each of the three methods
+    below, state the specific identifying assumption that must hold and name the R function or
+    package you would use:
+
+      1. Propensity score matching
+      2. Instrumental variables
+      3. Difference-in-differences
+
+    Then state explicitly what each method cannot fix.
   evaluator: multi_step_solution
   expected:
-    - step: "Causation vs correlation"
-      pattern: "causation|correlation|confound|bias"
-      order: 1
-    - step: "Propensity score"
-      pattern: "propensity|matching|pscore|MatchIt"
-      order: 2
-    - step: "Instrumental variables"
-      pattern: "instrument|IV|2SLS|ivreg"
-      order: 3
+    steps:
+      - step: "Propensity matching assumption: no unmeasured confounding / ignorability"
+        pattern: '(?:no unmeasured confound|unconfoundedness|ignorab|conditional independence|strong ignorability|selection on observables)[\s\S]{0,400}(?:MatchIt|matchit|Matching|twang|WeightIt)'
+        order: 1
+      - step: "IV assumptions: relevance and exclusion restriction"
+        pattern: '(?:exclusion restriction)[\s\S]{0,400}(?:AER|ivreg|ivreg2|feols|estimatr|iv_robust)'
+        order: 2
+      - step: "DiD assumption: parallel trends"
+        pattern: 'parallel trends|common trends'
+        order: 3
+      - step: "States the residual limitation"
+        pattern: '(?:cannot|can.?t|does not|doesn.?t|unable to)[\s\S]{0,120}(?:unmeasured|unobserved|latent|hidden) confound'
+        order: 4
+    must_not:
+      # Matching on observables does not address unobserved confounding.
+      - '(?i)propensity score matching (?:removes|eliminates|controls for|handles) (?:all )?(?:unobserved|unmeasured) confound'
+      - '(?i)correlation (?:does )?impl(?:y|ies) causation'
 
 - id: TN-06
   category: Terminal Science
-  difficulty: hard
+  difficulty: expert
   source: terminal-bench/fmri-encoding-r
+  description: "Must get the direction of encoding vs decoding right and name the leakage trap"
   prompt: |
-    Explain fMRI encoding models for predicting brain responses.
-    Include:
-    1. What is encoding vs decoding in neuroimaging
-    2. How to build a voxel-wise encoding model
-    3. Feature extraction from stimuli (visual, auditory)
-    4. Model evaluation using cross-validation
-    5. Python/R implementation considerations
+    Explain voxel-wise encoding models for fMRI:
+      1. State precisely what an encoding model predicts and from what, and contrast it with a
+         decoding model (be explicit about which is the input and which is the output in each case).
+      2. Describe how the stimulus is turned into a design matrix, including convolution with the
+         haemodynamic response.
+      3. Explain why ordinary least squares is usually replaced by a regularised estimator here, and
+         name the estimator.
+      4. Describe the cross-validation scheme, and name the specific leakage risk that naive k-fold
+         cross-validation introduces for fMRI time series.
   evaluator: multi_step_solution
   expected:
-    - step: "Encoding vs decoding"
-      pattern: "encoding|decoding|stimulus|brain response"
-      order: 1
-    - step: "Voxel-wise model"
-      pattern: "voxel|GLM|regress|design matrix"
-      order: 2
-    - step: "Feature extraction"
-      pattern: "feature|HOG|Gabor|spectrogram|MFCC"
-      order: 3
+    steps:
+      - step: "Encoding predicts brain response FROM stimulus features"
+        pattern: '(?:encoding)[\s\S]{0,200}(?:predict|model|map)[\s\S]{0,120}(?:brain|voxel|BOLD|neural) (?:response|activity|signal)'
+        order: 1
+      - step: "Decoding is the reverse direction"
+        pattern: '(?:decoding)[\s\S]{0,200}(?:predict|infer|recover|reconstruct)[\s\S]{0,120}(?:stimulus|feature|percept|category)'
+        order: 2
+      - step: "Design matrix convolved with the HRF"
+        pattern: '(?:convolv|convolution)[\s\S]{0,120}(?:h(?:a)?emodynamic|HRF)'
+        order: 3
+      - step: "Regularised estimator named"
+        pattern: '\bridge\b|\bL2\b|banded ridge|\blasso\b|elastic net|Tikhonov'
+        order: 4
+      - step: "Temporal autocorrelation leakage in naive k-fold"
+        pattern: '(?:autocorrel|temporal(?:ly)? (?:depend|correlat)|adjacent (?:TRs|volumes|timepoints)|contiguous (?:runs|blocks)|block(?:ed)?[- ]wise|leave-one-run-out)'
+        order: 5
+    must_not:
+      - '(?i)encoding models predict the stimulus from (?:the )?(?:brain|voxel|BOLD)'
 
 - id: TN-07
   category: Terminal Science
-  difficulty: medium
+  difficulty: hard
   source: terminal-bench/chem-rf
+  description: "The split criterion behind a random forest, computed exactly"
   prompt: |
-    Build a Random Forest model for predicting chemical properties.
-    Explain:
-    1. How to represent molecules as features (fingerprints, descriptors)
-    2. Feature selection techniques for chemical data
-    3. Model training and hyperparameter tuning
-    4. How to interpret feature importance in chemical context
-    Provide Python code using scikit-learn and RDKit.
-  evaluator: multi_step_solution
+    Write two Python functions used when growing a decision tree:
+
+      - `gini_impurity(labels: list) -> float` - the Gini impurity of a label list. An empty list has
+        impurity 0.0.
+      - `information_gain(parent: list, left: list, right: list) -> float` - the Gini-based gain,
+        i.e. the parent's impurity minus the size-weighted average impurity of the two children.
+
+    Do not use numpy or scikit-learn.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Molecular features/fingerprints"
-      pattern: "fingerprint|descriptor|Morgan|RDKit|MolFromSmiles"
-      order: 1
-    - step: "Random Forest training"
-      pattern: "RandomForest|n_estimators|fit\\(|sklearn"
-      order: 2
-    - step: "Tuning and feature importance"
-      pattern: "feature_importances|GridSearch|cross_val|hyperparameter"
-      order: 3
+    - function: gini_impurity
+      args: [[0, 0, 1, 1]]
+      expected: 0.5
+      tolerance: 1.0e-12
+    - function: gini_impurity
+      args: [[0, 0, 0, 0]]
+      expected: 0.0
+      tolerance: 1.0e-12
+    - function: gini_impurity
+      args: [[]]
+      expected: 0.0
+      tolerance: 1.0e-12
+    - function: gini_impurity
+      args: [[0, 1, 2]]
+      expected: 0.6666666666666667
+      tolerance: 1.0e-9
+    - function: information_gain
+      args: [[0, 0, 1, 1], [0, 0], [1, 1]]
+      expected: 0.5
+      tolerance: 1.0e-12
+    - function: information_gain
+      args: [[0, 0, 1, 1], [0, 1], [0, 1]]
+      expected: 0.0
+      tolerance: 1.0e-12
 
 - id: TN-08
   category: Terminal Science
-  difficulty: medium
+  difficulty: expert
   source: terminal-bench/bn-fit-modify
+  description: "Markov blanket must include co-parents, which is the part usually missed"
   prompt: |
-    Explain how to fit and modify Bayesian Networks for causal reasoning.
-    Include:
-    1. Structure learning algorithms (constraint-based, score-based)
-    2. Parameter learning (MLE, Bayesian estimation)
-    3. How to modify network structure based on domain knowledge
-    4. Inference and prediction
-    Provide Python examples using pgmpy or pomegranate.
-  evaluator: multi_step_solution
+    In a Bayesian network, a node's Markov blanket is the union of its parents, its children, and the
+    other parents of its children (its children's co-parents).
+
+    Write a Python function `markov_blanket(graph: dict, node: str) -> list[str]` where `graph` maps
+    each node name to the list of its parent node names. Return the Markov blanket as a
+    lexicographically sorted list, excluding the node itself.
+    Reply with ONLY the Python code in a code block.
+  evaluator: code_exec
   expected:
-    - step: "Structure learning"
-      pattern: "PC algorithm|BIC|MDL|structure|DAG"
-      order: 1
-    - step: "Parameter learning"
-      pattern: "MLE|Bayesian|conditional|probability"
-      order: 2
-    - step: "Inference"
-      pattern: "inference|query|evidence|predict"
-      order: 3
+    - function: markov_blanket
+      args: [{"A": [], "B": ["A"], "C": ["A"], "D": ["B", "C"], "E": ["D"]}, "B"]
+      expected: ["A", "C", "D"]
+    - function: markov_blanket
+      args: [{"A": [], "B": ["A"], "C": ["A"], "D": ["B", "C"], "E": ["D"]}, "A"]
+      expected: ["B", "C"]
+    - function: markov_blanket
+      args: [{"A": [], "B": ["A"], "C": ["A"], "D": ["B", "C"], "E": ["D"]}, "E"]
+      expected: ["D"]
+    - function: markov_blanket
+      args: [{"A": [], "B": ["A"], "C": ["A"], "D": ["B", "C"], "E": ["D"]}, "D"]
+      expected: ["B", "C", "E"]
+    - function: markov_blanket
+      args: [{"X": []}, "X"]
+      expected: []
