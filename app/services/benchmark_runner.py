@@ -420,7 +420,7 @@ def _merge_context_phase(
 
     try:
         points = run_context_sweep(config, sweep, progress=progress)
-    except Exception as e:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         logger.exception("Context sweep failed for run %d", run_id)
         points = None
 
