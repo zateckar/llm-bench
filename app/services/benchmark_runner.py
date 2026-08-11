@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 import sys
 import threading
@@ -186,6 +187,19 @@ def _finish_run(
 # ---------------------------------------------------------------------------
 
 
+_URL_RE = re.compile(r"https?://\S+")
+
+
+def _sanitize_error_detail(error: str) -> str:
+    """Strip endpoint URLs/hosts from an error before it is persisted.
+
+    Client exceptions embed the request URL (and sometimes an upstream error
+    body that quotes it back), and the run detail page renders stored details
+    to any authenticated user, so URLs never go into the database.
+    """
+    return _URL_RE.sub("<endpoint>", error)
+
+
 def _build_client_config(model: dict) -> ClientConfig:
     return ClientConfig(
         base_url=model["base_url"],
@@ -310,7 +324,11 @@ def _run_benchmark(
             if metrics.ok:
                 score, detail = evaluate(q, response)
             else:
-                score, detail = 0.0, f"Request failed: {metrics.error}"
+                logger.warning(
+                    "Request failed for %s in run %d: %s", q.id, run_id, metrics.error
+                )
+                score = 0.0
+                detail = f"Request failed: {_sanitize_error_detail(metrics.error)}"
 
             result = Result(
                 question=q, response=response, score=score, detail=detail,

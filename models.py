@@ -117,9 +117,11 @@ class Result:
         """True when the model never answered (network/HTTP failure).
 
         These are excluded from quality percentages: a 502 from the endpoint is
-        not evidence about the model's capability.
+        not evidence about the model's capability. ``metrics.ok`` is set by the
+        LLM client only for transport failures, so the response text is never
+        inspected here - a genuine answer may legitimately start with "[API ERROR".
         """
-        return not self.metrics.ok or self.response.strip().startswith("[API ERROR")
+        return not self.metrics.ok
 
 
 @dataclass
@@ -342,7 +344,12 @@ class ContextPoint:
         mean_ttft = self.ttft.mean
         if not mean_ttft or mean_ttft <= 0:
             return None
-        avg_prompt = self.prompt_tokens / self.requests if self.requests else 0
+        # prompt_tokens is summed over successful probes only, so divide by the
+        # successful count - not all requests - or errors understate the rate.
+        succeeded = self.requests - self.errors
+        if succeeded <= 0:
+            return None
+        avg_prompt = self.prompt_tokens / succeeded
         return avg_prompt / (mean_ttft / 1000.0)
 
     @property

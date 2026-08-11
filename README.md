@@ -90,12 +90,12 @@ Useful options:
 | `--perf-only` | run only the performance suite |
 | `--concurrency 1,16,64,256` | concurrency levels for the sweep, each 1–256 |
 | `--perf-requests N` | minimum requests per concurrency level (default 8) |
-| `--no-cache` | ignore the response cache and re-query |
+| `--no-cache` | re-query the model; the cache file is neither read nor modified |
 | `--report path.md` | where to write the markdown report |
 
 The run writes `report.md`, and `report.perf.json` when the performance suite ran.
 
-Responses are cached in `.benchmark_cache.json`, keyed by a fingerprint of the prompt, evaluator, expected value, pass threshold and decoding parameters — so editing a question invalidates its cached result automatically, and re-scoring after an evaluator fix costs no tokens.
+Responses are cached in `.benchmark_cache.json`, keyed by a fingerprint of the endpoint, prompt, evaluator, expected value, pass threshold and decoding parameters — so editing a question, or pointing the same model name at a different endpoint, invalidates its cached result automatically, and re-scoring after an evaluator fix costs no tokens.
 
 Configure the endpoint through the environment:
 

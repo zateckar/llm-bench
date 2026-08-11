@@ -131,10 +131,13 @@ def question_fingerprint(q: Question) -> str:
 
     Including this in the cache key means editing a prompt, evaluator, expected
     value, threshold or system prompt automatically invalidates the stale cached
-    result. Decoding parameters are included too, since they change the output.
+    result. Decoding parameters are included too, since they change the output,
+    and the endpoint is included so re-pointing the model name at another
+    server never replays responses from the old one.
     """
     payload = json.dumps(
         {
+            "endpoint": BASE_URL,
             "prompt": q.prompt,
             "system_prompt": q.system_prompt,
             "evaluator": q.evaluator,
@@ -168,7 +171,7 @@ def evaluate(q: Question, response: str) -> tuple[float, str]:
     return max(0.0, min(1.0, float(score))), detail
 
 
-def run_one(q: Question, client: ChatClient, cache: dict) -> Result:
+def run_one(q: Question, client: ChatClient, cache: dict, persist: bool = True) -> Result:
     """Run (or replay from cache) a single question."""
     cache_key = f"{MODEL}:{q.id}:{question_fingerprint(q)}"
     with _cache_lock:
@@ -217,18 +220,20 @@ def run_one(q: Question, client: ChatClient, cache: dict) -> Result:
 
     if metrics.ok:
         # Persist after each real API call so a mid-run crash keeps prior work.
-        with _cache_lock:
-            cache[cache_key] = {
-                "response": response,
-                "score": score,
-                "detail": detail,
-                "prompt_tokens": tokens.prompt_tokens,
-                "completion_tokens": tokens.completion_tokens,
-                "latency_ms": metrics.latency_ms,
-                "ttft_ms": metrics.ttft_ms,
-                "ok": True,
-            }
-            save_cache(cache)
+        # persist=False (--no-cache): private throwaway cache, disk untouched.
+        if persist:
+            with _cache_lock:
+                cache[cache_key] = {
+                    "response": response,
+                    "score": score,
+                    "detail": detail,
+                    "prompt_tokens": tokens.prompt_tokens,
+                    "completion_tokens": tokens.completion_tokens,
+                    "latency_ms": metrics.latency_ms,
+                    "ttft_ms": metrics.ttft_ms,
+                    "ok": True,
+                }
+                save_cache(cache)
 
     return result
 
@@ -254,14 +259,18 @@ def run_benchmark(
     questions: list[Question],
     client_config: ClientConfig,
     workers: int = 1,
+    no_cache: bool = False,
 ) -> tuple[list[CategoryResult], float]:
     """Run all questions and return (categorized results, wall-clock seconds).
 
     With ``workers > 1`` questions run concurrently. That both shortens the run
     and exercises the endpoint under load, but per-question latency will include
     server-side queueing - use the dedicated perf suite for clean latency numbers.
+
+    With ``no_cache`` the run operates on a throwaway in-memory cache: the cache
+    file is neither read nor written, so baseline results stay on disk untouched.
     """
-    cache = load_cache()
+    cache = {} if no_cache else load_cache()
     total = len(questions)
     results: list[Result | None] = [None] * total
     print_lock = threading.Lock()
@@ -283,7 +292,7 @@ def run_benchmark(
                     worker_local.client = client
             else:
                 client = shared_client
-            result = run_one(q, client, cache)
+            result = run_one(q, client, cache, persist=not no_cache)
         except Exception as e:  # noqa: BLE001 - a buggy question must not vanish
             # ChatClient.complete never raises for transport problems, so an
             # exception here is an internal bug. Record it as a failed request
@@ -606,7 +615,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--no-cache", action="store_true",
-        help="ignore the response cache and re-query the model",
+        help="ignore the response cache entirely: re-query the model and leave "
+             "the cache file untouched",
     )
     parser.add_argument(
         "--report", default="report.md", help="path for the markdown report",
@@ -673,9 +683,6 @@ def main() -> None:
         print("ERROR: OPENAI_BASE_URL and OPENAI_KEY must be set in .env")
         sys.exit(1)
 
-    if args.no_cache and CACHE_FILE.exists():
-        CACHE_FILE.unlink()
-
     client_config = build_client_config()
     workers = max(1, args.workers)
 
@@ -717,7 +724,9 @@ def main() -> None:
             f"{len(set(q.category for q in questions))} categories "
             f"with {workers} worker(s)...\n"
         )
-        categories, elapsed = run_benchmark(questions, client_config, workers=workers)
+        categories, elapsed = run_benchmark(
+            questions, client_config, workers=workers, no_cache=args.no_cache
+        )
 
     perf_report: PerfReport | None = None
     if args.perf or args.perf_only:

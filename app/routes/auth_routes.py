@@ -43,7 +43,7 @@ async def login_submit(
         return RedirectResponse(url="/login?error=1", status_code=302)
 
     response = RedirectResponse(url="/dashboard", status_code=302)
-    set_session_cookie(response, user["id"])
+    set_session_cookie(response, user["id"], user["token_version"])
     return response
 
 

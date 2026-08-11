@@ -232,6 +232,10 @@ def run_code_tests(
     ``value`` is a tagged encoding of the returned object (see ``_encode`` in the
     child source) so the caller can compare structurally instead of by repr.
     """
+    # The parent's wall-clock timeout must not fire before every test has had
+    # its per-test budget, so clamp per-test to a fair share of the total
+    # (integer division leaves headroom for the subprocess load/import overhead).
+    per_test_timeout = min(per_test_timeout, max(1, timeout // max(1, len(tests))))
     job = json.dumps({
         "code": code,
         "tests": tests,

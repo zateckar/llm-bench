@@ -15,6 +15,12 @@
 
 {% block content %}
 <div class="space-y-6" x-data="{ expandedCategories: {}, expandedQuestion: null }">
+    {% if request.query_params.get('error') == 'running' %}
+    <div class="p-3 bg-amber-900/50 border border-amber-700 rounded-lg text-amber-200 text-sm">
+        This run is still active and cannot be deleted until it finishes.
+    </div>
+    {% endif %}
+
     <div class="flex items-center gap-4">
         <a href="/runs" class="text-slate-400 hover:text-white">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
@@ -387,12 +393,19 @@
                 <button class="w-full flex items-center justify-between p-4 text-left hover:bg-slate-800 transition-colors"
                         @click="expandedCategories['{{ cat.category }}'] = !expandedCategories['{{ cat.category }}']">
                     <div class="flex items-center gap-3">
+                        {% if cat.avg_score is not none %}
                         <div class="w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold
                             {% if cat.avg_score >= 0.7 %}bg-emerald-900/50 text-emerald-400
                             {% elif cat.avg_score >= 0.5 %}bg-yellow-900/50 text-yellow-400
                             {% else %}bg-red-900/50 text-red-400{% endif %}">
                             {{ "%.0f"|format(cat.avg_score * 100) }}%
                         </div>
+                        {% else %}
+                        <div class="w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold bg-slate-800 text-slate-500"
+                             title="All requests in this category were transport errors">
+                            &mdash;
+                        </div>
+                        {% endif %}
                         <div>
                             <p class="font-medium text-slate-200">{{ cat.category }}</p>
                             <p class="text-xs text-slate-500">
@@ -404,7 +417,9 @@
                     </div>
                     <div class="flex items-center gap-3">
                         <div class="w-32 progress-bar">
+                            {% if cat.avg_score is not none %}
                             <div class="progress-fill" style="width: {{ cat.avg_score * 100 }}%"></div>
+                            {% endif %}
                         </div>
                         <svg class="w-4 h-4 text-slate-500 transition-transform"
                              :class="expandedCategories['{{ cat.category }}'] ? 'rotate-180' : ''"
@@ -494,8 +509,8 @@
     const barCtx = document.getElementById('barChart').getContext('2d');
     const barLabels = {{ categories | map(attribute='category') | list | tojson }};
     const barScoresRaw = {{ categories | map(attribute='avg_score') | list | tojson }};
-    const barScores = barScoresRaw.map(s => s * 100);
-    const barColors = barScores.map(s => s >= 70 ? 'rgba(16, 185, 129, 0.8)' : s >= 50 ? 'rgba(234, 179, 8, 0.8)' : 'rgba(239, 68, 68, 0.8)');
+    const barScores = barScoresRaw.map(s => (s == null ? 0 : s * 100));
+    const barColors = barScoresRaw.map(s => s == null ? 'rgba(100, 116, 139, 0.8)' : (s * 100 >= 70 ? 'rgba(16, 185, 129, 0.8)' : s * 100 >= 50 ? 'rgba(234, 179, 8, 0.8)' : 'rgba(239, 68, 68, 0.8)'));
 
     new Chart(barCtx, {
         type: 'bar',

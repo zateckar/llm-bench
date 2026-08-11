@@ -72,7 +72,7 @@ def main():
     if len(sys.argv) < 2:
         print("Usage:")
         print("  python manage.py init-db          Initialize database")
-        print("  python manage.py create-admin     Create admin user")
+        print("  python manage.py create-admin     Create admin user (password via prompt or stdin)")
         print("  python manage.py list-users       List all users")
         print("  python manage.py list-models      List all models")
         return
@@ -84,13 +84,18 @@ def main():
     elif command == "create-admin":
         if len(sys.argv) < 3:
             print("Usage: python manage.py create-admin <username> [email]")
+            print("  Password is prompted interactively, or read from stdin when piped in.")
             return
         import getpass
         username = sys.argv[2]
         email = sys.argv[3] if len(sys.argv) > 3 else ""
-        # Read interactively so the password never lands in shell history or
-        # the process listing.
-        password = getpass.getpass("Password: ")
+        if sys.stdin.isatty():
+            # Read interactively so the password never lands in shell history or
+            # the process listing.
+            password = getpass.getpass("Password: ")
+        else:
+            # Non-interactive (piped) invocation: read the password from stdin.
+            password = sys.stdin.readline().strip()
         if not password:
             print("ERROR: password must not be empty")
             return

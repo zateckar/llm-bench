@@ -36,6 +36,7 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("test_results", "ttft_ms", "REAL"),
     ("test_results", "request_ok", "INTEGER DEFAULT 1"),
     ("benchmark_progress", "phase", "TEXT DEFAULT 'quality'"),
+    ("users", "token_version", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

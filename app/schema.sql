@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT DEFAULT 'user',
     oidc_sub TEXT UNIQUE,
     display_name TEXT,
+    token_version INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

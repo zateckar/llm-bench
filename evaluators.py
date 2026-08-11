@@ -896,6 +896,9 @@ def eval_numeric_match(response: str, expected: Any, **_) -> tuple[float, str]:
     if isinstance(expected, dict):
         target = float(expected.get("value"))
         rel_tol = float(expected.get("relative", DEFAULT_REL_TOLERANCE))
+        # An explicit tolerance is authoritative; the integer round-to-target
+        # shortcut below must not backdoor a tight one such as tolerance: 1.0e-9.
+        strict = ("tolerance" in expected) or ("relative" in expected)
         if "tolerance" in expected:
             abs_tol = float(expected["tolerance"])
         elif "relative" in expected:
@@ -912,6 +915,7 @@ def eval_numeric_match(response: str, expected: Any, **_) -> tuple[float, str]:
         abs_tol = precision_tolerance(target)
         rel_tol = DEFAULT_REL_TOLERANCE
         accept = []
+        strict = False
 
     candidates = [target, *accept]
     value, how = extract_final_number(response)
@@ -924,8 +928,9 @@ def eval_numeric_match(response: str, expected: Any, **_) -> tuple[float, str]:
         # An integer expected value is a count, so a more precise answer that
         # rounds to it ("533.33" for 533) is still correct - but only a true
         # round-to-integer (±0.5, half-open) plus the precision window, so
-        # "533.99" for 533 fails: it rounds to 534, not 533.
-        if candidate == int(candidate):
+        # "533.99" for 533 fails: it rounds to 534, not 533. Skipped when the
+        # author set an explicit tolerance (strict), which must not be widened.
+        if candidate == int(candidate) and not strict:
             window = max(0.5, abs_tol)
             if abs(value - candidate) <= window + 1e-9 and round(value) == candidate:
                 return 1.0, f"Correct ({how}): {value:g} rounds to {candidate:g}"

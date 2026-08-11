@@ -169,6 +169,15 @@ async def delete_run(request: Request, run_id: int):
     except HTTPException:
         return RedirectResponse(url="/login", status_code=302)
 
+    run = await fetch_one("SELECT status FROM test_runs WHERE id = ?", (run_id,))
+    if not run:
+        return RedirectResponse(url="/runs", status_code=302)
+    # Deleting an in-flight run orphans its background thread: the runner keeps
+    # writing results into the now-missing rows and hits FK errors repeatedly.
+    if run["status"] in ("running", "pending"):
+        logger.warning("Refused to delete run %d while its status is '%s'", run_id, run["status"])
+        return RedirectResponse(url=f"/runs/{run_id}?error=running", status_code=302)
+
     await execute("DELETE FROM test_results WHERE run_id = ?", (run_id,))
     await execute("DELETE FROM benchmark_progress WHERE run_id = ?", (run_id,))
     await execute("DELETE FROM test_runs WHERE id = ?", (run_id,))

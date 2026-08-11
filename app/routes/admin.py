@@ -6,7 +6,7 @@ import json
 import asyncio
 import sqlite3
 
-from app.auth import hash_password
+from app.auth import hash_password, set_session_cookie
 from app.database import fetch_all, fetch_one, execute
 from app.templates_config import templates
 
@@ -397,9 +397,19 @@ async def admin_update_user(
                 )
 
     if password:
+        if len(password) < 8:
+            users = await fetch_all(
+                "SELECT id, username, email, role, oidc_sub, display_name, created_at FROM users ORDER BY username"
+            )
+            return templates.TemplateResponse(
+                request,
+                "admin/users.html",
+                {"users": users, "error": "Password must be at least 8 characters."},
+                status_code=400,
+            )
         password_hash = hash_password(password)
         await execute(
-            "UPDATE users SET email = ?, role = ?, password_hash = ? WHERE id = ?",
+            "UPDATE users SET email = ?, role = ?, password_hash = ?, token_version = token_version + 1 WHERE id = ?",
             (email, role, password_hash, user_id),
         )
     else:
@@ -465,5 +475,13 @@ async def update_profile(
         return RedirectResponse(url="/admin/profile?error=2", status_code=302)
 
     password_hash = hash_password(new_password)
-    await execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user["id"]))
-    return RedirectResponse(url="/admin/profile?success=1", status_code=302)
+    # Bumping token_version invalidates every other session of this user,
+    # including the cookie that carries this very request.
+    await execute(
+        "UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?",
+        (password_hash, user["id"]),
+    )
+    response = RedirectResponse(url="/admin/profile?success=1", status_code=302)
+    # Re-issue a fresh cookie so the legitimate user stays logged in.
+    set_session_cookie(response, user["id"], user["token_version"] + 1)
+    return response
