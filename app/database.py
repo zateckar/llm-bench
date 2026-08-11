@@ -41,26 +41,33 @@ MIGRATIONS: list[tuple[str, str, str]] = [
 
 
 async def _apply_migrations(db: aiosqlite.Connection) -> None:
-    """Add any missing columns, backfilling `passed` only when it is added."""
+    """Add any missing columns, then self-guarded backfill of `passed`."""
+    cursor = await db.execute("PRAGMA table_info(test_results)")
+    columns_before = {row[1] for row in await cursor.fetchall()}
+
     for table, column, definition in MIGRATIONS:
         try:
             await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
         except Exception:
             continue  # Column already exists.
 
-        # Rows written before `passed` existed default to 0, which would report
-        # every historical run as a total failure. Backfill them with the old
-        # 0.5 rule so old runs stay readable. Only valid on rows from before the
-        # column existed, so this must run only when the ALTER actually
-        # happened above; on later startups it would retroactively flip
-        # current-runner rows that legitimately failed a higher threshold.
-        if table == "test_results" and column == "passed":
-            await db.execute(
-                """UPDATE test_results
-                      SET passed = CASE WHEN score >= 0.5 THEN 1 ELSE 0 END,
-                          pass_threshold = 0.5
-                    WHERE passed = 0 AND score >= 0.5"""
-            )
+    # Rows written before `passed` existed default to 0, which would report
+    # every historical run as a total failure, so backfill them with the old
+    # 0.5 rule. This used to run only when the `passed` ALTER above succeeded,
+    # but `passed` and `pass_threshold` are separate guarded ALTERs: a crash
+    # between them (an ordering that actually shipped) made every later
+    # startup skip the backfill forever. Gate on the schema snapshot taken
+    # before the ALTERs instead: while `pass_threshold` is missing the app
+    # cannot run (its INSERTs and queries name the column), so every existing
+    # row predates the migration and re-deriving `passed` with the 0.5 rule
+    # is safe. Afterwards the column always exists and the backfill never
+    # runs again, so current-runner rows are never retroactively flipped.
+    if "pass_threshold" not in columns_before:
+        await db.execute(
+            """UPDATE test_results
+                  SET passed = CASE WHEN score >= 0.5 THEN 1 ELSE 0 END,
+                      pass_threshold = 0.5"""
+        )
 
 
 async def get_db() -> aiosqlite.Connection:
@@ -84,16 +91,19 @@ async def init_db():
 
         # Seed admin user if not exists
         from app.config import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL
-        import bcrypt
+        from app.auth import hash_password
 
         cursor = await db.execute(
             "SELECT id FROM users WHERE username = ?", (ADMIN_USERNAME,)
         )
         existing = await cursor.fetchone()
         if not existing:
-            password_hash = bcrypt.hashpw(
-                ADMIN_PASSWORD.encode(), bcrypt.gensalt()
-            ).decode()
+            try:
+                password_hash = hash_password(ADMIN_PASSWORD)
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"Invalid ADMIN_PASSWORD: {exc}"
+                ) from exc
             await db.execute(
                 "INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)",
                 (ADMIN_USERNAME, ADMIN_EMAIL, password_hash, "admin"),
@@ -144,5 +154,23 @@ async def execute_many(query: str, params_list: list[tuple]) -> None:
     try:
         await db.executemany(query, params_list)
         await db.commit()
+    finally:
+        await db.close()
+
+
+async def execute_transaction(statements: list[tuple[str, tuple]]) -> None:
+    """Execute several write statements on one connection in one transaction.
+
+    A failure rolls everything back, so multi-step writes (e.g. deleting a run
+    and its child rows, which have no ON DELETE CASCADE) cannot leave orphans.
+    """
+    db = await get_db()
+    try:
+        for query, params in statements:
+            await db.execute(query, params)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
     finally:
         await db.close()

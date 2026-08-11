@@ -5,7 +5,10 @@ can hang the benchmark (infinite loops, runaway memory). This module executes th
 code in a separate, short-lived subprocess with:
 
 - a hard wall-clock timeout (the parent kills the child if it overruns),
-- a restricted import allowlist and a stripped-down builtins set,
+- a restricted import allowlist plus a hard denylist, and a stripped-down
+  builtins set,
+- a scrubbed child environment (parent credentials are not passed down),
+- a fresh, empty temporary working directory instead of the repo root,
 - best-effort CPU/memory/file-size limits via the ``resource`` module on POSIX.
 
 It is NOT a security boundary strong enough for adversarial attackers, but it
@@ -22,16 +25,17 @@ ordering); see ``evaluators.values_equal``.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
-from pathlib import Path
+import tempfile
 
 # Modules a solution is allowed to import inside the sandbox.
 ALLOWED_IMPORTS = [
     # Standard library
     "math", "collections", "heapq", "json", "re", "itertools", "functools",
     "datetime", "time", "random", "bisect", "array", "copy", "hashlib",
-    "string", "queue", "inspect", "io", "os", "pathlib", "typing",
+    "string", "queue", "inspect", "io", "pathlib", "typing",
     "abc", "dataclasses", "enum", "textwrap", "operator", "statistics",
     "decimal", "fractions", "uuid", "base64", "struct", "numbers",
     "unicodedata", "contextlib", "warnings",
@@ -42,6 +46,13 @@ ALLOWED_IMPORTS = [
     # Common utilities
     "requests", "httpx",
 ]
+
+# Modules that must never be importable, even if something (a helper, a future
+# edit here) re-adds them to ALLOWED_IMPORTS. `os` in particular gives the
+# sandboxed code the filesystem (unlink/rmdir bypass the RLIMIT_FSIZE guard),
+# process control (os.fork escapes the parent's wall-clock kill on POSIX), and
+# os.environ (credentials) — none of which a functional test should need.
+DENIED_IMPORTS = ["os", "sys", "subprocess", "multiprocessing", "ctypes"]
 
 DEFAULT_TIMEOUT = 15  # seconds, wall-clock, enforced by the parent process
 MEMORY_LIMIT_MB = 512
@@ -62,9 +73,12 @@ def _read_job():
     return json.loads(sys.stdin.read())
 
 ALLOWED = set(json.loads(sys.argv[1]))
+DENIED = set(json.loads(sys.argv[2]))
 
 def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
     root = name.split(".")[0]
+    if root in DENIED:
+        raise ImportError("Import of module %r is denied in this sandbox." % name)
     if root in ALLOWED:
         return builtins.__import__(name, globals, locals, fromlist, level)
     raise ImportError("Import of module %r is not allowed in this sandbox." % name)
@@ -85,7 +99,7 @@ def _apply_limits():
         import resource
     except ImportError:
         return
-    mb = int(sys.argv[2]) * 1024 * 1024
+    mb = int(sys.argv[3]) * 1024 * 1024
     for res in ("RLIMIT_AS", "RLIMIT_DATA"):
         try:
             resource.setrlimit(getattr(resource, res), (mb, mb))
@@ -216,6 +230,26 @@ main()
 '''
 
 
+def _sandbox_env() -> dict[str, str]:
+    """A minimal environment for the sandboxed child process.
+
+    The parent environment carries credentials (OPENAI_KEY, SECRET_KEY,
+    everything loaded from .env), and networked modules are on the import
+    allowlist, so inheriting it would let generated code exfiltrate secrets.
+    Keep only what the interpreter and its libraries need to launch.
+    """
+    keep = [
+        "PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR",  # Windows launch
+        "TEMP", "TMP", "TMPDIR",  # tempfile for interpreters/libraries
+        "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH",  # user dir lookups
+        "LANG", "LC_ALL", "LC_CTYPE",  # locale/encoding defaults
+        "VIRTUAL_ENV",  # resolves the interpreter's site-packages
+    ]
+    env = {name: os.environ[name] for name in keep if name in os.environ}
+    env["PYTHONDONTWRITEBYTECODE"] = "1"  # never write into the temp cwd
+    return env
+
+
 def run_code_tests(
     code: str,
     tests: list[dict],
@@ -233,25 +267,31 @@ def run_code_tests(
     child source) so the caller can compare structurally instead of by repr.
     """
     # The parent's wall-clock timeout must not fire before every test has had
-    # its per-test budget, so clamp per-test to a fair share of the total
-    # (integer division leaves headroom for the subprocess load/import overhead).
-    per_test_timeout = min(per_test_timeout, max(1, timeout // max(1, len(tests))))
+    # its per-test budget, so clamp per-test to a fair share of the total with
+    # headroom: len(tests) + 1 shares leaves one full share for interpreter
+    # startup and imports (numpy can take seconds), instead of zero when the
+    # timeout divides evenly by the test count.
+    per_test_timeout = min(per_test_timeout, max(1, timeout // (max(1, len(tests)) + 1)))
     job = json.dumps({
         "code": code,
         "tests": tests,
         "helper": helper,
         "per_test_timeout": per_test_timeout,
     })
+    env = _sandbox_env()
     try:
-        proc = subprocess.run(
-            [sys.executable, "-I", "-c", _CHILD_SOURCE,
-             json.dumps(ALLOWED_IMPORTS), str(MEMORY_LIMIT_MB)],
-            input=job,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=str(Path(__file__).parent),
-        )
+        with tempfile.TemporaryDirectory(prefix="llm-bench-") as workdir:
+            proc = subprocess.run(
+                [sys.executable, "-I", "-c", _CHILD_SOURCE,
+                 json.dumps(ALLOWED_IMPORTS), json.dumps(DENIED_IMPORTS),
+                 str(MEMORY_LIMIT_MB)],
+                input=job,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd=workdir,
+                env=env,
+            )
     except subprocess.TimeoutExpired:
         return {"error": f"timeout after {timeout}s"}
     except Exception as e:  # noqa: BLE001

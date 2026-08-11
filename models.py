@@ -52,6 +52,10 @@ class Question:
 class TokenUsage:
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    # Prompt tokens the server served from its prefix cache instead of
+    # prefilling. Both common report shapes are normalised here (vLLM's
+    # prompt_cache_hit_tokens, OpenAI's prompt_tokens_details.cached_tokens).
+    cached_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
@@ -75,6 +79,10 @@ class RequestMetrics:
     error: str | None = None
     attempts: int = 1
     streamed: bool = False
+    # Prompt tokens served from the server's prefix cache on this call. 0
+    # either means a genuine miss or that the server does not report hits;
+    # callers can only rely on it being *nonzero*.
+    cached_tokens: int = 0
 
     @property
     def decode_ms(self) -> float | None:
@@ -175,6 +183,7 @@ class CategoryResult:
         return TokenUsage(
             prompt_tokens=sum(r.tokens.prompt_tokens for r in self.results),
             completion_tokens=sum(r.tokens.completion_tokens for r in self.results),
+            cached_tokens=sum(r.tokens.cached_tokens for r in self.results),
         )
 
     @property
@@ -278,6 +287,13 @@ class ConcurrencyPoint:
     ttft: LatencyStats
     output_tokens: int
     prompt_tokens: int
+    # Per-request sustained decode rates (tok/s per stream). This is what a
+    # user actually watches; the aggregate figure can stay flat while every
+    # individual stream has already slowed to a crawl.
+    stream_tps: LatencyStats = field(default_factory=LatencyStats)
+    # Per-workload-task breakdown, keyed by task name - the mix tells you
+    # *which* shape of request hurt most at this level, aggregate stats do not.
+    task_stats: dict[str, dict] = field(default_factory=dict)
 
     @property
     def requests_per_sec(self) -> float:
@@ -305,6 +321,8 @@ class ConcurrencyPoint:
             "prompt_tokens": self.prompt_tokens,
             "latency": self.latency.to_dict(),
             "ttft": self.ttft.to_dict(),
+            "stream_tps": self.stream_tps.to_dict(),
+            "task_stats": self.task_stats,
         }
 
 
@@ -329,6 +347,16 @@ class ContextPoint:
     skipped: bool = False
     skip_reason: str = ""
     notes: list[str] = field(default_factory=list)
+    # Warm (cache-hot) pair probes re-running cold probe 0's exact prompt after
+    # the burst. warm_ttft is the warm-pair latency distribution;
+    # warm_prompt_tokens / cached_tokens are the server-reported sums so the
+    # cache benefit is measured, not inferred from a timing dip. Serial by
+    # design, after the burst, so warm TTFT is not polluted by in-flight
+    # siblings - which also means the largest sizes may see post-burst cache
+    # eviction; that is the honest answer for "what does a repeat query cost".
+    warm_ttft: LatencyStats = field(default_factory=LatencyStats)
+    warm_prompt_tokens: int = 0
+    cached_tokens: int = 0
 
     @property
     def error_rate(self) -> float:
@@ -359,6 +387,21 @@ class ContextPoint:
             return None
         return self.output_tokens / (self.wall_ms / 1000.0)
 
+    @property
+    def warm_prompt_tokens_per_sec(self) -> float | None:
+        """Prefill rate on the warm pair - the cache-hit ingestion rate.
+
+        Mirrors ``prompt_tokens_per_sec`` over the warm probes. When the server
+        reports cache hits, this and ``cached_tokens`` answer "what did the
+        prefix cache actually save"; without hits it is simply the warm TTFT
+        expressed as a rate.
+        """
+        mean_ttft = self.warm_ttft.mean
+        if not mean_ttft or mean_ttft <= 0 or not self.warm_ttft.count:
+            return None
+        avg_prompt = self.warm_prompt_tokens / self.warm_ttft.count
+        return avg_prompt / (mean_ttft / 1000.0)
+
     def to_dict(self) -> dict:
         return {
             "context_tokens": self.context_tokens,
@@ -373,8 +416,72 @@ class ContextPoint:
             "output_tokens_per_sec": self.output_tokens_per_sec,
             "latency": self.latency.to_dict(),
             "ttft": self.ttft.to_dict(),
+            "warm_ttft": self.warm_ttft.to_dict(),
+            "warm_prompt_tokens": self.warm_prompt_tokens,
+            "warm_prompt_tokens_per_sec": self.warm_prompt_tokens_per_sec,
+            "cached_tokens": self.cached_tokens,
             "skipped": self.skipped,
             "skip_reason": self.skip_reason,
+            "notes": self.notes,
+        }
+
+
+@dataclass
+class CacheProbe:
+    """One cold/warm pair against a large shared prefix.
+
+    Answers "does this stack's prefix cache help my workload" with numbers,
+    not a timing guess: ``cached_tokens`` is the server-reported hit count
+    (`prompt_cache_hit_tokens` / `prompt_tokens_details.cached_tokens`), and
+    the speedups are warm-vs-cold on an identical prompt. Prompt-level fields
+    are per-probe values; the ``cached_/warm_`` sums aggregate the warm probes
+    so a partial failure still yields a valid ratio.
+    """
+
+    prompt_tokens: int = 0         # server-reported prompt size (per probe)
+    warm_probes: int = 0
+    warm_prompt_tokens: int = 0    # summed over warm probes
+    cached_tokens: int = 0         # summed over warm probes (server-reported)
+    cold_ttft_ms: float | None = None
+    warm_ttft_ms: float | None = None      # mean over warm probes
+    cold_prefill_tokens_per_sec: float | None = None
+    warm_prefill_tokens_per_sec: float | None = None
+    notes: list[str] = field(default_factory=list)
+
+    @property
+    def cache_hit_ratio(self) -> float | None:
+        """Fraction of warm prompt tokens the cache served. None = unmeasured."""
+        if not self.warm_prompt_tokens:
+            return None
+        return self.cached_tokens / self.warm_prompt_tokens
+
+    @property
+    def ttft_speedup(self) -> float | None:
+        """cold TTFT / warm TTFT. >1 means the repeat is faster to first token."""
+        if not self.cold_ttft_ms or not self.warm_ttft_ms:
+            return None
+        return self.cold_ttft_ms / self.warm_ttft_ms
+
+    @property
+    def prefill_gain(self) -> float | None:
+        """warm prefill rate / cold prefill rate."""
+        if not self.cold_prefill_tokens_per_sec or not self.warm_prefill_tokens_per_sec:
+            return None
+        return self.warm_prefill_tokens_per_sec / self.cold_prefill_tokens_per_sec
+
+    def to_dict(self) -> dict:
+        return {
+            "prompt_tokens": self.prompt_tokens,
+            "warm_probes": self.warm_probes,
+            "warm_prompt_tokens": self.warm_prompt_tokens,
+            "cached_tokens": self.cached_tokens,
+            "cold_ttft_ms": self.cold_ttft_ms,
+            "warm_ttft_ms": self.warm_ttft_ms,
+            "cold_prefill_tokens_per_sec": self.cold_prefill_tokens_per_sec,
+            "warm_prefill_tokens_per_sec": self.warm_prefill_tokens_per_sec,
+            "cache_hit_ratio": self.cache_hit_ratio,
+            "ttft_speedup": self.ttft_speedup,
+            "prefill_gain": self.prefill_gain,
             "notes": self.notes,
         }
 
@@ -395,6 +502,17 @@ class PerfReport:
     # Load behaviour
     concurrency: list[ConcurrencyPoint] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    # Acceptance thresholds the capacity verdict is computed against. Zero or
+    # None disables that criterion. Stored on the report so a reader can see
+    # which contract the verdict refers to.
+    slo_ttft_p95_ms: float = 2000.0
+    slo_stream_tps_p50: float = 15.0
+    slo_error_rate: float = 0.01
+    # How many requests one active user generates in an hour; converts the
+    # measured request rate into "people we can serve".
+    requests_per_user_hour: float = 60.0
+    # Prefix-cache probe result; None when the phase was off or failed.
+    cache_probe: CacheProbe | None = None
 
     @property
     def peak_output_tokens_per_sec(self) -> float | None:
@@ -434,6 +552,66 @@ class PerfReport:
         ideal = base.output_tokens_per_sec * top.concurrency
         return top.output_tokens_per_sec / ideal if ideal else None
 
+    def point_meets_slo(self, point: "ConcurrencyPoint") -> bool:
+        """Whether one concurrency level satisfies every enabled SLO criterion."""
+        if self.slo_ttft_p95_ms > 0:
+            p95 = point.ttft.p95
+            if p95 is None or p95 > self.slo_ttft_p95_ms:
+                return False
+        if self.slo_stream_tps_p50 > 0:
+            tps = point.stream_tps.p50
+            if tps is None or tps < self.slo_stream_tps_p50:
+                return False
+        if self.slo_error_rate > 0 and point.error_rate > self.slo_error_rate:
+            return False
+        return True
+
+    @property
+    def slo_capacity(self) -> int | None:
+        """Largest measured concurrency that still meets the SLO.
+
+        Levels are sorted, so the highest passing level whose predecessors all
+        pass too is the capacity; a gap in the pass chain ends the search -
+        a level that "recovers" after a failing level is usually luck, not
+        headroom.
+        """
+        if not self.concurrency:
+            return None
+        capacity = None
+        for point in sorted(self.concurrency, key=lambda p: p.concurrency):
+            if not self.point_meets_slo(point):
+                break
+            capacity = point.concurrency
+        return capacity
+
+    @property
+    def capacity_users(self) -> float | None:
+        """Rough number of simultaneously active users the endpoint can serve.
+
+        ``slo_capacity`` is in-flight requests, not people: between requests a
+        user reads the answer and thinks. With ``requests_per_user_hour`` r, a
+        think time of (3600/r - request duration) follows, and the Little's-law
+        mapping is users = c * 3600 / (3600 - c*r*L/1000), where L is the mean
+        request latency in ms at the knee. When the request duration alone
+        consumes the whole think budget (c*r*L/1000 approaches 3600) the model
+        breaks down and None is returned instead of an absurd figure.
+        """
+        if not self.concurrency or self.requests_per_user_hour <= 0:
+            return None
+        capacity = self.slo_capacity
+        if capacity is None:
+            return None
+        point = next(
+            (p for p in self.concurrency if p.concurrency == capacity), None
+        )
+        mean_ms = point.latency.mean if point else None
+        if not mean_ms:
+            return None
+        service_s = capacity * self.requests_per_user_hour * mean_ms / 3600_000.0
+        if service_s >= 0.95:
+            return None
+        return capacity / (1.0 - service_s)
+
     def to_dict(self) -> dict:
         return {
             "model": self.model,
@@ -448,6 +626,13 @@ class PerfReport:
             "peak_requests_per_sec": self.peak_requests_per_sec,
             "saturation_concurrency": self.saturation_concurrency,
             "scaling_efficiency": self.scaling_efficiency,
+            "slo_ttft_p95_ms": self.slo_ttft_p95_ms,
+            "slo_stream_tps_p50": self.slo_stream_tps_p50,
+            "slo_error_rate": self.slo_error_rate,
+            "requests_per_user_hour": self.requests_per_user_hour,
+            "slo_capacity": self.slo_capacity,
+            "capacity_users": self.capacity_users,
+            "cache_probe": self.cache_probe.to_dict() if self.cache_probe else None,
             "concurrency": [p.to_dict() for p in self.concurrency],
             "notes": self.notes,
         }

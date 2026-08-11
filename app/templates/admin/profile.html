@@ -20,6 +20,18 @@
     </div>
     {% endif %}
 
+    {% if request.query_params.get('error') == '3' %}
+    <div class="p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
+        This account has no local password (OIDC login). Ask an admin to set a password for you first.
+    </div>
+    {% endif %}
+
+    {% if request.query_params.get('error') == '4' %}
+    <div class="p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
+        New password must be at most 72 bytes.
+    </div>
+    {% endif %}
+
     {% if request.query_params.get('success') %}
     <div class="p-3 bg-emerald-900/50 border border-emerald-700 rounded-lg text-emerald-200 text-sm">
         Password updated successfully.

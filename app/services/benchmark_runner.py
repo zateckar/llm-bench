@@ -49,13 +49,22 @@ def start_benchmark(
     run_context: bool = False,
     context_sizes: tuple[int, ...] = (),
     context_concurrency: int | tuple[int, ...] = 4,
+    # None/empty keeps the PerfConfig default for each knob.
+    workload_mix: str = "uniform",
+    shared_prefix: bool = False,
+    slo_ttft_ms: float | None = None,
+    slo_tps: float | None = None,
+    slo_errors: float | None = None,
+    req_per_user_h: float | None = None,
 ) -> None:
     """Start a benchmark run in a background thread."""
     thread = threading.Thread(
         target=_run_benchmark,
         args=(run_id, model, category, limit, test_ids, difficulty, workers,
               run_perf, concurrency_levels, run_context, context_sizes,
-              context_concurrency),
+              context_concurrency,
+              workload_mix, shared_prefix, slo_ttft_ms, slo_tps,
+              slo_errors, req_per_user_h),
         daemon=True,
     )
     thread.start()
@@ -224,7 +233,13 @@ def _run_benchmark(
     concurrency_levels: tuple[int, ...],
     run_context: bool,
     context_sizes: tuple[int, ...],
-    context_concurrency: int,
+    context_concurrency: int | tuple[int, ...],
+    workload_mix: str,
+    shared_prefix: bool,
+    slo_ttft_ms: float | None,
+    slo_tps: float | None,
+    slo_errors: float | None,
+    req_per_user_h: float | None,
 ) -> None:
     from app.config import TESTS_DIR
     from app.services.url_guard import UnsafeURLError, validate_endpoint
@@ -381,7 +396,12 @@ def _run_benchmark(
 
         perf_json: str | None = None
         if run_perf:
-            perf_json = _run_perf_phase(run_id, config, concurrency_levels)
+            perf_json = _run_perf_phase(
+                run_id, config, concurrency_levels,
+                workload_mix=workload_mix, shared_prefix=shared_prefix,
+                slo_ttft_ms=slo_ttft_ms, slo_tps=slo_tps,
+                slo_errors=slo_errors, req_per_user_h=req_per_user_h,
+            )
 
         if run_context and context_sizes:
             perf_json = _merge_context_phase(
@@ -441,13 +461,62 @@ def _merge_context_phase(
     return json.dumps(base)
 
 
+def build_perf_config(
+    concurrency_levels: tuple[int, ...],
+    *,
+    workload_mix: str = "uniform",
+    shared_prefix: bool = False,
+    slo_ttft_ms: float | None = None,
+    slo_tps: float | None = None,
+    slo_errors: float | None = None,
+    req_per_user_h: float | None = None,
+):
+    """Assemble the PerfConfig the admin form describes.
+
+    Kept separate from the network phase so the form -> config wiring can be
+    tested without stubbing threads and sockets.
+    """
+    import perf
+    from perf import PerfConfig
+
+    kwargs: dict = {
+        "concurrency_levels": tuple(sorted(set(concurrency_levels))),
+        "shared_prefix": bool(shared_prefix),
+    }
+    if workload_mix and workload_mix != "uniform":
+        kwargs["workload_mix"] = perf.WORKLOAD_MIX
+    for key, value in (
+        ("slo_ttft_p95_ms", slo_ttft_ms),
+        ("slo_stream_tps_p50", slo_tps),
+        ("slo_error_rate", slo_errors),
+        ("requests_per_user_hour", req_per_user_h),
+    ):
+        if value is not None:
+            kwargs[key] = value
+    return PerfConfig(**kwargs)
+
+
 def _run_perf_phase(
-    run_id: int, config: ClientConfig, concurrency_levels: tuple[int, ...]
+    run_id: int,
+    config: ClientConfig,
+    concurrency_levels: tuple[int, ...],
+    *,
+    workload_mix: str = "uniform",
+    shared_prefix: bool = False,
+    slo_ttft_ms: float | None = None,
+    slo_tps: float | None = None,
+    slo_errors: float | None = None,
+    req_per_user_h: float | None = None,
 ) -> str | None:
     """Run the performance suite, reporting progress. Never fails the whole run."""
-    from perf import PerfConfig, run_perf_suite
+    from perf import run_perf_suite
 
-    perf_config = PerfConfig(concurrency_levels=tuple(sorted(set(concurrency_levels))))
+    perf_config = build_perf_config(
+        concurrency_levels,
+        workload_mix=workload_mix, shared_prefix=shared_prefix,
+        slo_ttft_ms=slo_ttft_ms, slo_tps=slo_tps,
+        slo_errors=slo_errors, req_per_user_h=req_per_user_h,
+    )
     expected = perf_config.total_requests()
     _update_progress(run_id, "", 0, expected, "Starting performance suite", "perf")
 

@@ -10,9 +10,13 @@ Quality benchmarks say whether a model is *right*; this module says whether it i
   after the first token so queueing and prefill do not flatter the number.
 * **Prefill throughput** - prompt tokens per second, estimated from TTFT on a
   deliberately long prompt with a 1-token generation cap.
-* **Concurrency / capacity** - a sweep over concurrency levels reporting
-  aggregate requests/s and tokens/s, latency degradation, and error rate. This is
-  what tells you whether concurrency buys throughput or only queueing delay.
+* **Concurrency / capacity** - an open-loop sweep over concurrency levels:
+  requests are scheduled to arrive on a wall-clock cadence instead of one
+  worker waiting for its previous request, so a server that falls behind is
+  actually measured falling behind (a closed-loop worker pool self-throttles
+  and never surfaces queueing). Each level reports aggregate requests/s and
+  tokens/s, per-stream decode rate, SLO verdicts, and error rate - this is
+  what tells you how many users the stack can serve before it hurts.
 
 Every phase can be run independently; a phase that fails records a note rather
 than aborting the sweep.
@@ -21,13 +25,21 @@ than aborting the sweep.
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 from llm_client import ChatClient, ClientConfig
-from models import ConcurrencyPoint, ContextPoint, LatencyStats, PerfReport, RequestMetrics
+from models import (
+    CacheProbe,
+    ConcurrencyPoint,
+    ContextPoint,
+    LatencyStats,
+    PerfReport,
+    RequestMetrics,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +66,28 @@ _FILLER = (
     "sway above the harbour and the tide retreats across the flats. "
 )
 
+# The prefix-cache probe uses a *different* filler from ``_FILLER`` so chunks
+# the prefill/context phases already pushed through a prefix cache do not warm
+# this probe's cold request - that would silently understate the cold/warm gap.
+_CACHE_FILLER = (
+    "Under a copper sky the observatory catalogues slow drift of granite buoys "
+    "and tallymen count the gulls that never land. "
+)
+
+
+def _cache_probe_prompt(run_nonce: int, target_tokens: int) -> str:
+    """One large prompt for the cold/warm prefix-cache pair.
+
+    The per-run nonce at the head keeps this run's prefix distinct from other
+    runs (and from phases that share ``_FILLER``); the warm probes reuse the
+    identical string so the cache can hit.
+    """
+    repeats = max(1, int(target_tokens * 4 / len(_CACHE_FILLER)))
+    return (
+        f"Cache probe {run_nonce}:\n" + (_CACHE_FILLER * repeats) +
+        "\n\nAcknowledge with exactly: OK."
+    )
+
 
 @dataclass
 class PerfConfig:
@@ -72,15 +106,38 @@ class PerfConfig:
 
     concurrency_levels: tuple[int, ...] = DEFAULT_CONCURRENCY_LEVELS
     # Requests fired at each level. A level always sends at least `concurrency`
-    # requests so every worker slot is used; see `requests_for_level`.
+    # requests so every scheduled arrival exists; see `requests_for_level`.
     requests_per_level: int = 8
     load_max_tokens: int = 96
+    # Load shape. None keeps the classic uniform count-to-80 probe; a mix of
+    # chat/summarize/codegen models what an organisation actually sends.
+    workload_mix: tuple[WorkloadTask, ...] | None = None
+    # Shared prompt prefix reused across every load probe of a level. Serving
+    # stacks with prefix caching serve this much better than nonce-everywhere
+    # probes - which is what production traffic actually looks like.
+    shared_prefix: bool = False
+
+    # Acceptance thresholds the capacity verdict is computed against. They
+    # model "would a colleague find this usable", not "is the server up":
+    # users notice first-token delay above ~2 s and stop trusting answers that
+    # stream slower than reading speed.
+    slo_ttft_p95_ms: float = 2000.0
+    slo_stream_tps_p50: float = 15.0
+    slo_error_rate: float = 0.01
+    # How many requests one active user generates in an hour; converts the
+    # measured request rate into "people we can serve". A 0 stops that
+    # estimate from being reported.
+    requests_per_user_hour: float = 60.0
 
     # Phase toggles, so a slow endpoint can be probed cheaply.
     measure_serial: bool = True
     measure_decode: bool = True
     measure_prefill: bool = True
     measure_concurrency: bool = True
+    # Cold/warm probe against a large shared prefix: 1 cold + this many
+    # identical warm requests, reporting cache hit ratio and speedups.
+    measure_prefix_cache: bool = True
+    prefix_cache_warm_probes: int = 2
 
     # Per-request retries during perf measurement. Retries distort timing, so a
     # perf request gets exactly one attempt and a failure is counted as an error.
@@ -89,19 +146,22 @@ class PerfConfig:
     def requests_for_level(self, level: int) -> int:
         """How many requests a given concurrency level will fire.
 
-        At least one per worker slot, so a level above ``requests_per_level`` is
-        not measured with idle workers. Levels are also given a couple of rounds
-        per slot where that is cheap, so the in-flight count reaches a steady
-        state instead of only capturing ramp-up and drain.
+        At least one per scheduled arrival, so a level above
+        ``requests_per_level`` is not measured with idle capacity. Levels are
+        also given a couple of rounds where that is cheap, so the in-flight
+        count reaches a steady state instead of only capturing ramp-up and
+        drain.
         """
         return max(level * MIN_ROUNDS_PER_LEVEL, self.requests_per_level)
 
     def total_requests(self) -> int:
         """Upper bound on how many API calls the suite will make.
 
-        This drives the progress display, so it has to match what the sweep
-        actually fires - using ``len(levels) * requests_per_level`` here reported
-        72 requests for a sweep that sent several hundred.
+        This drives the progress display. When concurrency is on, the open-loop
+        levels may be re-measured at up to three times the configured budget
+        (short probes scale sub-linearly with c, so a long-requested level
+        would otherwise only cover ramp-up), and the knee refinement may probe
+        one additional pair of midpoint levels once.
         """
         total = self.warmup_requests
         if self.measure_serial:
@@ -111,10 +171,13 @@ class PerfConfig:
         if self.measure_prefill:
             total += 3
         if self.measure_concurrency:
-            total += sum(
+            base = sum(
                 self.requests_for_level(level)
                 for level in sorted(set(self.concurrency_levels))
             )
+            total += base * 3 + 2 * max(self.requests_per_level, 1)
+        if self.measure_prefix_cache:
+            total += 1 + max(0, self.prefix_cache_warm_probes)
         return total
 
 
@@ -122,6 +185,8 @@ class PerfConfig:
 class _Sample:
     metrics: RequestMetrics
     text: str = ""
+    # Which workload task produced the probe, for per-task SLO insight.
+    task: str = ""
 
     @property
     def ok(self) -> bool:
@@ -161,6 +226,71 @@ def _count_prompt(nonce: int, upto: int = 150) -> str:
     )
 
 
+# --- Workload mix -----------------------------------------------------------
+# Real traffic is not one synthetic prompt: it is mostly short Q&A, with a
+# tail of long summarisation and a codegen/drafting block. Tasks encode the
+# three shapes and each probe picks one by weight, so the load phase measures
+# the mix an organisation actually sends - and prefix-sharing stacks get to
+# show the caching they will do in production.
+
+
+@dataclass(frozen=True)
+class WorkloadTask:
+    """One shape of request in the load mix. weight is relative."""
+
+    name: str
+    weight: int
+    prompt_tokens: int
+    max_tokens: int
+
+
+WORKLOAD_MIX: tuple[WorkloadTask, ...] = (
+    WorkloadTask("chat", weight=60, prompt_tokens=48, max_tokens=32),
+    WorkloadTask("summarize", weight=25, prompt_tokens=1200, max_tokens=96),
+    WorkloadTask("codegen", weight=15, prompt_tokens=200, max_tokens=160),
+)
+
+
+DEFAULT_WORKLOAD_MIX: tuple[WorkloadTask, ...] = WORKLOAD_MIX
+
+
+def _expand_mix(mix: tuple[WorkloadTask, ...]) -> list[WorkloadTask]:
+    """Weights -> a flat, interleaved bag; the sampler draws round-robin.
+
+    Tasks are interleaved rather than concatenated so a level with few probes
+    still sees every task shape - concatenating weights would feed a 10-probe
+    level nothing but the heaviest task.
+    """
+    bag: list[WorkloadTask] = []
+    rounds = max((task.weight for task in mix), default=1)
+    for _ in range(rounds):
+        bag.extend(mix)
+    return bag or [WorkloadTask("chat", 1, 48, 32)]
+
+
+def _task_prompt(task: WorkloadTask, nonce: int, shared_prefix: str) -> str:
+    """A task-shaped prompt; the shared prefix is prepend-only so prefix
+    caches see the same leading tokens on every probe of this level."""
+    tail_nonce = f" r{nonce}"
+    marker = f"[{task.name}] "
+    if task.name == "summarize":
+        filler_repeats = max(1, int(task.prompt_tokens * 4 / len(_FILLER)))
+        return (
+            f"{shared_prefix}{marker}Document{tail_nonce}:\n" + (_FILLER * filler_repeats) +
+            f"\n\nSummarise the document in at most {task.max_tokens} tokens."
+        )
+    if task.name == "codegen":
+        return (
+            f"{shared_prefix}{marker}Code task{tail_nonce}: write a Python function "
+            "f(n) returning the sum of squares 1..n, with a docstring and "
+            "a type hint. Code only."
+        )
+    return (
+        f"{shared_prefix}{marker}Q{tail_nonce}: give a two-sentence practical tip about "
+        "staying focused during long meetings."
+    )
+
+
 def _long_prompt(nonce: int, target_tokens: int) -> str:
     repeats = max(1, int(target_tokens * 4 / len(_FILLER)))
     return (
@@ -185,6 +315,10 @@ def run_perf_suite(
         model=config.model,
         endpoint=config.base_url,
         streaming=config.stream,
+        slo_ttft_p95_ms=perf.slo_ttft_p95_ms,
+        slo_stream_tps_p50=perf.slo_stream_tps_p50,
+        slo_error_rate=perf.slo_error_rate,
+        requests_per_user_hour=perf.requests_per_user_hour,
     )
 
     client = ChatClient(config)
@@ -276,7 +410,7 @@ def run_perf_suite(
                 "prompt_tokens)."
             )
 
-    # --- phase 4: concurrency sweep -----------------------------------------
+    # --- phase 4: open-loop concurrency sweep with knee refinement -----------
     if perf.measure_concurrency:
         levels, dropped = normalise_levels(perf.concurrency_levels)
         if dropped:
@@ -284,36 +418,215 @@ def run_perf_suite(
                 f"Concurrency level(s) {', '.join(str(d) for d in dropped)} were skipped: "
                 f"levels must be between 1 and {MAX_CONCURRENCY}."
             )
-        for level in levels:
-            point = _run_concurrency_level(
-                config, level, perf, attempts, lambda n=1: tick(f"load c={level}", n)
-            )
-            report.concurrency.append(point)
-            if point.error_rate >= 0.5:
-                report.notes.append(
-                    f"Concurrency {level}: {point.errors}/{point.requests} requests "
-                    "failed; the endpoint is rate limiting or saturated. Higher "
-                    "levels were still measured but are not comparable."
-                )
-            elif point.errors:
-                report.notes.append(
-                    f"Concurrency {level}: {point.errors}/{point.requests} requests failed. "
-                    "Throughput is computed from the successful requests only, so it "
-                    "understates capacity at this level."
-                )
-        high = [p.concurrency for p in report.concurrency
-                if p.concurrency > CLIENT_OVERHEAD_CONCURRENCY]
-        if high:
-            report.notes.append(
-                f"Level(s) {', '.join(str(h) for h in high)} exceed "
-                f"{CLIENT_OVERHEAD_CONCURRENCY} in-flight requests. At that point the load "
-                "generator's own thread scheduling and socket handling contribute to the "
-                "measured latency, so treat those rows as a lower bound on the endpoint's "
-                "capacity rather than an exact figure. Run the sweep from a host close to "
-                "the endpoint, or from several hosts, to push higher."
-            )
+        if levels:
+            _run_capacity_sweep(config, perf, report, levels, attempts, tick)
+
+    # --- phase 5: prefix-cache cold/warm probe --------------------------------
+    if perf.measure_prefix_cache:
+        _run_cache_probe(config, perf, report, attempts, tick)
 
     return report
+
+
+def _run_cache_probe(
+    config: ClientConfig,
+    perf: PerfConfig,
+    report: PerfReport,
+    attempts: int,
+    tick,
+) -> None:
+    """One cold request against a large shared prefix, then warm repeats.
+
+    Measures whether the endpoint's prefix cache helps a repeated long prompt:
+    the server-reported hit count plus the warm-vs-cold TTFT/prefill delta.
+    Runs after the load sweep so any cache state the sweep left behind is the
+    *point* (a hot cache is what production looks like), and uses a filler the
+    prefill/context phases never emit so the cold request is genuinely cold.
+    A failure records a note and leaves ``report.cache_probe`` as None rather
+    than aborting the suite.
+    """
+    run_nonce = int(time.time() * 1000) % 1_000_000
+    prompt = _cache_probe_prompt(run_nonce, perf.prefill_prompt_tokens)
+    client = ChatClient(config)
+    try:
+        cold = _probe(client, prompt, 8, attempts)
+        tick("prefix cache")
+        if not cold.ok:
+            report.notes.append(
+                "Prefix-cache probe failed on the cold request; cache benefit not measured."
+            )
+            return
+
+        warm: list[_Sample] = []
+        for _ in range(max(0, perf.prefix_cache_warm_probes)):
+            warm.append(_probe(client, prompt, 8, attempts))
+            tick("prefix cache")
+        warm_ok = [s for s in warm if s.ok]
+        if not warm_ok:
+            report.notes.append("Prefix-cache probe produced no successful warm request.")
+            return
+
+        def _prefill(s: _Sample) -> float | None:
+            pt, ttft = s.metrics.prompt_tokens, s.metrics.ttft_ms
+            # NaN is truthy, so a NaN ttft would slip past a plain truthiness
+            # check and poison the whole prefill average; guard explicitly.
+            if pt is not None and pt >= 0 and ttft is not None and math.isfinite(ttft) and ttft > 0:
+                return pt / (ttft / 1000.0)
+            return None
+
+        warm_ttfts = [s.metrics.ttft_ms for s in warm_ok if s.metrics.ttft_ms is not None]
+        # ``is not None``, not truthiness: a legitimately computed 0.0 rate is a
+        # valid sample and must not be dropped from the average.
+        warm_prefill = [r for r in (_prefill(s) for s in warm_ok) if r is not None]
+        report.cache_probe = CacheProbe(
+            prompt_tokens=cold.metrics.prompt_tokens,
+            warm_probes=len(warm_ok),
+            warm_prompt_tokens=sum(s.metrics.prompt_tokens for s in warm_ok),
+            cached_tokens=sum(s.metrics.cached_tokens for s in warm_ok),
+            cold_ttft_ms=cold.metrics.ttft_ms,
+            warm_ttft_ms=(
+                sum(warm_ttfts) / len(warm_ttfts) if warm_ttfts else None
+            ),
+            cold_prefill_tokens_per_sec=_prefill(cold),
+            warm_prefill_tokens_per_sec=(
+                sum(warm_prefill) / len(warm_prefill) if warm_prefill else None
+            ),
+        )
+        if report.cache_probe.cold_ttft_ms is None or not warm_ttfts:
+            report.cache_probe.notes.append(
+                "TTFT unavailable (endpoint not streaming); only the hit ratio is reliable."
+            )
+        if report.cache_probe.cached_tokens == 0 and report.cache_probe.warm_prompt_tokens:
+            report.cache_probe.notes.append(
+                "Server reported no prefix-cache hits; either it does not cache, this "
+                "prompt is not cacheable at this size, or it does not report hits."
+            )
+    finally:
+        client.session.close()
+
+
+def _run_capacity_sweep(
+    config: ClientConfig,
+    perf: PerfConfig,
+    report: PerfReport,
+    levels: tuple[int, ...],
+    attempts: int,
+    tick,
+) -> None:
+    """Measure each requested level open-loop, then bisect the SLO knee.
+
+    Two passes over the grid:
+
+    1. the configured levels, which answer "how far did I ask to push";
+    2. one refinement round that inserts the midpoint of every adjacent
+       (highest passing, lowest failing) level pair, so the capacity verdict
+       is not just the coarsest grid point below the knee.
+
+    A level whose SLO failure is pure error-rate (the endpoint is rate
+    limiting or refusing) is a different signal from a level whose latency
+    and per-stream rate degrade: the first marks the configured cap, the
+    second the serving stack's actual limit, and the report notes say which.
+    """
+    measured: dict[int, ConcurrencyPoint] = {}
+
+    def measure(level: int) -> ConcurrencyPoint:
+        point = measured.get(level)
+        if point is None:
+            point = _open_loop_level(
+                config, level, perf.requests_for_level(level), perf, report, attempts,
+                lambda n=1: tick(f"load c={level}", n),
+            )
+            measured[level] = point
+        return point
+
+    for level in levels:
+        measure(level)
+
+    for _ in range(REFINEMENT_ROUNDS):
+        ordered = sorted(measured)
+        verdict = {c: report.point_meets_slo(measured[c]) for c in ordered}
+        # Adjacent pass->fail pairs bound the knee; bisect each of them once.
+        gaps = [
+            (low, high)
+            for low, high in zip(ordered, ordered[1:])
+            if verdict[low] and not verdict[high] and high - low > 1
+        ]
+        if not gaps:
+            break
+        for low, high in gaps:
+            mid = (low + high) // 2
+            measure(mid)
+
+    report.concurrency = [measured[c] for c in sorted(measured)]
+
+    for point in report.concurrency:
+        verdict = report.point_meets_slo(point)
+        if point.error_rate >= 0.5 and verdict:
+            report.notes.append(
+                f"Concurrency {point.concurrency}: {point.errors}/{point.requests} requests "
+                "failed; the endpoint is rate limiting or saturated. Higher "
+                "levels were still measured but are not comparable."
+            )
+        elif point.errors and verdict:
+            report.notes.append(
+                f"Concurrency {point.concurrency}: {point.errors}/{point.requests} requests failed. "
+                "Throughput is computed from the successful requests only, so it "
+                "understates capacity at this level."
+            )
+
+    capacity = report.slo_capacity
+    measured_levels = sorted(measured)
+    if capacity is not None:
+        knee = next(
+            (c for c in measured_levels if c > capacity and not report.point_meets_slo(measured[c])),
+            None,
+        )
+        cause = _knee_cause(report, measured[knee]) if knee is not None else ""
+        report.notes.append(
+            f"Meets SLO up to c={capacity}"
+            + (f"; fails at c={knee} ({cause})." if knee is not None else " (highest measured level).")
+        )
+    elif measured_levels:
+        first = measured[measured_levels[0]]
+        cause = _knee_cause(report, first)
+        report.notes.append(
+            f"Fails SLO already at c={measured_levels[0]} ({cause}); try lower levels "
+            "or relax the SLO thresholds."
+        )
+
+    high = [p.concurrency for p in report.concurrency
+            if p.concurrency > CLIENT_OVERHEAD_CONCURRENCY]
+    if high:
+        report.notes.append(
+            f"Level(s) {', '.join(str(h) for h in high)} exceed "
+            f"{CLIENT_OVERHEAD_CONCURRENCY} in-flight requests. At that point the load "
+            "generator's own thread scheduling and socket handling contribute to the "
+            "measured latency, so treat those rows as a lower bound on the endpoint's "
+            "capacity rather than an exact figure. Run the sweep from a host close to "
+            "the endpoint, or from several hosts, to push higher."
+        )
+
+
+def _knee_cause(report: PerfReport, point: ConcurrencyPoint) -> str:
+    """Which SLO criterion(s) a failing level tripped, in plain language."""
+    causes = []
+    if report.slo_ttft_p95_ms > 0:
+        p95 = point.ttft.p95
+        if p95 is None or p95 > report.slo_ttft_p95_ms:
+            causes.append(
+                f"p95 TTFT {'unavailable' if p95 is None else f'{p95:.0f} ms'} "
+                f"> {report.slo_ttft_p95_ms:.0f} ms"
+            )
+    if report.slo_stream_tps_p50 > 0:
+        tps = point.stream_tps.p50
+        if tps is None or tps < report.slo_stream_tps_p50:
+            causes.append(
+                f"per-stream decode {'unavailable' if tps is None else f'{tps:.1f} tok/s'} "
+                f"< {report.slo_stream_tps_p50:.1f} tok/s"
+            )
+    if report.slo_error_rate > 0 and point.error_rate > report.slo_error_rate:
+        causes.append(f"errors {point.error_rate * 100:.0f}% > {report.slo_error_rate * 100:.0f}%")
+    return ", ".join(causes) or "unknown"
 
 
 def normalise_levels(levels) -> tuple[tuple[int, ...], tuple[int, ...]]:
@@ -336,35 +649,99 @@ def normalise_levels(levels) -> tuple[tuple[int, ...], tuple[int, ...]]:
     return tuple(sorted(set(accepted))), tuple(sorted(set(dropped)))
 
 
-def _run_concurrency_level(
+# Beyond the nominal grid the knee between adjacent levels is refined with one
+# extra level per gap; the extra probe runs against a cached session so its
+# cost is bounded by the en-route request budget.
+REFINEMENT_ROUNDS = 1
+
+
+def _open_loop_level(
     config: ClientConfig,
     level: int,
+    count: int,
     perf: PerfConfig,
+    report: PerfReport,
     attempts: int,
     tick,
 ) -> ConcurrencyPoint:
-    """Fire ``perf.requests_for_level(level)`` requests with ``level`` in flight."""
-    count = perf.requests_for_level(level)
-    results: list[_Sample] = []
+    """Schedule ``count`` requests on a wall-clock cadence with ``level`` in the
+    air at a time *if the server keeps up*.
 
-    # One client per worker thread, reused across that thread's requests. Building
-    # a fresh Session per request would mean a new TCP and TLS handshake every
-    # time, which at high concurrency measures connection setup rather than the
-    # endpoint - and would leave hundreds of sockets in TIME_WAIT.
+    A closed loop (one worker per slot, next request when the previous
+    finishes) cannot find a capacity limit: when the server slows down the
+    load slows with it, and the collapse never shows up. Here the schedule is
+    absolute - request k is due at k / level of a nominal request duration -
+    and late submissions are recorded as lateness, so an overloaded level
+    shows up first in TTFT/latency and per-stream rate, then in error rate,
+    exactly the way an operator sees it.
+    """
+    start = time.perf_counter()
+
+    # Nominal request duration guessing: the suite's serial phase has already
+    # measured a short round trip at c=1. Scale it by the load probe's token
+    # count to estimate what one load request costs the server, then derive
+    # each request's scheduled offset. This turns the probe count into a
+    # duration rather than a guess: a slow endpoint gets few, widely spaced
+    # probes, which is exactly when the open-loop cadence matters.
+    nominal_s: float | None = None
+    decoded = report.decode_tokens_per_sec
+    if report.serial_latency.count and report.serial_latency.mean:
+        # serial probes ask for 24 tokens; a load request asks for 96, and
+        # past c=1 the prefill part is unchanged. Linearity in tokens is rough
+        # but beats a constant.
+        nominal_s = (report.serial_latency.mean / 1000.0) * (perf.load_max_tokens / 24.0)
+    elif decoded:
+        nominal_s = perf.load_max_tokens / decoded
+    interval_s = (nominal_s or 1.0) / level
+    # Never less than one request per worker slot per nominal duration - an
+    # endpoint that answers instantly would otherwise fire thousands of
+    # requests in a second.
+    count = max(count, level * MIN_ROUNDS_PER_LEVEL)
+
+    executor = ThreadPoolExecutor(max_workers=min(MAX_CONCURRENCY, level * 4))
     local = threading.local()
+    clients: list[ChatClient] = []
+    clients_lock = threading.Lock()
 
-    def job(idx: int) -> _Sample:
+    # A shared preamble, prepend-only across every probe of this level: prefix
+    # caches see the same leading tokens and serve the way they would under
+    # real org traffic. A nonce at the head of the suffix keeps the *cache key*
+    # fresh (otherwise the whole mix collapses onto one cache line).
+    prefix = _FILLER * 40 if perf.shared_prefix else ""
+    mix_bag = _expand_mix(perf.workload_mix) if perf.workload_mix else None
+
+    def job(idx: int, scheduled_s: float) -> _Sample:
+        now = time.perf_counter() - start
+        if now < scheduled_s:
+            time.sleep(scheduled_s - now)
         worker = getattr(local, "client", None)
         if worker is None:
             worker = _new_client(config)
             local.client = worker
+            # Register every created client so its session's sockets can be
+            # closed once the level finishes; thread-local clients would
+            # otherwise leak one requests.Session per worker thread per level.
+            with clients_lock:
+                clients.append(worker)
+        if mix_bag is not None:
+            task = mix_bag[idx % len(mix_bag)]
+            sample = _probe(
+                worker, _task_prompt(task, idx, prefix), task.max_tokens, attempts,
+            )
+            sample.task = task.name
+            return sample
         return _probe(
-            worker, _count_prompt(5000 + idx, upto=80), perf.load_max_tokens, attempts,
+            worker, prefix + _count_prompt(5000 + idx, upto=80),
+            perf.load_max_tokens, attempts,
         )
 
-    started = time.perf_counter()
-    with ThreadPoolExecutor(max_workers=level) as pool:
-        futures = [pool.submit(job, i) for i in range(count)]
+    try:
+        started = time.perf_counter()
+        futures = [
+            executor.submit(job, i, i * interval_s)
+            for i in range(count)
+        ]
+        results: list[_Sample] = []
         for future in as_completed(futures):
             try:
                 results.append(future.result())
@@ -373,9 +750,31 @@ def _run_concurrency_level(
                     _Sample(metrics=RequestMetrics(ok=False, error=str(e)))
                 )
             tick()
+    finally:
+        executor.shutdown(wait=True)
+        for client in clients:
+            client.session.close()
     wall_ms = (time.perf_counter() - started) * 1000.0
 
     ok = [s for s in results if s.ok]
+    # Per-task breakdown: latency + per-stream rate grouped by task name,
+    # so the report can show which workload shape trips the SLO first.
+    task_stats: dict[str, dict] = {}
+    if mix_bag is not None:
+        for name in {t.name for t in perf.workload_mix or ()}:
+            task_ok = [s for s in ok if s.task == name]
+            if not task_ok:
+                continue
+            task_stats[name] = {
+                "count": len(task_ok),
+                "latency_ms": LatencyStats.from_samples(
+                    [s.metrics.latency_ms for s in task_ok]
+                ).to_dict(),
+                "stream_tps": LatencyStats.from_samples(
+                    [s.metrics.output_tokens_per_sec
+                     for s in task_ok if s.metrics.output_tokens_per_sec is not None]
+                ).to_dict(),
+            }
     return ConcurrencyPoint(
         concurrency=level,
         requests=len(results),
@@ -387,6 +786,11 @@ def _run_concurrency_level(
         ),
         output_tokens=sum(s.metrics.completion_tokens for s in ok),
         prompt_tokens=sum(s.metrics.prompt_tokens for s in ok),
+        stream_tps=LatencyStats.from_samples(
+            [s.metrics.output_tokens_per_sec
+             for s in ok if s.metrics.output_tokens_per_sec is not None]
+        ),
+        task_stats=task_stats,
     )
 
 
@@ -454,6 +858,12 @@ class ContextSweepConfig:
     # changes spot-check cost, not how the model answers. 8 tokens gets TTFT,
     # prefill cost and usage back without paying decode at 1M scale.
     probe_max_tokens: int = 8
+    # Extra "warm" probes per grid cell that re-run cold probe 0's *identical*
+    # prompt after the burst, so a prefix cache shows up as a warm-vs-cold
+    # TTFT/prefill difference rather than polluting the cold number. 0 disables
+    # the pairing. Serial by design so warm TTFT is not polluted by in-flight
+    # siblings.
+    warm_probes: int = 1
 
     def levels_for_size(self, size: int) -> tuple[int, ...]:
         """Concurrency levels actually measured at ``size``.
@@ -501,12 +911,22 @@ class ContextSweepConfig:
         """Upper bound on API calls, for progress reporting and cost planning.
 
         Sums over the whole (size, level) grid, so the progress display cannot
-        under-report what a multi-level sweep is about to spend.
+        under-report what a multi-level sweep is about to spend. Warm-pair
+        probes are counted per cell; skipped/refused cells fire fewer (this is
+        an upper bound, same as for short-circuited levels).
         """
-        return sum(
-            self.probes_for_size(size, level)
+        cells = sum(
+            1
             for size in sorted(set(self.context_sizes))
             for level in self.levels_for_size(size)
+        )
+        return (
+            sum(
+                self.probes_for_size(size, level)
+                for size in sorted(set(self.context_sizes))
+                for level in self.levels_for_size(size)
+            )
+            + cells * max(0, self.warm_probes)
         )
 
 
@@ -623,7 +1043,7 @@ def _run_context_job(
     timeout = sweep.timeout_for_size(size)
     nonce_base = 10_000 + (size + level) % 10_000
 
-    def job(idx: int) -> _Sample:
+    def probe(prompt: str) -> _Sample:
         # Each probe gets its own client config so the per-size timeout
         # cannot leak into the next size's measurements.
         worker_config = ClientConfig(
@@ -642,14 +1062,18 @@ def _run_context_job(
         )
         client = ChatClient(worker_config)
         try:
-            return _probe(
-                client,
-                _context_prompt(nonce_base + idx, size),
-                sweep.probe_max_tokens,
-                attempts,
-            )
+            return _probe(client, prompt, sweep.probe_max_tokens, attempts)
         finally:
             client.session.close()
+
+    def job(idx: int) -> _Sample:
+        # Cold probes get a per-probe nonce so server-side caching cannot make
+        # later probes of the burst look artificially fast.
+        return probe(_context_prompt(nonce_base + idx, size))
+
+    def warm_job() -> _Sample:
+        # Re-run cold probe 0's exact prompt - the cache is now warm.
+        return probe(_context_prompt(nonce_base, size))
 
     started = time.perf_counter()
     results: list[_Sample] = []
@@ -676,6 +1100,18 @@ def _run_context_job(
         skip_reason = results[0].metrics.error or "context length exceeded"
 
     ok = [s for s in results if s.ok]
+
+    # Warm pair: only worth firing when cold probe 0 was actually served -
+    # there is nothing to warm against otherwise. Keyed on the first cold
+    # result, not the burst aggregate, so a cell whose probes all failed for a
+    # non-context reason does not waste warm budget either.
+    warm_results: list[_Sample] = []
+    if sweep.warm_probes > 0 and not skipped and results and results[0].ok:
+        for _ in range(sweep.warm_probes):
+            warm_results.append(warm_job())
+            tick()
+    warm_ok = [s for s in warm_results if s.ok]
+
     point = ContextPoint(
         context_tokens=size,
         concurrency=concurrency,
@@ -690,6 +1126,11 @@ def _run_context_job(
         output_tokens=sum(s.metrics.completion_tokens for s in ok),
         skipped=skipped,
         skip_reason=skip_reason,
+        warm_ttft=LatencyStats.from_samples(
+            [s.metrics.ttft_ms for s in warm_ok if s.metrics.ttft_ms is not None]
+        ),
+        warm_prompt_tokens=sum(s.metrics.prompt_tokens for s in warm_ok),
+        cached_tokens=sum(s.metrics.cached_tokens for s in warm_ok),
     )
     if sweep.concurrency_levels:
         requested = max(
@@ -735,21 +1176,26 @@ def format_context_sweep_markdown(points: list[ContextPoint]) -> str:
         "show `n/a` there. 'skipped' means the endpoint rejected the size outright.",
         "",
         "| Context (tokens) | Concurrency | Probes | Errors | p50 latency | p95 latency | "
-        "TTFT mean | Prefill tok/s | Output tok/s | Note |",
+        "TTFT mean | Prefill tok/s | Warm TTFT | Warm prefill tok/s | Cached tok | "
+        "Probe output tok/s | Note |",
         "|------------------|-------------|--------|--------|-------------|-------------|"
-        "-----------|-----------------|----------------|------|",
+        "-----------|-----------------|-----------|--------------------|------------|"
+        "-----------------------|------|",
     ]
     for point in sorted(points, key=lambda p: (p.context_tokens, p.concurrency)):
         if point.skipped:
             note = point.skip_reason or "context limit"
             lines.append(
-                f"| {point.context_tokens:,} | - | {point.requests} | - | - | - | - | - | - | skipped: {note} |"
+                f"| {point.context_tokens:,} | - | {point.requests} | - | - | - | - | - | - | - | - | - | skipped: {note} |"
             )
             continue
+        cached = f"{point.cached_tokens:,}" if point.cached_tokens else "-"
         lines.append(
             f"| {point.context_tokens:,} | {point.concurrency} | {point.requests} "
             f"| {point.errors} | {_ms(point.latency.p50)} | {_ms(point.latency.p95)} "
             f"| {_ms(point.ttft.mean)} | {_rate(point.prompt_tokens_per_sec)} "
+            f"| {_ms(point.warm_ttft.mean)} | {_rate(point.warm_prompt_tokens_per_sec)} "
+            f"| {cached} "
             f"| {_rate(point.output_tokens_per_sec)} | {'; '.join(point.notes) or ''} |"
         )
     lines.append("")
@@ -787,6 +1233,21 @@ def format_perf_markdown(report: PerfReport) -> str:
         f"- **Peak aggregate output**: {_rate(report.peak_output_tokens_per_sec)}",
         f"- **Peak request rate**: {_rate(report.peak_requests_per_sec, 'req/s')}",
     ]
+    capacity = report.slo_capacity
+    if capacity is not None:
+        slo_bits = []
+        if report.slo_ttft_p95_ms > 0:
+            slo_bits.append(f"p95 TTFT <= {report.slo_ttft_p95_ms:.0f} ms")
+        if report.slo_stream_tps_p50 > 0:
+            slo_bits.append(f"p50 per-stream decode >= {report.slo_stream_tps_p50:.1f} tok/s")
+        if report.slo_error_rate > 0:
+            slo_bits.append(f"errors <= {report.slo_error_rate * 100:.0f}%")
+        users = report.capacity_users
+        lines.append(
+            f"- **Meets SLO up to**: concurrency {capacity}"
+            + (f" (~{users:.0f} active users)" if users else "")
+            + (" (" + ", ".join(slo_bits) + ")" if slo_bits else "")
+        )
     if report.saturation_concurrency:
         lines.append(
             f"- **Saturation point**: concurrency {report.saturation_concurrency} "
@@ -796,6 +1257,20 @@ def format_perf_markdown(report: PerfReport) -> str:
         lines.append(
             f"- **Scaling efficiency at max concurrency**: "
             f"{report.scaling_efficiency * 100:.0f}% of linear"
+        )
+    cp = report.cache_probe
+    if cp is not None:
+        parts = []
+        if cp.cache_hit_ratio is not None:
+            parts.append(f"hit ratio {cp.cache_hit_ratio * 100:.0f}%")
+        if cp.ttft_speedup is not None:
+            parts.append(f"TTFT {cp.ttft_speedup:.1f}x faster warm")
+        if cp.prefill_gain is not None:
+            parts.append(f"prefill {cp.prefill_gain:.1f}x")
+        detail = " · ".join(parts) if parts else "measured (no TTFT/hits to compare)"
+        lines.append(
+            f"- **Prefix cache**: {detail} "
+            f"({cp.prompt_tokens:,}-token prompt, {cp.warm_probes} warm probe(s))"
         )
     lines.append("")
 
@@ -819,15 +1294,16 @@ def format_perf_markdown(report: PerfReport) -> str:
         lines += [
             "### Concurrency sweep",
             "",
-            "| Concurrency | Requests | Errors | Req/s | Output tok/s | p50 latency | p95 latency | p50 TTFT |",
-            "|-------------|----------|--------|-------|--------------|-------------|-------------|----------|",
+            "| Concurrency | Requests | Errors | Req/s | Aggregate tok/s | Per-stream tok/s | p50 latency | p95 latency | p50 TTFT |",
+            "|-------------|----------|--------|-------|-----------------|------------------|-------------|-------------|----------|",
         ]
         for point in sorted(report.concurrency, key=lambda p: p.concurrency):
             marker = "*" if point.concurrency > CLIENT_OVERHEAD_CONCURRENCY else ""
+            stream = _rate(point.stream_tps.p50)
             lines.append(
                 f"| {point.concurrency}{marker} | {point.requests} | {point.errors} "
                 f"({point.error_rate * 100:.0f}%) | {point.requests_per_sec:.2f} | "
-                f"{point.output_tokens_per_sec:.1f} | {_ms(point.latency.p50)} | "
+                f"{point.output_tokens_per_sec:.1f} | {stream} | {_ms(point.latency.p50)} | "
                 f"{_ms(point.latency.p95)} | {_ms(point.ttft.p50)} |"
             )
         if any(p.concurrency > CLIENT_OVERHEAD_CONCURRENCY for p in report.concurrency):
@@ -863,12 +1339,31 @@ def format_perf_console(report: PerfReport) -> str:
         ),
     ]
     for point in sorted(report.concurrency, key=lambda p: p.concurrency):
+        stream = _rate(point.stream_tps.p50)
         lines.append(
             f"    c={point.concurrency:<3} {point.requests_per_sec:6.2f} req/s  "
-            f"{point.output_tokens_per_sec:7.1f} tok/s  "
+            f"{point.output_tokens_per_sec:7.1f} tok/s  {stream:>12}/stream  "
             f"p50 {_ms(point.latency.p50):>9}  p95 {_ms(point.latency.p95):>9}  "
             f"errors {point.errors}/{point.requests}"
         )
+    capacity = report.slo_capacity
+    if capacity is not None:
+        users = report.capacity_users
+        lines.append(
+            f"  SLO capacity: c={capacity}"
+            + (f" (~{users:.0f} active users at {report.requests_per_user_hour:.0f} req/user/h)"
+               if users else "")
+        )
+    cp = report.cache_probe
+    if cp is not None:
+        bits = []
+        if cp.cache_hit_ratio is not None:
+            bits.append(f"hits {cp.cache_hit_ratio * 100:.0f}%")
+        if cp.ttft_speedup is not None:
+            bits.append(f"TTFT {cp.ttft_speedup:.1f}x")
+        if cp.prefill_gain is not None:
+            bits.append(f"prefill {cp.prefill_gain:.1f}x")
+        lines.append(f"  cache    {' | '.join(bits) if bits else 'measured'}")
     for note in report.notes:
         lines.append(f"  ! {note}")
     return "\n".join(lines)

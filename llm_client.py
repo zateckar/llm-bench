@@ -82,8 +82,6 @@ class ChatClient:
         answer.
         """
         cfg = self.config
-        want_stream = cfg.stream if stream is None else stream
-        want_stream = want_stream and self._streaming_supported
         attempts_allowed = cfg.max_retries if retries is None else retries
         attempts_allowed = max(1, attempts_allowed)
 
@@ -95,6 +93,10 @@ class ChatClient:
         last_error = "unknown error"
         for attempt in range(attempts_allowed):
             started = time.perf_counter()
+            # Recomputed per attempt: a fallback branch below may clear the
+            # capability flags, and the next retry must honour that instead
+            # of re-sending the payload that was just rejected.
+            want_stream = (cfg.stream if stream is None else stream) and self._streaming_supported
             try:
                 if want_stream:
                     text, usage, ttft = self._stream_once(messages, max_tokens)
@@ -105,9 +107,16 @@ class ChatClient:
                 # detection (e.g. context-window overflows) pattern-matches
                 # text that only exists there.
                 last_error = str(e)
-                if e.status == 400 and want_stream and self._stream_usage_supported:
-                    # A gateway that rejects stream_options: drop it and retry
-                    # immediately without consuming a backoff cycle.
+                if (
+                    e.status == 400
+                    and want_stream
+                    and self._stream_usage_supported
+                    and "stream_options" in e.body.lower()
+                ):
+                    # A gateway complaining about stream_options: drop it and
+                    # retry immediately without consuming a backoff cycle. The
+                    # body must implicate the field — an unrelated 400 must not
+                    # disable usage reporting for the client's lifetime.
                     logger.info("Endpoint rejected stream_options; disabling it")
                     self._stream_usage_supported = False
                     continue
@@ -121,7 +130,6 @@ class ChatClient:
                     # just a request error.
                     logger.info("Endpoint rejected streaming; falling back to blocking")
                     self._streaming_supported = False
-                    want_stream = False
                     continue
                 if not e.retryable:
                     # A permanent 4xx (401, 403, 413, ...) will fail the same
@@ -147,6 +155,7 @@ class ChatClient:
                 ok=True,
                 attempts=attempt + 1,
                 streamed=want_stream,
+                cached_tokens=usage.cached_tokens,
             )
             return text, usage, metrics
 
@@ -192,10 +201,7 @@ class ChatClient:
         data = resp.json()
         text = _extract_message_text(data.get("choices") or [{}])
         usage_raw = data.get("usage") or {}
-        usage = TokenUsage(
-            prompt_tokens=int(usage_raw.get("prompt_tokens") or 0),
-            completion_tokens=int(usage_raw.get("completion_tokens") or 0),
-        )
+        usage = _parse_usage(usage_raw)
         if not usage.completion_tokens and text:
             usage.completion_tokens = _estimate_tokens(text)
         return text, usage, None
@@ -223,7 +229,10 @@ class ChatClient:
         usage = TokenUsage()
 
         try:
-            for line in resp.iter_lines(decode_unicode=True):
+            # Raw bytes, decoded per line: ``decode_unicode=True`` raises
+            # UnicodeDecodeError when a multi-byte character is split across
+            # TCP chunks, aborting a healthy stream.
+            for raw_line in resp.iter_lines():
                 if time.perf_counter() - started > self.config.timeout * 2:
                     # ``timeout`` bounds each socket op, not the whole stream;
                     # a server trickling one byte per minute otherwise holds
@@ -232,8 +241,9 @@ class ChatClient:
                     raise _StreamDeadlineExceeded(
                         f"stream deadline exceeded after {self.config.timeout * 2:.0f}s"
                     )
-                if not line:
+                if not raw_line:
                     continue
+                line = raw_line.decode("utf-8", errors="replace")
                 if not line.startswith("data:"):
                     continue
                 payload = line[5:].strip()
@@ -246,10 +256,7 @@ class ChatClient:
 
                 usage_raw = event.get("usage")
                 if usage_raw:
-                    usage = TokenUsage(
-                        prompt_tokens=int(usage_raw.get("prompt_tokens") or 0),
-                        completion_tokens=int(usage_raw.get("completion_tokens") or 0),
-                    )
+                    usage = _parse_usage(usage_raw)
 
                 for choice in event.get("choices") or []:
                     delta = choice.get("delta") or {}
@@ -309,6 +316,26 @@ class _RetryableStatus(Exception):
 
 class _StreamDeadlineExceeded(Exception):
     """The response stream stayed open past the total wall-clock deadline."""
+
+
+def _parse_usage(usage_raw: dict) -> TokenUsage:
+    """Normalise the `usage` JSON object into TokenUsage.
+
+    Prefix-cache hit counts arrive in two divergent shapes: vLLM-style emits a
+    top-level ``prompt_cache_hit_tokens``, OpenAI-style nests it under
+    ``prompt_tokens_details.cached_tokens``. The explicit top-level field wins;
+    anything absent or malformed coerces to 0 via the existing ``or 0`` idiom.
+    """
+    cached = usage_raw.get("prompt_cache_hit_tokens")
+    if cached is None:
+        details = usage_raw.get("prompt_tokens_details")
+        if isinstance(details, dict):
+            cached = details.get("cached_tokens")
+    return TokenUsage(
+        prompt_tokens=int(usage_raw.get("prompt_tokens") or 0),
+        completion_tokens=int(usage_raw.get("completion_tokens") or 0),
+        cached_tokens=int(cached or 0),
+    )
 
 
 def _extract_message_text(choices: list[dict]) -> str:

@@ -32,7 +32,10 @@ services:
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
 
       # --- Cookie security ----------------------------------------------------
-      - COOKIE_SECURE=true
+      # Default to false: the container serves plain HTTP, so a Secure session
+      # cookie would be dropped by browsers and logins would silently fail.
+      # Set COOKIE_SECURE=true when serving via an HTTPS reverse proxy.
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
 
       # --- OIDC (optional) ----------------------------------------------------
       - OIDC_ENABLED=${OIDC_ENABLED:-false}

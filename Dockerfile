@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: Build (install production dependencies)
 # =============================================================================
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
 # Install UV for fast dependency resolution
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -17,7 +17,7 @@ RUN uv sync --frozen --no-dev --no-editable
 # =============================================================================
 # Stage 2: Runtime
 # =============================================================================
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 # Install ca-certificates for HTTPS calls to LLM providers, and curl for
 # health-check probing. Remove apt lists to keep the image lean.
@@ -25,8 +25,9 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user (uid/gid 1000) for security.
-RUN groupadd -r llmbench && useradd -r -g llmbench -d /app -s /sbin/nologin llmbench
+# Create a non-root user (uid/gid 1000) for security. The IDs are pinned so
+# bind-mounted host directories stay readable/writable by uid/gid 1000.
+RUN groupadd -g 1000 llmbench && useradd -u 1000 -g llmbench -d /app -s /sbin/nologin llmbench
 
 WORKDIR /app
 

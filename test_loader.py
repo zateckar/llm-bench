@@ -193,7 +193,12 @@ def _parse_question(item: Any, where: str) -> Question:
             )
     elif "keywords" in item:
         evaluator = "contains_keywords"
-        expected = item.get("keywords", [])
+        keywords = item.get("keywords")
+        if not isinstance(keywords, list) or not keywords:
+            raise SuiteError(
+                f"{where} ({test_id}): 'keywords' must be a non-empty list"
+            )
+        expected = keywords
     else:
         raise SuiteError(
             f"{where} ({test_id}): no 'evaluator', 'criteria' or 'keywords' field"

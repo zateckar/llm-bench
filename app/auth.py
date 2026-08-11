@@ -11,11 +11,23 @@ from app.database import fetch_one
 serializer = URLSafeTimedSerializer(SECRET_KEY)
 
 
+# bcrypt 5.x raises ValueError instead of truncating past this limit.
+MAX_PASSWORD_BYTES = 72
+
+
 def hash_password(password: str) -> str:
+    if len(password.encode()) > MAX_PASSWORD_BYTES:
+        raise ValueError("Password must be at most 72 bytes.")
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
-def verify_password(password: str, password_hash: str) -> bool:
+def verify_password(password: str, password_hash: str | None) -> bool:
+    if not password_hash:
+        # OIDC-created accounts have no local password; no password can match.
+        return False
+    if len(password.encode()) > MAX_PASSWORD_BYTES:
+        # Could never match a hash produced by hash_password; treat as wrong.
+        return False
     return bcrypt.checkpw(password.encode(), password_hash.encode())
 
 

@@ -2,7 +2,7 @@
 name = "llm-bench"
 version = "0.1.0"
 description = "LLM quality and accuracy benchmarking web application"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",

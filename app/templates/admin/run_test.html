@@ -153,6 +153,50 @@
                     the endpoint's capacity rather than an exact measurement. The run also holds one
                     socket per in-flight request, so make sure the host's file-descriptor limit allows it.
                 </p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-700/60">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">Workload mix</label>
+                        <select name="workload_mix"
+                                class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                            <option value="uniform">Uniform (count-to-80 probes)</option>
+                            <option value="mixed">Realistic mix (chat / summarize / codegen)</option>
+                        </select>
+                        <p class="text-xs text-slate-500 mt-1">Mixed models what an organisation actually sends, so per-task stats show which shape trips the SLO first.</p>
+                    </div>
+                    <div class="flex items-start gap-3 pt-6">
+                        <input type="checkbox" name="shared_prefix" value="1" id="shared_prefix"
+                               class="mt-1 rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-blue-500">
+                        <label for="shared_prefix" class="text-sm text-slate-300 cursor-pointer">
+                            Shared prompt prefix
+                            <span class="block text-xs text-slate-500 mt-0.5">Reuse one preamble on every probe so prefix-caching stacks serve the way they will in production.</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-700/60">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">p95 TTFT ≤ ms</label>
+                        <input type="number" name="slo_ttft_ms" value="{{ slo_defaults.ttft_ms }}" min="0" step="50"
+                               class="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Per-stream ≥ tok/s</label>
+                        <input type="number" name="slo_tps" value="{{ slo_defaults.tps }}" min="0" step="1"
+                               class="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Errors ≤ %</label>
+                        <input type="number" name="slo_errors" value="{{ slo_defaults.errors_pct }}" min="0" max="100" step="0.5"
+                               class="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Req / user / h</label>
+                        <input type="number" name="req_per_user_h" value="{{ slo_defaults.req_per_user_h }}" min="1"
+                               class="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+                <p class="text-xs text-slate-500 mt-1">SLO thresholds for the capacity verdict. A level fails when p95 time-to-first-token, per-stream decode, or error rate breaches its budget.</p>
             </div>
         </div>
 

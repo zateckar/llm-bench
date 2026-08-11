@@ -21,6 +21,12 @@
     </div>
     {% endif %}
 
+    {% if request.query_params.get('error') == 'rerun-running' %}
+    <div class="p-3 bg-amber-900/50 border border-amber-700 rounded-lg text-amber-200 text-sm">
+        This run is still active; wait until it finishes before re-running errored questions.
+    </div>
+    {% endif %}
+
     <div class="flex items-center gap-4">
         <a href="/runs" class="text-slate-400 hover:text-white">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
@@ -174,7 +180,53 @@
                 </p>
                 <p class="text-xs text-slate-500">of linear at max c</p>
             </div>
+            <div>
+                <p class="text-xs text-slate-500 uppercase tracking-wider">Serves</p>
+                <p class="text-sm text-slate-200 mt-1">
+                    {% if perf.slo_capacity is not none %}
+                        c = {{ perf.slo_capacity }}
+                        {% if perf.capacity_users %} &middot; ~{{ "%.0f"|format(perf.capacity_users) }} users{% endif %}
+                    {% else %}n/a{% endif %}
+                </p>
+                <p class="text-xs text-slate-500">within SLO</p>
+            </div>
+            {% if perf.cache_probe is defined and perf.cache_probe %}
+            {% set cp = perf.cache_probe %}
+            <div>
+                <p class="text-xs text-slate-500 uppercase tracking-wider">Prefix Cache</p>
+                <p class="text-sm text-slate-200 mt-1">
+                    {% if cp.cache_hit_ratio is not none %}{{ "%.0f%%"|format(cp.cache_hit_ratio * 100) }} hits
+                    {%- elif cp.ttft_speedup is not none %}{{ "%.1f"|format(cp.ttft_speedup) }}x TTFT
+                    {%- else %}measured{% endif %}
+                </p>
+                <p class="text-xs text-slate-500">
+                    {% if cp.ttft_speedup is not none and cp.cache_hit_ratio is not none %}{{ "%.1f"|format(cp.ttft_speedup) }}x TTFT
+                    {%- endif %}
+                    {% if cp.prefill_gain is not none %} &middot; {{ "%.1f"|format(cp.prefill_gain) }}x prefill{% endif %}
+                    {%- if cp.prompt_tokens %} &middot; {{ "{:,}".format(cp.prompt_tokens) }} tok{% endif %}
+                </p>
+                {% if cp.notes %}
+                <p class="text-xs text-amber-400/80 mt-1">{{ cp.notes | join(' ') }}</p>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
+
+        {% if perf.slo_capacity is not none %}
+        <div class="rounded-lg bg-emerald-900/20 border border-emerald-800/40 p-3 flex flex-wrap items-baseline gap-x-6 gap-y-1">
+            <p class="text-sm text-emerald-300 font-medium">
+                Meets SLO up to concurrency {{ perf.slo_capacity }}
+                {%- if perf.capacity_users %} &middot; ~{{ "%.0f"|format(perf.capacity_users) }} active users{% endif %}
+            </p>
+            <p class="text-xs text-slate-400">
+                SLO:
+                {%- if perf.slo_ttft_p95_ms and perf.slo_ttft_p95_ms > 0 %} p95 TTFT &le; {{ "%.0f"|format(perf.slo_ttft_p95_ms) }} ms{% endif -%}
+                {%- if perf.slo_stream_tps_p50 and perf.slo_stream_tps_p50 > 0 %} &middot; per-stream decode &ge; {{ "%.1f"|format(perf.slo_stream_tps_p50) }} tok/s{% endif -%}
+                {%- if perf.slo_error_rate and perf.slo_error_rate > 0 %} &middot; errors &le; {{ "%.0f%%"|format(perf.slo_error_rate * 100) }}{% endif -%}
+                {%- if perf.requests_per_user_hour %} &middot; {{ "%.0f"|format(perf.requests_per_user_hour) }} req/user/h{% endif %}
+            </p>
+        </div>
+        {% endif %}
 
         <div>
             <h3 class="text-sm font-medium text-slate-300 mb-2">Single-stream latency distribution</h3>
@@ -217,8 +269,10 @@
                         <tr>
                             <th class="text-left">Concurrency</th><th class="text-left">Requests</th>
                             <th class="text-left">Errors</th><th class="text-left">Req/s</th>
-                            <th class="text-left">Output tok/s</th><th class="text-left">p50 latency</th>
+                            <th class="text-left">Aggregate tok/s</th><th class="text-left">Per-stream tok/s</th>
+                            <th class="text-left">p50 latency</th>
                             <th class="text-left">p95 latency</th><th class="text-left">p50 TTFT</th>
+                            <th class="text-left">SLO</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -237,9 +291,27 @@
                             </td>
                             <td class="text-slate-300">{{ "%.2f"|format(point.requests_per_sec) }}</td>
                             <td class="text-slate-200">{{ "%.1f"|format(point.output_tokens_per_sec) }}</td>
+                            <td class="text-slate-300">
+                                {% if point.stream_tps and point.stream_tps.p50_ms is not none %}
+                                    {{ "%.1f"|format(point.stream_tps.p50_ms) }}
+                                {% else %}-{% endif %}
+                            </td>
                             <td class="text-slate-300">{{ ms(point.latency.p50_ms) }}</td>
                             <td class="text-slate-300">{{ ms(point.latency.p95_ms) }}</td>
                             <td class="text-slate-400">{{ ms(point.ttft.p50_ms) }}</td>
+                            <td>
+                                {% set ttft_ok = (not perf.slo_ttft_p95_ms or perf.slo_ttft_p95_ms <= 0
+                                                 or (point.ttft.p95_ms is not none and point.ttft.p95_ms <= perf.slo_ttft_p95_ms)) %}
+                                {% set tps_ok = (not perf.slo_stream_tps_p50 or perf.slo_stream_tps_p50 <= 0
+                                                or (point.stream_tps and point.stream_tps.p50_ms is not none and point.stream_tps.p50_ms >= perf.slo_stream_tps_p50)) %}
+                                {% set err_ok = (not perf.slo_error_rate or perf.slo_error_rate <= 0
+                                                or point.error_rate <= perf.slo_error_rate) %}
+                                {% if ttft_ok and tps_ok and err_ok %}
+                                    <span class="text-emerald-400" title="meets every enabled SLO criterion">meets</span>
+                                {% else %}
+                                    <span class="text-red-400" title="{% if not ttft_ok %}p95 TTFT over budget; {% endif %}{% if not tps_ok %}per-stream decode below budget; {% endif %}{% if not err_ok %}error rate above budget{% endif %}">fails</span>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -279,7 +351,10 @@
                         <th class="text-left">Probes</th><th class="text-left">Errors</th>
                         <th class="text-left">p50 latency</th><th class="text-left">p95 latency</th>
                         <th class="text-left">TTFT mean</th><th class="text-left">Prefill tok/s</th>
-                        <th class="text-left">Output tok/s</th><th class="text-left">Note</th>
+                        <th class="text-left" title="TTFT on a repeated identical prompt (cache warm)">Warm TTFT</th>
+                        <th class="text-left" title="Prefill rate on the warm repeat">Warm prefill tok/s</th>
+                        <th class="text-left" title="Server-reported prefix-cache hit tokens">Cached tok</th>
+                        <th class="text-left" title="Output tokens over total wall time; includes long-context prefill, so it is not the model's decode rate">Probe output tok/s</th><th class="text-left">Note</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -304,6 +379,18 @@
                         <td>{% if point.skipped %}-{% else %}{{ ms(point.latency.p95_ms) }}{% endif %}</td>
                         <td>{% if point.skipped %}-{% else %}{{ ms(point.ttft.mean_ms) }}{% endif %}</td>
                         <td>{% if point.skipped %}-{% else %}{{ rate(point.prompt_tokens_per_sec, 'tok/s') }}{% endif %}</td>
+                        <td>{%- if point.skipped -%}-
+                            {%- elif point.warm_ttft is defined and point.warm_ttft.mean_ms is not none -%}
+                                {{ ms(point.warm_ttft.mean_ms) }}
+                            {%- else -%}-{%- endif -%}</td>
+                        <td>{%- if point.skipped -%}-
+                            {%- elif point.warm_prompt_tokens_per_sec is defined and point.warm_prompt_tokens_per_sec is not none -%}
+                                {{ rate(point.warm_prompt_tokens_per_sec, 'tok/s') }}
+                            {%- else -%}-{%- endif -%}</td>
+                        <td>{%- if point.skipped -%}-
+                            {%- elif point.cached_tokens -%}
+                                {{ "{:,}".format(point.cached_tokens) }}
+                            {%- else -%}-{%- endif -%}</td>
                         <td>{% if point.skipped %}-{% else %}{{ rate(point.output_tokens_per_sec, 'tok/s') }}{% endif %}</td>
                         <td class="text-slate-500 text-xs">
                             {{ point.skip_reason if point.skipped else (point.notes | join('; ') if point.notes else '') }}
@@ -578,6 +665,15 @@
                     data: {{ perf.concurrency | map(attribute='output_tokens_per_sec') | list | tojson }},
                     borderColor: 'rgba(16, 185, 129, 0.9)',
                     backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                    yAxisID: 'y',
+                    tension: 0.25,
+                },
+                {
+                    label: 'Per-stream decode (tok/s)',
+                    data: {{ perf.concurrency | map(attribute='stream_tps') | map(attribute='p50_ms') | list | tojson }},
+                    borderColor: 'rgba(59, 130, 246, 0.9)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                    borderDash: [5, 4],
                     yAxisID: 'y',
                     tension: 0.25,
                 },

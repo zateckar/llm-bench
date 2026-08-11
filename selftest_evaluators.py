@@ -212,6 +212,13 @@ CASES: list[Case] = [
         "Use A* search here.",
         ["a*"], PASS,
     ),
+    Case(
+        "contains_keywords",
+        "REGRESSION: a symbol-keyword at the start of a later line used to be "
+        "missed without MULTILINE",
+        "First list the target files,\n-rf then delete them.",
+        ["-rf"], PASS,
+    ),
 
     # ---------------- mcq ----------------
     Case("mcq", "letter on its own passes", "B", {"answer": "B", "options": "ABCD"}, PASS),
@@ -619,6 +626,64 @@ CASES: list[Case] = [
             {"pattern": r"--bind\s+0\.0\.0\.0", "description": "all interfaces",
              "required": False, "forbidden": True},
         ], FAIL,
+    ),
+    Case(
+        "command_correctness",
+        "REGRESSION: a Markdown blockquote echoing the forbidden flag used to "
+        "score 0 via the bare `>` prompt heuristic",
+        "Run `python3 -m http.server 8080 --bind 127.0.0.1`. Never expose it to "
+        "all interfaces:\n> Warning: --bind 0.0.0.0 listens on every interface.",
+        [
+            {"pattern": r"python3?\s+-m\s+http\.server", "description": "server", "required": True},
+            {"pattern": r"\b8080\b", "description": "port", "required": True},
+            {"pattern": r"--bind\s+127\.0\.0\.1", "description": "loopback", "required": True},
+            {"pattern": r"--bind\s+0\.0\.0\.0", "description": "all interfaces",
+             "required": False, "forbidden": True},
+        ], PASS,
+    ),
+    Case(
+        "command_correctness",
+        "REGRESSION: prose starting with '>' (greater-than sign) is not a command",
+        "Run `python3 -m http.server 8080 --bind 127.0.0.1`. The rule is "
+        "simple:\n> 1024 means --bind 0.0.0.0 is dangerously broad for port "
+        "values below 1024.",
+        [
+            {"pattern": r"python3?\s+-m\s+http\.server", "description": "server", "required": True},
+            {"pattern": r"\b8080\b", "description": "port", "required": True},
+            {"pattern": r"--bind\s+127\.0\.0\.1", "description": "loopback", "required": True},
+            {"pattern": r"--bind\s+0\.0\.0\.0", "description": "all interfaces",
+             "required": False, "forbidden": True},
+        ], PASS,
+    ),
+    Case(
+        "command_correctness",
+        "a forbidden flag on a Python-REPL prompt line still fails",
+        ">>> import http.server  # then run: python3 -m http.server 8080 --bind 0.0.0.0",
+        [
+            {"pattern": r"--bind\s+0\.0\.0\.0", "description": "all interfaces",
+             "required": False, "forbidden": True},
+        ], FAIL,
+    ),
+    Case(
+        "command_correctness",
+        "a forbidden flag on a user@host-style prompt line still fails",
+        "user@host:~$ python3 -m http.server 8080 --bind 0.0.0.0",
+        [
+            {"pattern": r"--bind\s+0\.0\.0\.0", "description": "all interfaces",
+             "required": False, "forbidden": True},
+        ], FAIL,
+    ),
+    Case(
+        "command_correctness",
+        "valid required commands on user@host and REPL prompt lines pass",
+        "user@host:~$ python3 -m http.server 8080 --bind 127.0.0.1\n>>> print('up on 127.0.0.1:8080')",
+        [
+            {"pattern": r"python3?\s+-m\s+http\.server", "description": "server", "required": True},
+            {"pattern": r"\b8080\b", "description": "port", "required": True},
+            {"pattern": r"--bind\s+127\.0\.0\.1", "description": "loopback", "required": True},
+            {"pattern": r"--bind\s+0\.0\.0\.0", "description": "all interfaces",
+             "required": False, "forbidden": True},
+        ], PASS,
     ),
 
     # ---------------- file_content_match ----------------

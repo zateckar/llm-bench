@@ -237,14 +237,17 @@ def strip_think_blocks(response: str) -> str:
 
 
 def keyword_pattern(keyword: str) -> str:
-    """Word-boundary-aware pattern for a literal keyword.
+    r"""Word-boundary-aware pattern for a literal keyword.
 
-    ``\\b`` only works next to word characters, so a keyword like ``a*`` or
-    ``3/11`` needs relaxed boundaries at the non-word end.
+    ``\b`` only works next to word characters, so a keyword like ``a*`` or
+    ``3/11`` needs a relaxed boundary at the non-word end. The boundary is
+    ``(?<=\A)`` (absolute string start, without ``re.MULTILINE``) or a
+    preceding non-word character, so ``-rf`` at the start of a later line
+    still matches.
     """
     if not keyword:
         return r"(?!x)x"  # never matches
-    start = r"\b" if (keyword[0].isalnum() or keyword[0] == "_") else r"(?:^|(?<=\W))"
+    start = r"\b" if (keyword[0].isalnum() or keyword[0] == "_") else r"(?:(?<=\A)|(?<=\W))"
     end = r"\b" if (keyword[-1].isalnum() or keyword[-1] == "_") else r"(?:$|(?=\W))"
     return start + re.escape(keyword) + end
 
@@ -1393,6 +1396,28 @@ def eval_file_content_match(response: str, expected: Any, **_) -> tuple[float, s
     return score, f"Missing: {', '.join(missed[:4])}"
 
 
+# Lines treated as command content: classic ``$ cmd`` prompts, user@host / PS1
+# variants ending in ``$`` or ``#``, tool prompts with context like ``$cmd>``,
+# and Python REPL prompts (``>>>``/``...``). A bare ``>`` (Markdown quote,
+# YAML echo, plain prose) is not a command line.
+COMMAND_PROMPT_RE = re.compile(
+    r"""
+    \s*
+    (?:
+        \$\s                # "$ cmd" (plain or after whitespace)
+      |                     # user@host / machine PS1-style, must include context
+        [^\s]*[@:][^\s]*[$#]\s
+      |                     # tool shells: ">cmd>", "$cmd>", "mysql>" ...
+        [A-Za-z0-9_$.-]+>\s
+      | >>>\s?              # Python REPL
+      | \.\.\.\s?           # Python REPL continuation
+    )
+    \S
+    """,
+    re.VERBOSE,
+)
+
+
 def eval_command_correctness(response: str, expected: Any, **_) -> tuple[float, str]:
     """Check that the response contains the right shell commands/flags.
 
@@ -1401,9 +1426,11 @@ def eval_command_correctness(response: str, expected: Any, **_) -> tuple[float, 
     could score points for commands it never produced.
 
     Forbidden patterns are matched against the *command content* only: fenced
-    code blocks, backtick-quoted inline code, and lines that start with a shell
-    prompt (``$ `` or ``> ``). Mentioning a dangerous flag in an explanatory
-    sentence ("do NOT use --bind 0.0.0.0") is not running the command.
+    code blocks, backtick-quoted inline code, and lines that start with a
+    recognizable shell or REPL prompt (``$ ``, ``$cmd>``, user@host-style
+    prompts, or Python ``>>>``/``...``). A bare blockquote/Markdown ``>``
+    doesn't count, so mentioning a dangerous flag in an explanatory sentence
+    ("do NOT use --bind 0.0.0.0") is not running the command.
     """
     entries = list(expected or [])
     if not entries:
@@ -1431,7 +1458,7 @@ def eval_command_correctness(response: str, expected: Any, **_) -> tuple[float, 
     command_text = "\n".join(
         re.findall(r"```[^\n]*\n?(.*?)```", body, re.DOTALL)
         + re.findall(r"`([^`\n]+)`", body)
-        + [line for line in body.splitlines() if re.match(r"\s*[$>]\s", line)]
+        + [line for line in body.splitlines() if COMMAND_PROMPT_RE.match(line)]
     )
     forbidden = [
         e for e in entries if e.get("forbidden")

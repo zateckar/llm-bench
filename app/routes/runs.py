@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from app.auth import get_current_user, require_admin
-from app.database import fetch_all, fetch_one, execute
+from app.database import execute, execute_transaction, fetch_all, fetch_one
 from app.templates_config import templates
 
 logger = logging.getLogger(__name__)
@@ -178,9 +178,15 @@ async def delete_run(request: Request, run_id: int):
         logger.warning("Refused to delete run %d while its status is '%s'", run_id, run["status"])
         return RedirectResponse(url=f"/runs/{run_id}?error=running", status_code=302)
 
-    await execute("DELETE FROM test_results WHERE run_id = ?", (run_id,))
-    await execute("DELETE FROM benchmark_progress WHERE run_id = ?", (run_id,))
-    await execute("DELETE FROM test_runs WHERE id = ?", (run_id,))
+    # One transaction: the child tables have no ON DELETE CASCADE, so three
+    # separate auto-committing deletes could leave orphans on failure midway.
+    await execute_transaction(
+        [
+            ("DELETE FROM test_results WHERE run_id = ?", (run_id,)),
+            ("DELETE FROM benchmark_progress WHERE run_id = ?", (run_id,)),
+            ("DELETE FROM test_runs WHERE id = ?", (run_id,)),
+        ]
+    )
 
     return RedirectResponse(url="/runs", status_code=302)
 
@@ -202,6 +208,11 @@ async def rerun_failed(request: Request, run_id: int):
     )
     if not original_run:
         return RedirectResponse(url="/runs", status_code=302)
+
+    # Re-running an in-flight run would spawn a duplicate concurrent benchmark.
+    if original_run["status"] in ("running", "pending"):
+        logger.warning("Refused to rerun failed questions of run %d while its status is '%s'", run_id, original_run["status"])
+        return RedirectResponse(url=f"/runs/{run_id}?error=rerun-running", status_code=302)
 
     # Re-run only the questions that failed for an infrastructure reason - an
     # evaluator crash or a transport error - never questions the model got wrong.

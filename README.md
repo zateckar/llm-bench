@@ -33,10 +33,10 @@ Latency and throughput are recorded for every question, and an optional dedicate
 - **Latency distribution** — p50/p90/p95/p99 and max, end to end, plus **time to first token** when the endpoint supports streaming. Reported as a distribution rather than a mean, because tail latency is what users notice.
 - **Decode throughput** — output tokens per second on a single stream, measured *after* the first token so prefill and queueing do not flatter the number.
 - **Prefill throughput** — prompt tokens per second, estimated from TTFT on a deliberately long prompt with a 1-token generation cap.
-- **Concurrency and capacity** — a sweep over concurrency levels (**1 to 256** in flight) reporting aggregate requests/s and tokens/s, latency degradation, error rate under load, the **saturation point** (the level past which extra concurrency buys latency, not throughput) and **scaling efficiency** against linear.
+- **Concurrency and capacity** — an **open-loop** sweep over concurrency levels (**1 to 256** in flight): requests are scheduled to arrive on a wall-clock cadence rather than one worker waiting on the previous request, so a server that falls behind is *measured* falling behind (a closed loop self-throttles and hides the collapse). Each level reports aggregate requests/s and tokens/s, **per-stream decode tok/s**, p95 TTFT, error rate, and an **SLO verdict**. The suite then bisects the gap between the highest passing and lowest failing level and reports an **SLO capacity** ("meets SLO up to concurrency N"), an estimated number of **active users** (Little's law from the knee's request rate and latency plus a configurable requests-per-user-hour), the **saturation point**, and **scaling efficiency** against linear. Defaults: p95 TTFT ≤ 2 s, per-stream decode ≥ 15 tok/s, errors ≤ 1%, 60 req/user/hour — all `PerfConfig` knobs.
 - **Context scalability** — a sweep over prompt sizes from **32k to 1M tokens** measuring TTFT, latency and prefill tok/s at each size. Passing several levels to `--context-concurrency` (e.g. `1,4,8`) measures the full **context × concurrency grid**: one point per (size, level), so you can see whether prefill cost grows linearly with context and whether that growth worsens under load. To bound token spend, sizes ≥ 192k clamp their concurrency to 4 by default, and a size the endpoint refuses outright (context-window error) is recorded as `skipped` instead of being dragged through guaranteed failures. The web UI draws one TTFT / prefill-tok/s line per concurrency level against context size.
 
-Each level fires at least two requests per worker slot, so the measured window contains a steady state rather than only ramp-up and drain. Above 64 in flight the load generator's own thread scheduling and socket handling start to contribute to the measured latency; those rows are marked `*` in the report and should be read as a **lower bound** on the endpoint's capacity. To push higher, run the sweep from a host close to the endpoint or from several hosts at once.
+Each scheduled level fires enough probes to cover a few nominal request durations (at least two per arrival slot), so the measured window contains a steady state rather than only ramp-up and drain. Above 64 in flight the load generator's own thread scheduling and socket handling start to contribute to the measured latency; those rows are marked `*` in the report and should be read as a **lower bound** on the endpoint's capacity. To push higher, run the sweep from a host close to the endpoint or from several hosts at once.
 
 ---
 
@@ -216,6 +216,10 @@ ENVIRONMENT=production
 SECRET_KEY=generate-a-strong-random-key-here
 ADMIN_PASSWORD=generate-a-strong-unique-password-here
 ```
+
+The container serves plain HTTP, so if you access it directly (no HTTPS
+reverse proxy in front) leave `COOKIE_SECURE` at `false` — with it `true`
+browsers refuse the session cookie and login silently loops back to /login.
 
 ### 2. Pull and start
 

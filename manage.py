@@ -18,8 +18,14 @@ async def init_db():
 
 async def create_admin(username: str, password: str, email: str = ""):
     """Create an admin user."""
-    import bcrypt
+    from app.auth import hash_password
     from app.database import get_db
+
+    try:
+        password_hash = hash_password(password)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return
 
     db = await get_db()
     try:
@@ -29,7 +35,6 @@ async def create_admin(username: str, password: str, email: str = ""):
             print(f"User '{username}' already exists.")
             return
 
-        password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
         await db.execute(
             "INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)",
             (username, email, password_hash, "admin"),

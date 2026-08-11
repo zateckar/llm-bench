@@ -130,8 +130,29 @@ async def admin_run_page(request: Request):
                 "1,16,64,256",
             ],
             "default_context_sizes": ",".join(str(s) for s in perf.DEFAULT_CONTEXT_SIZES),
+            "slo_defaults": {
+                "ttft_ms": perf.PerfConfig().slo_ttft_p95_ms,
+                "tps": perf.PerfConfig().slo_stream_tps_p50,
+                "errors_pct": perf.PerfConfig().slo_error_rate * 100,
+                "req_per_user_h": perf.PerfConfig().requests_per_user_hour,
+            },
         },
     )
+
+
+def _slo_float(raw: str, scale: float = 1.0) -> float | None:
+    """Parse one SLO threshold from the form; empty/invalid -> None so the
+    PerfConfig default applies instead of a silent 0 disabling the check."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    if value < 0:
+        return None
+    return value * scale
 
 
 @router.post("/admin/run")
@@ -147,6 +168,12 @@ async def admin_start_run(
     run_context: str = Form(""),
     context_sizes: str = Form(""),
     context_concurrency: str = Form("4"),
+    workload_mix: str = Form("uniform"),
+    shared_prefix: str = Form(""),
+    slo_ttft_ms: str = Form(""),
+    slo_tps: str = Form(""),
+    slo_errors: str = Form(""),
+    req_per_user_h: str = Form(""),
 ):
     user = _admin_required(request)
     if isinstance(user, RedirectResponse):
@@ -177,6 +204,12 @@ async def admin_start_run(
         run_context=bool(run_context),
         context_sizes=_parse_context_sizes(context_sizes),
         context_concurrency=_parse_context_concurrency(context_concurrency),
+        workload_mix=workload_mix if workload_mix in ("uniform", "mixed") else "uniform",
+        shared_prefix=bool(shared_prefix),
+        slo_ttft_ms=_slo_float(slo_ttft_ms),
+        slo_tps=_slo_float(slo_tps),
+        slo_errors=_slo_float(slo_errors, scale=0.01),
+        req_per_user_h=_slo_float(req_per_user_h),
     )
 
     return RedirectResponse(url=f"/admin/run/{run_id}/progress", status_code=302)
@@ -351,7 +384,18 @@ async def admin_create_user(
             status_code=400,
         )
 
-    password_hash = hash_password(password)
+    try:
+        password_hash = hash_password(password)
+    except ValueError as exc:
+        users = await fetch_all(
+            "SELECT id, username, email, role, oidc_sub, display_name, created_at FROM users ORDER BY username"
+        )
+        return templates.TemplateResponse(
+            request,
+            "admin/users.html",
+            {"users": users, "error": str(exc)},
+            status_code=400,
+        )
     await execute(
         "INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)",
         (username, email, password_hash, role),
@@ -407,7 +451,18 @@ async def admin_update_user(
                 {"users": users, "error": "Password must be at least 8 characters."},
                 status_code=400,
             )
-        password_hash = hash_password(password)
+        try:
+            password_hash = hash_password(password)
+        except ValueError as exc:
+            users = await fetch_all(
+                "SELECT id, username, email, role, oidc_sub, display_name, created_at FROM users ORDER BY username"
+            )
+            return templates.TemplateResponse(
+                request,
+                "admin/users.html",
+                {"users": users, "error": str(exc)},
+                status_code=400,
+            )
         await execute(
             "UPDATE users SET email = ?, role = ?, password_hash = ?, token_version = token_version + 1 WHERE id = ?",
             (email, role, password_hash, user_id),
@@ -468,13 +523,20 @@ async def update_profile(
     if not user:
         return RedirectResponse(url="/login", status_code=302)
 
+    if not user["password_hash"]:
+        # OIDC-created account with no local password to verify against.
+        return RedirectResponse(url="/admin/profile?error=3", status_code=302)
+
     if not verify_password(current_password, user["password_hash"]):
         return RedirectResponse(url="/admin/profile?error=1", status_code=302)
 
     if len(new_password) < 8:
         return RedirectResponse(url="/admin/profile?error=2", status_code=302)
 
-    password_hash = hash_password(new_password)
+    try:
+        password_hash = hash_password(new_password)
+    except ValueError:
+        return RedirectResponse(url="/admin/profile?error=4", status_code=302)
     # Bumping token_version invalidates every other session of this user,
     # including the cookie that carries this very request.
     await execute(

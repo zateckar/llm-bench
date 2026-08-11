@@ -123,11 +123,13 @@ def check_contains_keywords(report: Report, where: str, expected: object) -> Non
     n_of = expected.get("n_of")
     if n_of is not None:
         pool = n_of.get("of") or []
-        need = int(n_of.get("n", 0))
+        n = n_of.get("n", len(pool))
         if not pool:
             report.error(where, "contains_keywords n_of has an empty pool")
-        elif need < 1 or need > len(pool):
-            report.error(where, f"contains_keywords n_of.n={need} is outside 1..{len(pool)}")
+        elif isinstance(n, bool) or not isinstance(n, int):
+            report.error(where, f"contains_keywords n_of.n must be an integer, got {n!r}")
+        elif n < 1 or n > len(pool):
+            report.error(where, f"contains_keywords n_of.n={n} is outside 1..{len(pool)}")
     forbidden = {str(k).lower() for k in (expected.get("none") or [])}
     required = {
         str(k).lower()
@@ -475,9 +477,10 @@ def validate_question(report: Report, q: Question) -> None:
                 "require a specific value instead",
             )
     elif q.evaluator == "file_content_match":
-        if not isinstance(q.expected, dict) or not any(
-            q.expected.get(k) for k in ("content", "content_patterns", "file_name")
-        ):
+        if not isinstance(q.expected, dict):
+            report.error(where, "file_content_match has nothing to check")
+            return
+        if not any(q.expected.get(k) for k in ("content", "content_patterns", "file_name")):
             report.error(where, "file_content_match has nothing to check")
         for i, pattern in enumerate(q.expected.get("content_patterns") or [], 1):
             check_regex(report, where, pattern, f"content_pattern #{i}")

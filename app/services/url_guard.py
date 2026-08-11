@@ -8,8 +8,11 @@ server make authenticated requests there, leaking the bearer token or pivoting
 into the internal network.
 
 This module enforces https/http only and blocks hosts that resolve to private,
-loopback, link-local, or reserved IP ranges. Set ALLOW_PRIVATE_ENDPOINTS=true to
-opt out (e.g. for a self-hosted model on the LAN you trust).
+loopback, link-local, CGNAT, or reserved IP ranges. Setting
+ALLOW_PRIVATE_ENDPOINTS=true FULLY DISABLES this guard, including the
+DNS-rebinding protection: any URL passes and a re-resolving hostile DNS record
+can send authenticated requests to any internal address. Only use it on
+networks you fully trust (e.g. a self-hosted model on a trusted LAN).
 """
 
 from __future__ import annotations
@@ -26,6 +29,13 @@ class UnsafeURLError(ValueError):
     """Raised when a URL is not allowed by the SSRF policy."""
 
 
+# Explicitly blocked networks that the is_* heuristics miss (CGNAT is not
+# reported as private by ipaddress in modern Python).
+_BLOCKED_NETWORKS = (
+    ipaddress.ip_network("100.64.0.0/10"),  # CGNAT (RFC 6598), carrier/VPN internal
+)
+
+
 def _ip_is_blocked(ip: str) -> bool:
     addr = ipaddress.ip_address(ip)
     return (
@@ -35,6 +45,7 @@ def _ip_is_blocked(ip: str) -> bool:
         or addr.is_reserved
         or addr.is_multicast
         or addr.is_unspecified
+        or any(addr in net for net in _BLOCKED_NETWORKS)
     )
 
 
@@ -62,6 +73,8 @@ def validate_endpoint(url: str) -> str:
         infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80))
     except socket.gaierror as e:
         raise UnsafeURLError(f"could not resolve host: {e}") from e
+    except UnicodeError as e:
+        raise UnsafeURLError(f"invalid host name: {e}") from e
 
     for info in infos:
         ip = info[4][0]

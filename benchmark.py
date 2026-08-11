@@ -78,13 +78,25 @@ BASE_URL = os.getenv("OPENAI_BASE_URL", "").rstrip("/")
 API_KEY = os.getenv("OPENAI_KEY", "")
 MODEL = os.getenv("OPENAI_MODEL", "unknown")
 
-MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "4096"))
+def _env_number(name: str, raw: str, cast) -> int | float:
+    """Parse a numeric env var, failing with a readable message instead of a
+    raw ValueError traceback at import time."""
+    try:
+        return cast(raw)
+    except ValueError:
+        raise SystemExit(
+            f"ERROR: invalid value for {name}: {raw!r} — expected a number. "
+            "Fix it in your environment or .env file."
+        )
+
+
+MAX_TOKENS = _env_number("OPENAI_MAX_TOKENS", os.getenv("OPENAI_MAX_TOKENS", "4096"), int)
 # For a quality benchmark, default to deterministic decoding so results are
 # reproducible. Override with OPENAI_TEMPERATURE / OPENAI_SEED if desired.
-TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0"))
+TEMPERATURE = _env_number("OPENAI_TEMPERATURE", os.getenv("OPENAI_TEMPERATURE", "0"), float)
 _SEED_ENV = os.getenv("OPENAI_SEED")
-SEED = int(_SEED_ENV) if _SEED_ENV else None
-REQUEST_TIMEOUT = float(os.getenv("OPENAI_TIMEOUT", "180"))
+SEED = _env_number("OPENAI_SEED", _SEED_ENV, int) if _SEED_ENV else None
+REQUEST_TIMEOUT = _env_number("OPENAI_TIMEOUT", os.getenv("OPENAI_TIMEOUT", "180"), float)
 STREAM = os.getenv("OPENAI_STREAM", "true").lower() not in ("0", "false", "no")
 
 
@@ -124,6 +136,27 @@ def save_cache(cache: dict) -> None:
         # Losing the cache only costs re-running questions; it must not abort
         # an otherwise healthy run.
         logger.warning("Could not write cache file: %s", e)
+
+
+def _is_valid_cache_entry(cached) -> bool:
+    """Validate the on-disk cache schema before use.
+
+    Entries written by older tool versions (e.g. ``text`` instead of
+    ``response``, or a raw ``[response, tokens, metrics]`` tuple) would
+    otherwise raise KeyError/TypeError inside run_one and be misreported as a
+    transport error that never self-heals. Malformed entries are treated as a
+    miss instead, which also overwrites them on the next store.
+    """
+    if not isinstance(cached, dict):
+        return False
+    if not isinstance(cached.get("response"), str):
+        return False
+    if not isinstance(cached.get("latency_ms", 0.0), (int, float)):
+        return False
+    ttft = cached.get("ttft_ms")
+    if ttft is not None and not isinstance(ttft, (int, float)):
+        return False
+    return True
 
 
 def question_fingerprint(q: Question) -> str:
@@ -176,6 +209,12 @@ def run_one(q: Question, client: ChatClient, cache: dict, persist: bool = True) 
     cache_key = f"{MODEL}:{q.id}:{question_fingerprint(q)}"
     with _cache_lock:
         cached = cache.get(cache_key)
+        if cached is not None and not _is_valid_cache_entry(cached):
+            # Stale or malformed entry from an older schema: treat it as a miss
+            # and drop it so the next successful store cleans it out.
+            logger.warning("Ignoring malformed cache entry for %s", q.id)
+            cache.pop(cache_key, None)
+            cached = None
 
     if cached:
         metrics = RequestMetrics(
@@ -233,6 +272,16 @@ def run_one(q: Question, client: ChatClient, cache: dict, persist: bool = True) 
                     "ttft_ms": metrics.ttft_ms,
                     "ok": True,
                 }
+                # Reload+merge entries written by other concurrent benchmark
+                # processes since this run loaded the cache, so a plain
+                # last-writer-wins write does not silently drop their work.
+                # Best effort only: without an interprocess file lock a narrow
+                # race window remains (no locking library is used on purpose).
+                # Malformed entries are never merged back in, which lets the
+                # write clean out stale-schema entries from disk too.
+                for key, value in load_cache().items():
+                    if _is_valid_cache_entry(value):
+                        cache.setdefault(key, value)
                 save_cache(cache)
 
     return result
@@ -278,6 +327,10 @@ def run_benchmark(
 
     shared_client = ChatClient(client_config)
     worker_local = threading.local()
+    # Register every created worker client so its session's sockets can be
+    # closed once the pool finishes; thread-local clients would otherwise leak
+    # one requests.Session per worker thread until process exit.
+    worker_clients: list[ChatClient] = []
 
     def work(index: int, q: Question) -> None:
         try:
@@ -290,6 +343,8 @@ def run_benchmark(
                 if client is None:
                     client = ChatClient(client_config)
                     worker_local.client = client
+                    with print_lock:
+                        worker_clients.append(client)
             else:
                 client = shared_client
             result = run_one(q, client, cache, persist=not no_cache)
@@ -312,9 +367,13 @@ def run_benchmark(
             print(_status_line(index + 1, total, result), flush=True)
 
     if workers > 1:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            for i, q in enumerate(questions):
-                pool.submit(work, i, q)
+        try:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                for i, q in enumerate(questions):
+                    pool.submit(work, i, q)
+        finally:
+            for client in worker_clients:
+                client.session.close()
     else:
         for i, q in enumerate(questions):
             work(i, q)
@@ -621,7 +680,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--report", default="report.md", help="path for the markdown report",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    # 0 would silently mean "no limit" (running the whole suite — the opposite
+    # of the intent) and a negative value would silently slice questions off
+    # the end; reject both loudly instead.
+    if args.limit is not None and args.limit < 1:
+        parser.error(f"--limit must be a positive integer, got {args.limit}")
+    return args
 
 
 def _parse_levels(raw: str) -> tuple[int, ...]:
