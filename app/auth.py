@@ -78,5 +78,11 @@ def set_session_cookie(response: RedirectResponse, user_id: int) -> None:
 
 
 def clear_session_cookie(response: RedirectResponse) -> None:
-    """Clear session cookie."""
-    response.delete_cookie("session")
+    """Clear session cookie. Attributes must match set_cookie for browsers
+    to treat it as the same cookie."""
+    response.delete_cookie(
+        "session",
+        path="/",
+        samesite="strict",
+        secure=COOKIE_SECURE,
+    )

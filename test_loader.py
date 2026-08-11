@@ -173,8 +173,13 @@ def _parse_question(item: Any, where: str) -> Question:
                 "'evaluator', not both"
             )
         evaluator = "security_analysis"
+        criteria = item.get("criteria")
+        if not isinstance(criteria, list) or not criteria:
+            raise SuiteError(
+                f"{where} ({test_id}): 'criteria' must be a non-empty list"
+            )
         expected: Any = {
-            "criteria": item.get("criteria", []),
+            "criteria": criteria,
             "must_not": item.get("must_not", []),
         }
         if "min_criteria" in item:
@@ -232,6 +237,8 @@ def _parse_question(item: Any, where: str) -> Question:
             max_tokens = int(max_tokens)
         except (TypeError, ValueError):
             raise SuiteError(f"{where} ({test_id}): max_tokens must be an integer")
+        if max_tokens <= 0:
+            raise SuiteError(f"{where} ({test_id}): max_tokens must be positive")
 
     return Question(
         id=test_id,

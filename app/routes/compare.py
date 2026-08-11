@@ -97,7 +97,9 @@ async def compare_page(request: Request):
                     for run in selected_runs:
                         rid = run["id"]
                         r = run_results[rid].get(cat, {}).get(tid, {})
-                        entry[f"run_{rid}_score"] = r.get("score", 0)
+                        # None marks "not executed in this run"; a 0 here would
+                        # read as a genuinely zero score and skew the comparison.
+                        entry[f"run_{rid}_score"] = r.get("score")
                         entry[f"run_{rid}_detail"] = r.get("detail", "")
                     cat_results.append(entry)
 

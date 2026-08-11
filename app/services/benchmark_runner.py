@@ -84,6 +84,7 @@ def _connect() -> sqlite3.Connection:
 
     db = sqlite3.connect(str(DATABASE_PATH), timeout=30)
     db.execute("PRAGMA journal_mode=WAL")
+    db.execute("PRAGMA foreign_keys=ON")
     return db
 
 
@@ -278,91 +279,101 @@ def _run_benchmark(
         fail("No questions matched the selected filters")
         return
 
-    total = len(questions)
-    config = _build_client_config(model)
-    results: list[Result | None] = [None] * total
-    completed = 0
-    progress_lock = threading.Lock()
+    # A crash from here on must not leave the run in 'running' forever (the
+    # SSE progress loop would never terminate), so anything unexpected that
+    # escapes an inner guard fails the run loudly.
+    try:
+        total = len(questions)
+        config = _build_client_config(model)
+        results: list[Result | None] = [None] * total
+        completed = 0
+        progress_lock = threading.Lock()
 
-    _update_progress(run_id, "", 0, total, f"Loaded {total} questions", "quality")
+        _update_progress(run_id, "", 0, total, f"Loaded {total} questions", "quality")
 
-    def evaluate(q: Question, response: str) -> tuple[float, str]:
-        evaluator = EVALUATORS.get(q.evaluator)
-        if evaluator is None:
-            return 0.0, f"Unknown evaluator: {q.evaluator}"
+        def evaluate(q: Question, response: str) -> tuple[float, str]:
+            evaluator = EVALUATORS.get(q.evaluator)
+            if evaluator is None:
+                return 0.0, f"Unknown evaluator: {q.evaluator}"
+            try:
+                score, detail = evaluator(response, q.expected)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Evaluator error for %s: %s", q.id, e)
+                return 0.0, f"Evaluator error: {e}"
+            return max(0.0, min(1.0, float(score))), detail
+
+        def work(index: int, q: Question, client: ChatClient) -> None:
+            nonlocal completed
+            response, tokens, metrics = client.complete(
+                q.prompt, q.system_prompt, max_tokens=q.max_tokens
+            )
+            if metrics.ok:
+                score, detail = evaluate(q, response)
+            else:
+                score, detail = 0.0, f"Request failed: {metrics.error}"
+
+            result = Result(
+                question=q, response=response, score=score, detail=detail,
+                tokens=tokens, metrics=metrics,
+            )
+            results[index] = result
+            _store_result(run_id, index + 1, result)
+
+            with progress_lock:
+                completed += 1
+                _update_progress(
+                    run_id, f"{q.category}: {q.id}", completed, total,
+                    f"Ran {completed}/{total} questions", "quality",
+                )
+
+        started = time.perf_counter()
         try:
-            score, detail = evaluator(response, q.expected)
+            if workers > 1:
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    # One client per worker: requests.Session is not documented as
+                    # thread-safe, and sharing it would add contention to the very
+                    # latency numbers being recorded.
+                    local = threading.local()
+
+                    def job(idx: int, question: Question) -> None:
+                        client = getattr(local, "client", None)
+                        if client is None:
+                            client = ChatClient(config)
+                            local.client = client
+                        work(idx, question, client)
+
+                    futures = [pool.submit(job, i, q) for i, q in enumerate(questions)]
+                    # job() writes the result row itself, so a worker exception
+                    # means a missing row; surface it by failing the run below.
+                    for future in futures:
+                        future.result()
+            else:
+                client = ChatClient(config)
+                for i, q in enumerate(questions):
+                    work(i, q, client)
         except Exception as e:  # noqa: BLE001
-            logger.warning("Evaluator error for %s: %s", q.id, e)
-            return 0.0, f"Evaluator error: {e}"
-        return max(0.0, min(1.0, float(score))), detail
+            logger.exception("Benchmark run %d failed", run_id)
+            _summarise_and_finish(
+                run_id, results, total, workers,
+                (time.perf_counter() - started) * 1000.0, None, str(e),
+            )
+            return
 
-    def work(index: int, q: Question, client: ChatClient) -> None:
-        nonlocal completed
-        response, tokens, metrics = client.complete(
-            q.prompt, q.system_prompt, max_tokens=q.max_tokens
-        )
-        if metrics.ok:
-            score, detail = evaluate(q, response)
-        else:
-            score, detail = 0.0, f"Request failed: {metrics.error}"
+        duration_ms = (time.perf_counter() - started) * 1000.0
 
-        result = Result(
-            question=q, response=response, score=score, detail=detail,
-            tokens=tokens, metrics=metrics,
-        )
-        results[index] = result
-        _store_result(run_id, index + 1, result)
+        perf_json: str | None = None
+        if run_perf:
+            perf_json = _run_perf_phase(run_id, config, concurrency_levels)
 
-        with progress_lock:
-            completed += 1
-            _update_progress(
-                run_id, f"{q.category}: {q.id}", completed, total,
-                f"Ran {completed}/{total} questions", "quality",
+        if run_context and context_sizes:
+            perf_json = _merge_context_phase(
+                run_id, config, context_sizes, context_concurrency, perf_json
             )
 
-    started = time.perf_counter()
-    try:
-        if workers > 1:
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                # One client per worker: requests.Session is not documented as
-                # thread-safe, and sharing it would add contention to the very
-                # latency numbers being recorded.
-                local = threading.local()
-
-                def job(idx: int, question: Question) -> None:
-                    client = getattr(local, "client", None)
-                    if client is None:
-                        client = ChatClient(config)
-                        local.client = client
-                    work(idx, question, client)
-
-                for i, q in enumerate(questions):
-                    pool.submit(job, i, q)
-        else:
-            client = ChatClient(config)
-            for i, q in enumerate(questions):
-                work(i, q, client)
+        _summarise_and_finish(run_id, results, total, workers, duration_ms, perf_json, "")
     except Exception as e:  # noqa: BLE001
         logger.exception("Benchmark run %d failed", run_id)
-        _summarise_and_finish(
-            run_id, results, total, workers,
-            (time.perf_counter() - started) * 1000.0, None, str(e),
-        )
-        return
-
-    duration_ms = (time.perf_counter() - started) * 1000.0
-
-    perf_json: str | None = None
-    if run_perf:
-        perf_json = _run_perf_phase(run_id, config, concurrency_levels)
-
-    if run_context and context_sizes:
-        perf_json = _merge_context_phase(
-            run_id, config, context_sizes, context_concurrency, perf_json
-        )
-
-    _summarise_and_finish(run_id, results, total, workers, duration_ms, perf_json, "")
+        fail(str(e))
 
 
 def _merge_context_phase(

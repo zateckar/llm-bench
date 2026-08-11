@@ -112,13 +112,18 @@ def load_cache() -> dict:
     if CACHE_FILE.exists():
         try:
             return json.loads(CACHE_FILE.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            logger.warning("Cache file is corrupt; starting from an empty cache")
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
+            logger.warning("Cache file is unreadable (%s); starting from an empty cache", e)
     return {}
 
 
 def save_cache(cache: dict) -> None:
-    CACHE_FILE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
+    try:
+        CACHE_FILE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
+    except OSError as e:
+        # Losing the cache only costs re-running questions; it must not abort
+        # an otherwise healthy run.
+        logger.warning("Could not write cache file: %s", e)
 
 
 def question_fingerprint(q: Question) -> str:
@@ -266,18 +271,33 @@ def run_benchmark(
     worker_local = threading.local()
 
     def work(index: int, q: Question) -> None:
-        # One client per worker thread, not per question: sessions are not
-        # documented as thread-safe, but rebuilding the client per question
-        # makes every concurrent question pay TCP+TLS setup and unfairly
-        # inflates its recorded latency/TTFT vs. the serial path.
-        if workers > 1:
-            client = getattr(worker_local, "client", None)
-            if client is None:
-                client = ChatClient(client_config)
-                worker_local.client = client
-        else:
-            client = shared_client
-        result = run_one(q, client, cache)
+        try:
+            # One client per worker thread, not per question: sessions are not
+            # documented as thread-safe, but rebuilding the client per question
+            # makes every concurrent question pay TCP+TLS setup and unfairly
+            # inflates its recorded latency/TTFT vs. the serial path.
+            if workers > 1:
+                client = getattr(worker_local, "client", None)
+                if client is None:
+                    client = ChatClient(client_config)
+                    worker_local.client = client
+            else:
+                client = shared_client
+            result = run_one(q, client, cache)
+        except Exception as e:  # noqa: BLE001 - a buggy question must not vanish
+            # ChatClient.complete never raises for transport problems, so an
+            # exception here is an internal bug. Record it as a failed request
+            # (the same convention the client uses) rather than silently
+            # dropping the question from the report.
+            logger.error("Unexpected error running %s: %s", q.id, e, exc_info=True)
+            result = Result(
+                question=q,
+                response=f"[API ERROR: unexpected: {e}]",
+                score=0.0,
+                detail=f"Request failed: {e}",
+                tokens=TokenUsage(),
+                metrics=RequestMetrics(ok=False, error=str(e)),
+            )
         results[index] = result
         with print_lock:
             print(_status_line(index + 1, total, result), flush=True)

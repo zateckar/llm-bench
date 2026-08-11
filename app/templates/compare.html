@@ -226,18 +226,22 @@
                         {% for result in cat_data.results %}
                         {% set has_diff = false %}
                         {% for run in selected_runs %}
-                            {% set s1 = result.get('run_' + selected_runs[0].id|string + '_score', 0) %}
-                            {% set s2 = result.get('run_' + run.id|string + '_score', 0) %}
+                            {% set s1 = result.get('run_' + selected_runs[0].id|string + '_score') %}
+                            {% set s2 = result.get('run_' + run.id|string + '_score') %}
                             {% if s1 != s2 %}{% set has_diff = true %}{% endif %}
                         {% endfor %}
                         <div class="flex items-center gap-3 px-3 py-2 rounded text-sm {% if has_diff %}bg-slate-800{% else %}bg-slate-900/30{% endif %}">
                             <span class="font-mono text-xs text-slate-500 w-16">{{ result.test_id }}</span>
                             {% for run in selected_runs %}
-                            {% set score = result.get('run_' + run.id|string + '_score', 0) %}
+                            {% set score = result.get('run_' + run.id|string + '_score') %}
                             <span class="flex-1 text-center">
+                                {% if score is none %}
+                                <span class="text-slate-600" title="Test not executed in this run">&mdash;</span>
+                                {% else %}
                                 <span class="{% if score >= 0.5 %}text-emerald-400{% else %}text-red-400{% endif %}">
                                     {{ "%.0f"|format(score * 100) }}%
                                 </span>
+                                {% endif %}
                             </span>
                             {% endfor %}
                         </div>

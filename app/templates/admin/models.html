@@ -8,6 +8,10 @@
         <p class="text-slate-400 mt-1">Configure LLM models for benchmarking</p>
     </div>
 
+    {% if error %}
+    <div class="p-3 rounded-lg bg-red-900/30 border border-red-800 text-sm text-red-300">{{ error }}</div>
+    {% endif %}
+
     <!-- Existing models -->
     {% if models %}
     <div class="space-y-3">

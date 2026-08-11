@@ -82,12 +82,18 @@ def main():
     if command == "init-db":
         asyncio.run(init_db())
     elif command == "create-admin":
-        if len(sys.argv) < 4:
-            print("Usage: python manage.py create-admin <username> <password> [email]")
+        if len(sys.argv) < 3:
+            print("Usage: python manage.py create-admin <username> [email]")
             return
+        import getpass
         username = sys.argv[2]
-        password = sys.argv[3]
-        email = sys.argv[4] if len(sys.argv) > 4 else ""
+        email = sys.argv[3] if len(sys.argv) > 3 else ""
+        # Read interactively so the password never lands in shell history or
+        # the process listing.
+        password = getpass.getpass("Password: ")
+        if not password:
+            print("ERROR: password must not be empty")
+            return
         asyncio.run(create_admin(username, password, email))
     elif command == "list-users":
         asyncio.run(list_users())

@@ -85,6 +85,7 @@ class ChatClient:
         want_stream = cfg.stream if stream is None else stream
         want_stream = want_stream and self._streaming_supported
         attempts_allowed = cfg.max_retries if retries is None else retries
+        attempts_allowed = max(1, attempts_allowed)
 
         messages = []
         if system_prompt:
@@ -100,18 +101,32 @@ class ChatClient:
                 else:
                     text, usage, ttft = self._blocking_once(messages, max_tokens)
             except _RetryableStatus as e:
-                last_error = f"HTTP {e.status}"
+                # Keep the response body in the error string: downstream
+                # detection (e.g. context-window overflows) pattern-matches
+                # text that only exists there.
+                last_error = str(e)
                 if e.status == 400 and want_stream and self._stream_usage_supported:
                     # A gateway that rejects stream_options: drop it and retry
                     # immediately without consuming a backoff cycle.
                     logger.info("Endpoint rejected stream_options; disabling it")
                     self._stream_usage_supported = False
                     continue
-                if e.status in (400, 404, 501) and want_stream:
+                if (
+                    e.status in (400, 404, 501)
+                    and want_stream
+                    and "stream" in e.body.lower()
+                ):
+                    # Only an endpoint actually complaining about streaming
+                    # should turn streaming off for good; an unrelated 400 is
+                    # just a request error.
                     logger.info("Endpoint rejected streaming; falling back to blocking")
                     self._streaming_supported = False
                     want_stream = False
                     continue
+                if not e.retryable:
+                    # A permanent 4xx (401, 403, 413, ...) will fail the same
+                    # way on every attempt, so don't pay the backoff.
+                    return self._error(last_error, attempt + 1)
                 if attempt < attempts_allowed - 1:
                     self._sleep_backoff(attempt, last_error)
                     continue
@@ -209,6 +224,14 @@ class ChatClient:
 
         try:
             for line in resp.iter_lines(decode_unicode=True):
+                if time.perf_counter() - started > self.config.timeout * 2:
+                    # ``timeout`` bounds each socket op, not the whole stream;
+                    # a server trickling one byte per minute otherwise holds
+                    # the iterator open forever.
+                    resp.close()
+                    raise _StreamDeadlineExceeded(
+                        f"stream deadline exceeded after {self.config.timeout * 2:.0f}s"
+                    )
                 if not line:
                     continue
                 if not line.startswith("data:"):
@@ -279,6 +302,13 @@ class _RetryableStatus(Exception):
         super().__init__(f"HTTP {status}: {body}")
         self.status = status
         self.body = body
+        # Only statuses that may succeed on a later attempt are worth paying
+        # exponential backoff for; other 4xx are permanent failures.
+        self.retryable = status >= 500 or status in (408, 409, 425, 429)
+
+
+class _StreamDeadlineExceeded(Exception):
+    """The response stream stayed open past the total wall-clock deadline."""
 
 
 def _extract_message_text(choices: list[dict]) -> str:

@@ -641,12 +641,15 @@ def _run_context_job(
             extra_headers=config.extra_headers,
         )
         client = ChatClient(worker_config)
-        return _probe(
-            client,
-            _context_prompt(nonce_base + idx, size),
-            sweep.probe_max_tokens,
-            attempts,
-        )
+        try:
+            return _probe(
+                client,
+                _context_prompt(nonce_base + idx, size),
+                sweep.probe_max_tokens,
+                attempts,
+            )
+        finally:
+            client.session.close()
 
     started = time.perf_counter()
     results: list[_Sample] = []

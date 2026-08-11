@@ -40,25 +40,26 @@ MIGRATIONS: list[tuple[str, str, str]] = [
 
 
 async def _apply_migrations(db: aiosqlite.Connection) -> None:
-    """Add any missing columns, then backfill `passed` for pre-migration rows."""
+    """Add any missing columns, backfilling `passed` only when it is added."""
     for table, column, definition in MIGRATIONS:
         try:
             await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
         except Exception:
-            pass  # Column already exists.
+            continue  # Column already exists.
 
-    # Rows written before `passed` existed default to 0, which would report every
-    # historical run as a total failure. Backfill them with the old 0.5 rule so
-    # old runs stay readable; new rows are written with the real threshold.
-    try:
-        await db.execute(
-            """UPDATE test_results
-                  SET passed = CASE WHEN score >= 0.5 THEN 1 ELSE 0 END,
-                      pass_threshold = 0.5
-                WHERE passed = 0 AND score >= 0.5"""
-        )
-    except Exception:
-        pass
+        # Rows written before `passed` existed default to 0, which would report
+        # every historical run as a total failure. Backfill them with the old
+        # 0.5 rule so old runs stay readable. Only valid on rows from before the
+        # column existed, so this must run only when the ALTER actually
+        # happened above; on later startups it would retroactively flip
+        # current-runner rows that legitimately failed a higher threshold.
+        if table == "test_results" and column == "passed":
+            await db.execute(
+                """UPDATE test_results
+                      SET passed = CASE WHEN score >= 0.5 THEN 1 ELSE 0 END,
+                          pass_threshold = 0.5
+                    WHERE passed = 0 AND score >= 0.5"""
+            )
 
 
 async def get_db() -> aiosqlite.Connection:

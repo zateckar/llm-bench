@@ -8,9 +8,15 @@
         <p class="text-slate-400 mt-1">Change your password</p>
     </div>
 
-    {% if request.query_params.get('error') %}
+    {% if request.query_params.get('error') == '1' %}
     <div class="p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
         Current password is incorrect.
+    </div>
+    {% endif %}
+
+    {% if request.query_params.get('error') == '2' %}
+    <div class="p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
+        New password must be at least 8 characters.
     </div>
     {% endif %}
 

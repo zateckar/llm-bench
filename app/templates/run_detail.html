@@ -64,11 +64,7 @@
     </div>
 
     <!-- Run Info -->
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <div class="card p-4">
-            <p class="text-xs text-slate-500 uppercase tracking-wider">Endpoint</p>
-            <p class="text-sm text-slate-300 mt-1 font-mono truncate">{{ run.base_url }}</p>
-        </div>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div class="card p-4">
             <p class="text-xs text-slate-500 uppercase tracking-wider">Started</p>
             <p class="text-sm text-slate-300 mt-1">{{ run.started_at[:19] if run.started_at else 'N/A' }}</p>

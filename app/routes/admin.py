@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse, StreamingResponse
 import json
 import asyncio
+import sqlite3
 
 from app.auth import hash_password
 from app.database import fetch_all, fetch_one, execute
@@ -297,7 +298,16 @@ async def admin_delete_model(request: Request, model_id: int):
     if isinstance(user, RedirectResponse):
         return user
 
-    await execute("DELETE FROM models WHERE id = ?", (model_id,))
+    try:
+        await execute("DELETE FROM models WHERE id = ?", (model_id,))
+    except sqlite3.IntegrityError:
+        models = await fetch_all("SELECT * FROM models ORDER BY name")
+        return templates.TemplateResponse(
+            request,
+            "admin/models.html",
+            {"models": models, "error": "Cannot delete model: it is referenced by existing runs."},
+            status_code=400,
+        )
     return RedirectResponse(url="/admin/models", status_code=302)
 
 
@@ -330,6 +340,17 @@ async def admin_create_user(
     if isinstance(user, RedirectResponse):
         return user
 
+    if len(password) < 8:
+        users = await fetch_all(
+            "SELECT id, username, email, role, oidc_sub, display_name, created_at FROM users ORDER BY username"
+        )
+        return templates.TemplateResponse(
+            request,
+            "admin/users.html",
+            {"users": users, "error": "Password must be at least 8 characters."},
+            status_code=400,
+        )
+
     password_hash = hash_password(password)
     await execute(
         "INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)",
@@ -349,6 +370,31 @@ async def admin_update_user(
     user = _admin_required(request)
     if isinstance(user, RedirectResponse):
         return user
+
+    if role != "admin":
+        target = await fetch_one("SELECT role FROM users WHERE id = ?", (user_id,))
+        if target and target["role"] == "admin":
+            if user_id == user["id"]:
+                error = "You cannot remove your own admin role."
+            else:
+                admins = await fetch_one(
+                    "SELECT COUNT(*) AS n FROM users WHERE role = 'admin'"
+                )
+                error = (
+                    None
+                    if admins and admins["n"] > 1
+                    else "Cannot demote the last remaining admin."
+                )
+            if error:
+                users = await fetch_all(
+                    "SELECT id, username, email, role, oidc_sub, display_name, created_at FROM users ORDER BY username"
+                )
+                return templates.TemplateResponse(
+                    request,
+                    "admin/users.html",
+                    {"users": users, "error": error},
+                    status_code=400,
+                )
 
     if password:
         password_hash = hash_password(password)
@@ -373,7 +419,18 @@ async def admin_delete_user(request: Request, user_id: int):
     if user_id == user["id"]:
         return RedirectResponse(url="/admin/users", status_code=302)
 
-    await execute("DELETE FROM users WHERE id = ?", (user_id,))
+    try:
+        await execute("DELETE FROM users WHERE id = ?", (user_id,))
+    except sqlite3.IntegrityError:
+        users = await fetch_all(
+            "SELECT id, username, email, role, oidc_sub, display_name, created_at FROM users ORDER BY username"
+        )
+        return templates.TemplateResponse(
+            request,
+            "admin/users.html",
+            {"users": users, "error": "Cannot delete user: they are referenced by existing runs."},
+            status_code=400,
+        )
     return RedirectResponse(url="/admin/users", status_code=302)
 
 
@@ -403,6 +460,9 @@ async def update_profile(
 
     if not verify_password(current_password, user["password_hash"]):
         return RedirectResponse(url="/admin/profile?error=1", status_code=302)
+
+    if len(new_password) < 8:
+        return RedirectResponse(url="/admin/profile?error=2", status_code=302)
 
     password_hash = hash_password(new_password)
     await execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user["id"]))

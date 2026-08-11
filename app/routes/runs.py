@@ -3,7 +3,7 @@
 import json
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from app.auth import get_current_user, require_admin
@@ -81,7 +81,7 @@ async def run_detail(request: Request, run_id: int):
         return RedirectResponse(url="/login", status_code=302)
 
     run = await fetch_one(
-        """SELECT tr.*, m.name as model_name, m.model_id, m.base_url
+        """SELECT tr.*, m.name as model_name, m.model_id
            FROM test_runs tr
            JOIN models m ON tr.model_id = m.id
            WHERE tr.id = ?""",
@@ -166,7 +166,7 @@ async def run_detail(request: Request, run_id: int):
 async def delete_run(request: Request, run_id: int):
     try:
         await require_admin(request)
-    except Exception:
+    except HTTPException:
         return RedirectResponse(url="/login", status_code=302)
 
     await execute("DELETE FROM test_results WHERE run_id = ?", (run_id,))
@@ -181,7 +181,7 @@ async def rerun_failed(request: Request, run_id: int):
     """Create a new run with only the failed questions from a previous run."""
     try:
         user = await require_admin(request)
-    except Exception:
+    except HTTPException:
         return RedirectResponse(url="/login", status_code=302)
 
     # Get the original run
