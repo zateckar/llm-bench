@@ -38,6 +38,7 @@ from evaluators import EVALUATORS
 from llm_client import ChatClient, ClientConfig
 from models import (
     CategoryResult,
+    ContextPoint,
     LatencyStats,
     PerfReport,
     Question,
@@ -47,9 +48,12 @@ from models import (
 )
 from perf import (
     MAX_CONCURRENCY,
+    ContextSweepConfig,
     PerfConfig,
+    format_context_sweep_markdown,
     format_perf_console,
     format_perf_markdown,
+    run_context_sweep,
     run_perf_suite,
 )
 from test_loader import SuiteError, compute_test_suite_hash, load_all_tests
@@ -259,10 +263,20 @@ def run_benchmark(
     started = time.perf_counter()
 
     shared_client = ChatClient(client_config)
+    worker_local = threading.local()
 
     def work(index: int, q: Question) -> None:
-        # One client per worker: sessions are not documented as thread-safe.
-        client = ChatClient(client_config) if workers > 1 else shared_client
+        # One client per worker thread, not per question: sessions are not
+        # documented as thread-safe, but rebuilding the client per question
+        # makes every concurrent question pay TCP+TLS setup and unfairly
+        # inflates its recorded latency/TTFT vs. the serial path.
+        if workers > 1:
+            client = getattr(worker_local, "client", None)
+            if client is None:
+                client = ChatClient(client_config)
+                worker_local.client = client
+        else:
+            client = shared_client
         result = run_one(q, client, cache)
         results[index] = result
         with print_lock:
@@ -326,6 +340,7 @@ def generate_report(
     elapsed_s: float = 0.0,
     perf: PerfReport | None = None,
     workers: int = 1,
+    context_points: list | None = None,
 ) -> str:
     """Generate a markdown report from results."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -372,7 +387,9 @@ def generate_report(
         lines += ["", "---", ""]
         if perf is not None:
             lines.append(format_perf_markdown(perf))
-        else:
+        if context_points:
+            lines.append(format_context_sweep_markdown(context_points))
+        if perf is None and not context_points:
             lines.append("_No questions were run and no performance suite was requested._")
         return "\n".join(lines)
 
@@ -421,6 +438,8 @@ def generate_report(
 
     if perf is not None:
         lines += ["", "---", "", format_perf_markdown(perf)]
+    if context_points:
+        lines.append(format_context_sweep_markdown(context_points))
 
     lines += ["---", "", "## Detailed Results", ""]
 
@@ -551,6 +570,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="serial latency samples (default 8)",
     )
     parser.add_argument(
+        "--context-sweep", action="store_true",
+        help="also measure latency and TTFT at a range of prompt context sizes",
+    )
+    parser.add_argument(
+        "--context-sizes", default="",
+        help="comma-separated context sizes in tokens "
+             "(default " + ",".join(str(s) for s in ContextSweepConfig().context_sizes) + ")",
+    )
+    parser.add_argument(
+        "--context-concurrency", default="4",
+        help="comma-separated context-sweep concurrency levels; sizes below 192k "
+             "are measured at every level, larger sizes are clamped to "
+             "ContextSweepConfig.max_large_concurrency (default 4)",
+    )
+    parser.add_argument(
         "--no-cache", action="store_true",
         help="ignore the response cache and re-query the model",
     )
@@ -584,6 +618,32 @@ def _parse_levels(raw: str) -> tuple[int, ...]:
     if not levels:
         raise SystemExit("No concurrency levels given")
     return tuple(sorted(set(levels)))
+
+
+def _parse_context_sizes(raw: str) -> tuple[int, ...]:
+    """Parse --context-sizes into sorted de-duplicated token counts.
+
+    An empty string keeps the ContextSweepConfig defaults; malformed entries
+    fail loudly like --concurrency does.
+    """
+    if not raw.strip():
+        return ()
+    sizes = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            value = int(part)
+        except ValueError:
+            raise SystemExit(f"Invalid context size: {part!r}")
+        if value < 1000:
+            raise SystemExit(
+                f"Context size {value} is too small to measure usefully; give the size "
+                "in tokens, e.g. 32000."
+            )
+        sizes.append(value)
+    return tuple(sorted(set(sizes)))
 
 
 def main() -> None:
@@ -655,8 +715,42 @@ def main() -> None:
         print(" " * 60, end="\r")
         print(format_perf_console(perf_report))
 
+    context_points: list[ContextPoint] | None = None
+    if args.context_sweep:
+        context_levels = _parse_levels(args.context_concurrency)
+        sweep_config = ContextSweepConfig(
+            context_sizes=_parse_context_sizes(args.context_sizes),
+            # A single level means exactly the old single-level sweep; the grid
+            # only engages when the operator actually asks for several levels.
+            concurrency_per_size=context_levels[0],
+            concurrency_levels=context_levels if len(context_levels) > 1 else (),
+        )
+        print(
+            f"\nRunning context scalability sweep "
+            f"(~{sweep_config.total_requests()} requests)..."
+        )
+
+        def ctx_progress(phase: str, done: int, total: int) -> None:
+            print(f"  [{done}/{total}] {phase}", end="\r", flush=True)
+
+        context_points = run_context_sweep(
+            client_config, sweep_config, progress=ctx_progress
+        )
+        print(" " * 60, end="\r")
+        for point in context_points:
+            if point.skipped:
+                print(f"  ctx {point.context_tokens:>9,}: skipped ({point.skip_reason})")
+            else:
+                print(
+                    f"  ctx {point.context_tokens:>9,}: c={point.concurrency} "
+                    f"ttft {point.ttft.mean or 0:8.0f} ms  "
+                    f"p50 {point.latency.p50 or 0:8.0f} ms  "
+                    f"errors {point.errors}/{point.requests}"
+                )
+
     report = generate_report(
-        categories, test_suite_hash, elapsed_s=elapsed, perf=perf_report, workers=workers
+        categories, test_suite_hash, elapsed_s=elapsed, perf=perf_report,
+        workers=workers, context_points=context_points,
     )
     report_path = Path(args.report)
     if not report_path.is_absolute():
@@ -671,6 +765,13 @@ def main() -> None:
         perf_path = report_path.with_suffix(".perf.json")
         perf_path.write_text(json.dumps(perf_report.to_dict(), indent=2), encoding="utf-8")
         print(f"Perf JSON saved to: {perf_path}")
+
+    if context_points is not None:
+        ctx_path = report_path.with_suffix(".context.json")
+        ctx_path.write_text(
+            json.dumps([p.to_dict() for p in context_points], indent=2), encoding="utf-8"
+        )
+        print(f"Context sweep JSON saved to: {ctx_path}")
 
     if categories:
         scored = [r for c in categories for r in c.scored]

@@ -34,6 +34,7 @@ Latency and throughput are recorded for every question, and an optional dedicate
 - **Decode throughput** — output tokens per second on a single stream, measured *after* the first token so prefill and queueing do not flatter the number.
 - **Prefill throughput** — prompt tokens per second, estimated from TTFT on a deliberately long prompt with a 1-token generation cap.
 - **Concurrency and capacity** — a sweep over concurrency levels (**1 to 256** in flight) reporting aggregate requests/s and tokens/s, latency degradation, error rate under load, the **saturation point** (the level past which extra concurrency buys latency, not throughput) and **scaling efficiency** against linear.
+- **Context scalability** — a sweep over prompt sizes from **32k to 1M tokens** measuring TTFT, latency and prefill tok/s at each size. Passing several levels to `--context-concurrency` (e.g. `1,4,8`) measures the full **context × concurrency grid**: one point per (size, level), so you can see whether prefill cost grows linearly with context and whether that growth worsens under load. To bound token spend, sizes ≥ 192k clamp their concurrency to 4 by default, and a size the endpoint refuses outright (context-window error) is recorded as `skipped` instead of being dragged through guaranteed failures. The web UI draws one TTFT / prefill-tok/s line per concurrency level against context size.
 
 Each level fires at least two requests per worker slot, so the measured window contains a steady state rather than only ramp-up and drain. Above 64 in flight the load generator's own thread scheduling and socket handling start to contribute to the measured latency; those rows are marked `*` in the report and should be read as a **lower bound** on the endpoint's capacity. To push higher, run the sweep from a host close to the endpoint or from several hosts at once.
 
@@ -137,6 +138,17 @@ uv run python selftest_evaluators.py
 - **No false passes.** Every evaluator has at least one adversarial case — a plausible-looking wrong answer — that must score below the pass bar. Each corresponds to a real scoring defect: a number that appears only as an intermediate step, half the required keywords, required steps in the wrong order, a correct label under the wrong item number, a response that hedges and then fabricates specifics, a review that finds most issues and then declares the code secure.
 - **No false failures.** Every evaluator has correct answers that must score 1.0, including awkward-but-valid forms: an `int` where the fixture says `float`, a tuple where it says a list, a dict with different key ordering, and a reasoning model's `<think>` block preceding the real answer.
 - **End to end.** A hand-written ideal answer and a hand-written lazy answer are run through real questions from `tests/`, and must pass and fail respectively.
+
+### Evaluation methodology & known limitations
+
+Scoring is entirely rule-based — there is no second LLM acting as a judge. That makes grades reproducible and free of judge bias, but it also means grading is syntactic, not semantic. The known limits, kept deliberately because tightening them would risk more unfair *failures* than unfair passes:
+
+- **Negation blindness.** `contains_keywords`, `none:` lists, and `not_contains` checks match substrings/words, not meaning: "the capital is **not** Paris" still counts as mentioning Paris. This is symmetric — it penalises "X is not Y" and "Y is not X" equally — so no model gains a systematic edge.
+- **`numeric_set` matches anywhere.** Required values are searched in the whole response, so a value appearing as an intermediate step counts. `numeric_match` is the strict variant and grades only the asserted final answer.
+- **Heuristic final-answer extraction.** `numeric_match` uses ordered cues ("answer/result/total …", last line, last number). A response that asserts the wrong number last is graded as wrong even if the right one appeared earlier — by design: the final assertion is what a reader would take away.
+- **MCQ strictness.** Hedging across options scores 0; a prose answer with no recognisable option letter scores 0. Fallback letter-scanning only activates when an answer cue is present, so prose articles ("a", "I") are not mistaken for option letters.
+- **Sandbox is not a hard security boundary.** `code_exec` strips non-allowlisted imports and runs with resource limits in a subprocess, but the allowlist includes `os`/`requests`-adjacent modules; run untrusted models at your own risk. Verdicts are also environment-dependent: an allow-listed import that is not installed in the sandbox interpreter fails the question.
+- **Integer rounding window.** An integer expected value (a count) accepts a more precise answer that genuinely rounds to it (±0.5): 533.33 passes for 533, but 532 and 533.99 do not.
 
 ### Code quality
 

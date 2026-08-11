@@ -259,6 +259,63 @@
     </div>
     {% endif %}
 
+    {% if context_points %}
+    <!-- Context-length scalability: one point per (prompt size, concurrency
+         level) grid cell. Skipped sizes (endpoint refused the prompt) render
+         as a table row, not a chart point. -->
+    <div class="card p-5 space-y-5">
+        <div class="flex items-baseline justify-between">
+            <h2 class="text-lg font-semibold text-white">Context Scalability</h2>
+            <span class="text-xs text-slate-500">one probe set per context size and concurrency level</span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr>
+                        <th class="text-left">Context</th><th class="text-left">Concurrency</th>
+                        <th class="text-left">Probes</th><th class="text-left">Errors</th>
+                        <th class="text-left">p50 latency</th><th class="text-left">p95 latency</th>
+                        <th class="text-left">TTFT mean</th><th class="text-left">Prefill tok/s</th>
+                        <th class="text-left">Output tok/s</th><th class="text-left">Note</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {# Points arrive sorted by (size, level); a top-of-group row
+                       restarts the visual band so the levels of one size read
+                       as a block. #}
+                    {% set ns = namespace(last_size=none) %}
+                    {% for point in context_points %}
+                    <tr class="{% if point.skipped %}text-slate-500 italic{% endif %}">
+                        <td class="{% if point.skipped %}text-slate-500{% elif ns.last_size == point.context_tokens %}text-slate-600{% else %}text-slate-200 font-medium{% endif %}">
+                            {{ "{:,}".format(point.context_tokens) }}
+                        </td>
+                        {% set ns.last_size = point.context_tokens %}
+                        <td>
+                            {% if point.skipped %}-{% else %}{{ point.concurrency }}{% endif %}
+                        </td>
+                        <td class="text-slate-400">{{ point.requests }}</td>
+                        <td class="{% if point.errors %}text-red-400{% else %}text-slate-500{% endif %}">
+                            {% if point.skipped %}-{% else %}{{ point.errors }}{% endif %}
+                        </td>
+                        <td>{% if point.skipped %}-{% else %}{{ ms(point.latency.p50_ms) }}{% endif %}</td>
+                        <td>{% if point.skipped %}-{% else %}{{ ms(point.latency.p95_ms) }}{% endif %}</td>
+                        <td>{% if point.skipped %}-{% else %}{{ ms(point.ttft.mean_ms) }}{% endif %}</td>
+                        <td>{% if point.skipped %}-{% else %}{{ rate(point.prompt_tokens_per_sec, 'tok/s') }}{% endif %}</td>
+                        <td>{% if point.skipped %}-{% else %}{{ rate(point.output_tokens_per_sec, 'tok/s') }}{% endif %}</td>
+                        <td class="text-slate-500 text-xs">
+                            {{ point.skip_reason if point.skipped else (point.notes | join('; ') if point.notes else '') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div style="position: relative; height: 240px;"><canvas id="contextChart"></canvas></div>
+        <div style="position: relative; height: 220px;"><canvas id="contextPrefillChart"></canvas></div>
+    </div>
+    {% endif %}
+
     {% if difficulty_rows %}
     <div class="card p-5">
         <h2 class="text-lg font-semibold text-white mb-3">By Difficulty</h2>
@@ -544,6 +601,112 @@
                     position: 'right',
                     title: { display: true, text: 'ms', color: '#eab308' },
                     grid: { drawOnChartArea: false },
+                    ticks: { color: '#94a3b8' },
+                    beginAtZero: true
+                }
+            },
+            plugins: { legend: { labels: { color: '#94a3b8' } } }
+        }
+    });
+    {% endif %}
+    {% if context_points and context_points | selectattr('skipped', 'equalto', false) | list %}
+    // TTFT, latency and prefill rate against the input context size, one series
+    // per concurrency level. A grid run measures each size at several levels;
+    // a size missing from a level's series (skipped, or not probed) is a null,
+    // and spanGaps bridges it rather than dropping the line to zero. The kink
+    // in any line is the point where prefill cost starts to dominate.
+    const cp = {{ context_points | selectattr('skipped', 'equalto', false) | list | tojson }};
+    const ctxSizes = [...new Set(cp.map(p => p.context_tokens))].sort((a, b) => a - b);
+    const ctxLevels = [...new Set(cp.map(p => p.concurrency))].sort((a, b) => a - b);
+    const ctxValueByCell = new Map(cp.map(p => [p.context_tokens + ':' + p.concurrency, p]));
+    const ctxSeriesFor = level => ctxSizes.map(s => ctxValueByCell.get(s + ':' + level) || null);
+    // Distinct colour per level; more than six levels cycle hues instead of
+    // reusing a colour the legend cannot tell apart.
+    const ctxColours = ['#3b82f6', '#10b981', '#eab308', '#ef4444', '#a78bfa', '#f472b6'];
+    const ctxColourFor = i => ctxColours[i % ctxColours.length];
+    const rgba = (hex, alpha) => {
+        const n = parseInt(hex.slice(1), 16);
+        return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+    };
+    const ctxTick = { color: '#94a3b8', callback: v => (v >= 1e6 ? (v / 1e6) + 'M' : (v / 1e3) + 'k') };
+    const ctxXScale = {
+        title: { display: true, text: 'Context size (tokens)', color: '#94a3b8' },
+        grid: { color: 'rgba(148, 163, 184, 0.1)' },
+        ticks: ctxTick
+    };
+
+    // Chart 1: timing, left axis in ms. TTFT per level is always shown; the
+    // p50 latency series start off as legend-toggles (hidden) so a wide grid
+    // stays readable until the operator opts in.
+    new Chart(document.getElementById('contextChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: ctxSizes,
+            datasets: ctxLevels.flatMap((level, i) => [
+                {
+                    label: 'TTFT c=' + level,
+                    data: ctxSeriesFor(level).map(p => p ? p.ttft.mean_ms : null),
+                    borderColor: rgba(ctxColourFor(i), 0.9),
+                    backgroundColor: rgba(ctxColourFor(i), 0.15),
+                    yAxisID: 'y',
+                    tension: 0.25,
+                    spanGaps: true,
+                },
+                {
+                    label: 'p50 c=' + level,
+                    data: ctxSeriesFor(level).map(p => p ? p.latency.p50_ms : null),
+                    borderColor: rgba(ctxColourFor(i), 0.9),
+                    backgroundColor: rgba(ctxColourFor(i), 0.15),
+                    borderDash: [5, 4],
+                    yAxisID: 'y',
+                    tension: 0.25,
+                    spanGaps: true,
+                    hidden: true,
+                }
+            ])
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: ctxXScale,
+                y: {
+                    position: 'left',
+                    title: { display: true, text: 'ms', color: '#3b82f6' },
+                    grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                    ticks: { color: '#94a3b8' },
+                    beginAtZero: true
+                }
+            },
+            plugins: { legend: { labels: { color: '#94a3b8' } } }
+        }
+    });
+
+    // Chart 2: server-side ingestion rate per level. Prefill throughput is
+    // derived from TTFT, so a null TTFT leaves a gap here too.
+    new Chart(document.getElementById('contextPrefillChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: ctxSizes,
+            datasets: ctxLevels.map((level, i) => ({
+                label: 'Prefill tok/s c=' + level,
+                data: ctxSeriesFor(level).map(p => p ? p.prompt_tokens_per_sec : null),
+                borderColor: rgba(ctxColourFor(i), 0.9),
+                backgroundColor: rgba(ctxColourFor(i), 0.15),
+                tension: 0.25,
+                spanGaps: true,
+            }))
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: ctxXScale,
+                y: {
+                    title: { display: true, text: 'tok/s', color: '#eab308' },
+                    grid: { color: 'rgba(148, 163, 184, 0.1)' },
                     ticks: { color: '#94a3b8' },
                     beginAtZero: true
                 }

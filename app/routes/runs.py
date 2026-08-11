@@ -32,6 +32,23 @@ def _parse_perf(raw: str | None) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+def _context_points(perf: dict | None) -> list[dict]:
+    """Return the context-scalability entries stored alongside the perf report.
+
+    Sorted by (size, level): a context x concurrency grid stores several
+    points per size and the table groups them visually by size.
+    """
+    if not perf:
+        return []
+    points = perf.get("context_sweep")
+    if isinstance(points, list):
+        rows = [p for p in points if isinstance(p, dict)]
+        return sorted(
+            rows, key=lambda p: (p.get("context_tokens") or 0, p.get("concurrency") or 0)
+        )
+    return []
+
+
 @router.get("/runs")
 async def runs_list(request: Request):
     user = await get_current_user(request)
@@ -129,6 +146,7 @@ async def run_detail(request: Request, run_id: int):
     tier_order = {"easy": 0, "medium": 1, "hard": 2, "expert": 3}
     difficulty_rows.sort(key=lambda r: tier_order.get(r["difficulty"], 9))
 
+    perf_data = _parse_perf(run.get("perf_json"))
     return templates.TemplateResponse(
         request, "run_detail.html",
         {
@@ -138,7 +156,8 @@ async def run_detail(request: Request, run_id: int):
             "evaluator_errors": evaluator_errors,
             "transport_errors": transport_errors,
             "difficulty_rows": difficulty_rows,
-            "perf": _parse_perf(run.get("perf_json")),
+            "perf": perf_data,
+            "context_points": _context_points(perf_data),
         },
     )
 

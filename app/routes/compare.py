@@ -24,15 +24,20 @@ async def compare_page(request: Request):
            ORDER BY tr.id DESC"""
     )
 
-    selected_ids = request.query_params.get("runs", "")
+    # The multi-select form submits repeated params (?runs=8&runs=9), not a
+    # comma-separated list. `.get()` would read only the first value and
+    # comparison would silently do nothing.
+    selected_ids = ",".join(request.query_params.getlist("runs"))
     selected_runs = []
     comparison_data = []
 
     if selected_ids:
         ids = []
+        seen = set()
         for x in selected_ids.split(","):
             trimmed = x.strip()
-            if trimmed.isdigit():
+            if trimmed.isdigit() and int(trimmed) not in seen:
+                seen.add(int(trimmed))
                 ids.append(int(trimmed))
 
         for rid in ids:

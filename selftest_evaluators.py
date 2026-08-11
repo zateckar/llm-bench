@@ -116,6 +116,58 @@ CASES: list[Case] = [
         "The probability is 3/11.",
         {"value": 0.272727, "tolerance": 0.001}, PASS,
     ),
+    Case(
+        "numeric_match",
+        "REGRESSION (A8a): a stated percentage is a fraction, not its face value "
+        "(LR-12/LR-18 '75%' used to extract 75 against an expected 0.75)",
+        "The answer is 75%.",
+        0.75, PASS,
+    ),
+    Case(
+        "numeric_match",
+        "REGRESSION (A8a): a percentage must not pass against its face value either",
+        "Answer: 75%.",
+        75.0, FAIL,
+    ),
+    Case(
+        "numeric_match",
+        "REGRESSION (A8b): a response that is nothing but a <think> block has no "
+        "answer to score, even when the musing contains the right number",
+        "<think>The answer is probably 42.</think>",
+        42.0, FAIL,
+    ),
+    Case(
+        "numeric_match",
+        "REGRESSION (A7): an integer target accepts a more precise answer that "
+        "rounds to it ('533.33 bananas' against LR-06's expected 533)",
+        "The answer is 533.33 bananas.",
+        533.0, PASS,
+    ),
+    Case(
+        "numeric_match",
+        "REGRESSION (A7): the integer rounding window does not rescue a wrong count",
+        "532 bananas.",
+        533.0, FAIL,
+    ),
+    Case(
+        "numeric_match",
+        "REGRESSION (A7b): 533.99 rounds to 534, not 533 - the old floor/ceil "
+        "window used to accept it",
+        "The answer is 533.99 bananas.",
+        533.0, FAIL,
+    ),
+    Case(
+        "numeric_match",
+        "REGRESSION (A7b): a value just below the integer genuinely rounds to it",
+        "The answer is 532.7 bananas.",
+        533.0, PASS,
+    ),
+    Case(
+        "numeric_match",
+        "an unterminated <think> tag must not swallow the final answer",
+        "<think>Let me compute. The answer is 42.",
+        42.0, PASS,
+    ),
 
     # ---------------- contains_keywords ----------------
     Case(
@@ -176,6 +228,19 @@ CASES: list[Case] = [
         "reasoning-model scratchpad is stripped before extraction",
         "<think>Maybe A. No, wait.</think>Answer: D",
         {"answer": "D", "options": "ABCD"}, PASS,
+    ),
+    Case(
+        "mcq",
+        "REGRESSION: prose using 'A' as an article used to fail as 'Ambiguous' "
+        "even when the correct letter was already given",
+        "The answer is B. A stations B at the depot.",
+        {"answer": "B", "options": "ABCD"}, PASS,
+    ),
+    Case(
+        "mcq",
+        "a prose answer with no letter cue and only stray letters is not graded",
+        "A train leaves the station at noon.",
+        {"answer": "B", "options": "ABCD"}, FAIL,
     ),
 
     # ---------------- exact_match ----------------
@@ -349,6 +414,29 @@ CASES: list[Case] = [
             "must_not": [r"(?i)\buse pdb to catch the segfault\b"],
         }, FAIL,
     ),
+    Case(
+        "multi_step_solution",
+        "REGRESSION (A3): an early incidental mention (summary/TOC) used to poison "
+        "last_pos and mark the correctly-placed step OUT OF ORDER",
+        "Plan: investigate, fix, deploy.\n"
+        "First investigate the crash. Then fix the code. Finally deploy the patch.",
+        {"steps": [
+            {"step": "a", "pattern": "investigate", "order": 1},
+            {"step": "b", "pattern": "fix", "order": 2},
+            {"step": "c", "pattern": "deploy", "order": 3},
+        ]}, PASS,
+    ),
+    Case(
+        "multi_step_solution",
+        "REGRESSION (A3): genuinely out-of-order steps still fail when patterns are "
+        "searched from last_pos onward",
+        "First deploy the patch. Then investigate the crash. Finally fix the code.",
+        {"steps": [
+            {"step": "a", "pattern": "investigate", "order": 1},
+            {"step": "b", "pattern": "fix", "order": 2},
+            {"step": "c", "pattern": "deploy", "order": 3},
+        ]}, FAIL,
+    ),
 
     # ---------------- ordered_labels ----------------
     Case(
@@ -488,8 +576,43 @@ CASES: list[Case] = [
     ),
     Case(
         "command_correctness",
-        "a forbidden command is a hard failure",
-        "Run: python3 -m http.server 8080 --bind 0.0.0.0",
+        "a forbidden command in a fenced block is a hard failure",
+        "```sh\npython3 -m http.server 8080 --bind 0.0.0.0\n```",
+        [
+            {"pattern": r"python3?\s+-m\s+http\.server", "description": "server", "required": True},
+            {"pattern": r"\b8080\b", "description": "port", "required": True},
+            {"pattern": r"--bind\s+0\.0\.0\.0", "description": "all interfaces",
+             "required": False, "forbidden": True},
+        ], FAIL,
+    ),
+    Case(
+        "command_correctness",
+        "REGRESSION (A2): warning about a forbidden flag in prose used to fail as "
+        "if the flag had been used",
+        "Run `python3 -m http.server 8080 --bind 127.0.0.1` - do NOT use --bind 0.0.0.0.",
+        [
+            {"pattern": r"python3?\s+-m\s+http\.server", "description": "server", "required": True},
+            {"pattern": r"\b8080\b", "description": "port", "required": True},
+            {"pattern": r"--bind\s+127\.0\.0\.1", "description": "loopback", "required": True},
+            {"pattern": r"--bind\s+0\.0\.0\.0", "description": "all interfaces",
+             "required": False, "forbidden": True},
+        ], PASS,
+    ),
+    Case(
+        "command_correctness",
+        "REGRESSION (A2): a forbidden flag actually used inside the code still fails",
+        "Run `python3 -m http.server 8080 --bind 0.0.0.0` to serve everywhere.",
+        [
+            {"pattern": r"python3?\s+-m\s+http\.server", "description": "server", "required": True},
+            {"pattern": r"\b8080\b", "description": "port", "required": True},
+            {"pattern": r"--bind\s+0\.0\.0\.0", "description": "all interfaces",
+             "required": False, "forbidden": True},
+        ], FAIL,
+    ),
+    Case(
+        "command_correctness",
+        "REGRESSION (A2): a forbidden flag on a shell-prompt line still fails",
+        "$ python3 -m http.server 8080 --bind 0.0.0.0",
         [
             {"pattern": r"python3?\s+-m\s+http\.server", "description": "server", "required": True},
             {"pattern": r"\b8080\b", "description": "port", "required": True},
@@ -592,6 +715,34 @@ CODE_CASES: list[Case] = [
         "code guarded by __main__ is not executed at load time",
         "```python\ndef triple(n):\n    return n * 3\n\nif __name__ == '__main__':\n    raise SystemExit('demo')\n```",
         [{"function": "triple", "args": [3], "expected": 9}], PASS,
+    ),
+    Case(
+        "code_exec",
+        "REGRESSION (A5): a debugging answer that quotes the buggy original in a "
+        "second fence used to let the quote redefine the fixed function",
+        "Here is the fixed function:\n"
+        "```python\n"
+        "def merge_sort(items):\n"
+        "    if len(items) <= 1:\n"
+        "        return items\n"
+        "    mid = len(items) // 2\n"
+        "    return merge(merge_sort(items[:mid]), merge_sort(items[mid:]))\n"
+        "\n"
+        "def merge(left, right):\n"
+        "    out = []\n"
+        "    while left and right:\n"
+        "        out.append(left.pop(0) if left[0] <= right[0] else right.pop(0))\n"
+        "    return out + left + right\n"
+        "```\n"
+        "The original buggy code was:\n"
+        "```python\n"
+        "def merge_sort(items):\n"
+        "    return items  # bug: never actually sorted\n"
+        "```",
+        [
+            {"function": "merge_sort", "args": [[3, 1, 2]], "expected": [1, 2, 3]},
+            {"function": "merge_sort", "args": [[5, -1, 9, 0]], "expected": [-1, 0, 5, 9]},
+        ], PASS,
     ),
 ]
 

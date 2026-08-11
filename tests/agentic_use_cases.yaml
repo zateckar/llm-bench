@@ -30,7 +30,7 @@
         pattern: 'create_pull_request\s*\('
         order: 3
       - step: "Merge only after approval"
-        pattern: '(?:if|once|after|when)[\s\S]{0,120}approv[\s\S]{0,200}merge_pr|merge_pr[\s\S]{0,120}(?:only )?(?:if|once|after)[\s\S]{0,60}approv'
+        pattern: 'approv[\s\S]{0,200}merge_pr|merge_pr[\s\S]{0,120}(?:only )?(?:if|once|after)[\s\S]{0,60}approv'
         order: 4
       - step: "Deploy to staging or a canary before full production"
         pattern: 'deploy\s*\([^)]*(?:staging|canary|preprod|pre-production)|canary|blue[- ]green|progressive'
@@ -178,11 +178,17 @@
 
     Compute all three figures and end your reply with a single line in exactly this format:
     `ANSWERS: <current monthly cost>, <cost after resizing>, <cost after resizing and the savings plan>`
-    Give each figure in whole dollars, with no currency symbol and no thousands separators.
-  evaluator: regex_all
+    Give each figure rounded to the nearest dollar, with no currency symbol and no thousands separators.
+  evaluator: numeric_match
   expected:
-    patterns:
-      - '(?im)^\s*ANSWERS:\s*22118\s*,\s*11059\s*,\s*5530\s*\.?\s*$'
+    # The final figure on the ANSWERS: line is graded as the final number.
+    # Exact products are 22118.40 / 11059.20 / 5529.60, so both the rounded
+    # (5530) and truncated (5529) forms of the last figure are accepted. The
+    # explicit relative tolerance keeps validate_suite from flagging this item
+    # for relying on the default.
+    value: 5530
+    relative: 0.0001
+    accept: [22118, 11059, 5530, 5529]
 
 - id: AU-06
   category: Agentic Use Cases

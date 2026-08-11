@@ -27,7 +27,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 from llm_client import ChatClient, ClientConfig
-from models import ConcurrencyPoint, LatencyStats, PerfReport, RequestMetrics
+from models import ConcurrencyPoint, ContextPoint, LatencyStats, PerfReport, RequestMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -391,6 +391,321 @@ def _run_concurrency_level(
 
 
 # ---------------------------------------------------------------------------
+# Context-length scalability sweep
+# ---------------------------------------------------------------------------
+
+# Default context sizes (tokens) to probe. These are the operating points
+# commonly advertised for modern models; probing across two orders of
+# magnitude shows where prefill cost and rate limits start to dominate.
+DEFAULT_CONTEXT_SIZES: tuple[int, ...] = (
+    32_000, 64_000, 128_000, 192_000, 256_000, 384_000, 512_000, 720_000, 1_000_000,
+)
+
+# One 1M-token prompt at 4 chars/token is ~4 MB of text; a slow model can spend
+# minutes just prefilling it, so the per-request timeout must scale with the
+# context size instead of using the fixed 180 s default.
+CONTEXT_TIMEOUT_BASE_S = 180.0
+CONTEXT_TIMEOUT_PER_TOKEN_S = 1.0 / 8_000.0  # ~120 s extra per 1M tokens
+CONTEXT_TIMEOUT_MAX_S = 600.0
+
+
+@dataclass
+class ContextSweepConfig:
+    """Knobs for the context-length sweep.
+
+    Small sizes (below ``large_threshold_tokens``) get the full concurrency
+    treatment so the sweep measures real scaling; large sizes are deliberately
+    sampled serially because the alternative - a 4-way burst of 1M-token
+    prompts - spends tens of millions of tokens per model and tells you more
+    about the rate limiter than about the serving stack.
+
+    ``concurrency_levels`` turns the sweep into a context x concurrency grid:
+    every size is probed at each requested level, one ContextPoint per
+    (size, level) cell. A concurrency level on a large size multiplies the
+    prompt spend of that size - c=4 at 1M tokens is a ~4M-token burst per
+    probe round - so ``max_large_concurrency`` caps what large sizes accept.
+    Levels above the cap are clamped down per large size, not dropped, so the
+    grid stays rectangular and the clamp is recorded on the emitted point.
+    """
+
+    context_sizes: tuple[int, ...] = DEFAULT_CONTEXT_SIZES
+    # Concurrent probes per context size below the large threshold. Bounded by
+    # MAX_CONCURRENCY like the load sweep; the client is the bottleneck beyond
+    # ~64 in-flight streaming requests.
+    concurrency_per_size: int = 4
+    # Explicit grid levels. Empty (the default) keeps the single-level
+    # behaviour driven by ``concurrency_per_size``; when given, it overrides
+    # that for every size.
+    concurrency_levels: tuple[int, ...] = ()
+    # Hard cap on concurrency for sizes at or above ``large_threshold_tokens``
+    # when a grid is requested. A multi-way burst of sub-megabyte prompts is
+    # cheap enough to measure scaling, but the same burst at 1M tokens spends
+    # tens of millions of tokens per model; this is the compromise between
+    # "grid everywhere" and "keep the token bill sane".
+    max_large_concurrency: int = 4
+    # Probes per small context size; at least ``concurrency_per_size`` are run
+    # so every worker slot is exercised.
+    probes_per_size_small: int = 3
+    # Probes per large context size - serial, by design.
+    probes_per_size_large: int = 1
+    # Above this context size only ``probes_per_size_large`` serial probes run.
+    large_threshold_tokens: int = 192_000
+    # Generation is capped tiny on purpose: the sweep measures how context size
+    # changes spot-check cost, not how the model answers. 8 tokens gets TTFT,
+    # prefill cost and usage back without paying decode at 1M scale.
+    probe_max_tokens: int = 8
+
+    def levels_for_size(self, size: int) -> tuple[int, ...]:
+        """Concurrency levels actually measured at ``size``.
+
+        With no explicit grid the size gets exactly one level - the
+        ``concurrency_per_size`` burst for small sizes, serial probing for
+        large ones, as before. With a grid every requested level is clamped
+        into 1..MAX_CONCURRENCY, and large sizes are additionally clamped to
+        ``max_large_concurrency``; clamping merges levels, so duplicates are
+        dropped after clamping.
+        """
+        if not self.concurrency_levels:
+            return (self.concurrency_for_size(size),)
+        cap = MAX_CONCURRENCY
+        if size >= self.large_threshold_tokens:
+            cap = min(cap, max(1, self.max_large_concurrency))
+        return tuple(sorted({max(1, min(cap, level)) for level in self.concurrency_levels}))
+
+    def probes_for_size(self, size: int, level: int | None = None) -> int:
+        """Probes fired for one grid cell ``(size, level)``.
+
+        Each cell fires at least one probe per worker slot so no slot sits
+        idle, and at least ``probes_per_size_small``/``probes_per_size_large``
+        so the probe count does not shrink below what a single-level sweep
+        would have sent. ``level=None`` keeps the pre-grid signature: it means
+        the size's single default level.
+        """
+        if level is None:
+            level = self.levels_for_size(size)[0]
+        if size >= self.large_threshold_tokens:
+            return max(level, self.probes_per_size_large)
+        return max(level, self.probes_per_size_small)
+
+    def concurrency_for_size(self, size: int) -> int:
+        if size >= self.large_threshold_tokens:
+            return 1
+        return max(1, min(MAX_CONCURRENCY, self.concurrency_per_size))
+
+    def timeout_for_size(self, size: int) -> float:
+        """Per-request timeout that grows with the context being prefilled."""
+        scaled = CONTEXT_TIMEOUT_BASE_S + size * CONTEXT_TIMEOUT_PER_TOKEN_S
+        return min(CONTEXT_TIMEOUT_MAX_S, scaled)
+
+    def total_requests(self) -> int:
+        """Upper bound on API calls, for progress reporting and cost planning.
+
+        Sums over the whole (size, level) grid, so the progress display cannot
+        under-report what a multi-level sweep is about to spend.
+        """
+        return sum(
+            self.probes_for_size(size, level)
+            for size in sorted(set(self.context_sizes))
+            for level in self.levels_for_size(size)
+        )
+
+
+def _context_prompt(nonce: int, target_tokens: int) -> str:
+    """Build a filler prompt calibrated to roughly ``target_tokens``.
+
+    Uses the same chars-per-token heuristic as ``_long_prompt`` so the expected
+    context is the input to the server; the server-reported usage is what gets
+    recorded, so a tokenizer mismatch shows up in the measured prompt_tokens
+    rather than silently skewing the curve.
+    """
+    repeats = max(1, int(target_tokens * 4 / len(_FILLER)))
+    return (
+        f"Calibration document {nonce}:\n" + (_FILLER * repeats) +
+        "\n\nIgnoring the document above, reply with exactly one token: OK."
+    )
+
+
+def _is_context_limit_error(sample: _Sample) -> bool:
+    """Heuristic: the server rejected the request because the prompt exceeded
+    its context window, which is different from a generic transport failure."""
+    if sample.ok:
+        return False
+    err = (sample.metrics.error or "").lower()
+    return any(
+        marker in err
+        for marker in (
+            "context length", "context_length", "maximum context", "max_tokens",
+            "context window", "token limit", "too many tokens",
+        )
+    )
+
+
+def run_context_sweep(
+    config: ClientConfig,
+    sweep: ContextSweepConfig | None = None,
+    progress=None,
+) -> list[ContextPoint]:
+    """Probe the endpoint at a fixed set of context sizes.
+
+    Each (size, level) grid cell gets one :class:`ContextPoint` (one per size
+    when no grid is requested, as before). Small sizes are exercised with the
+    requested concurrency; sizes at or above
+    ``ContextSweepConfig.large_threshold_tokens`` are clamped to
+    ``max_large_concurrency`` so the sweep finishes in reasonable time and
+    token budget. A size whose level-1 probes all report a context-window
+    error is recorded as ``skipped`` at every level rather than dragged
+    through the rest of the grid: the remaining levels of that size are not
+    probed at all, since they are guaranteed to fail the same way.
+    """
+    sweep = sweep or ContextSweepConfig()
+    attempts = 1  # perf measurements never retry; a retry would distort timing
+    total = sweep.total_requests()
+    done = 0
+
+    def tick(size: int, level: int, n: int = 1) -> None:
+        nonlocal done
+        done += n
+        if progress:
+            try:
+                progress(f"context {size} c{level}", done, total)
+            except Exception:  # noqa: BLE001 - a broken UI must not fail the run
+                logger.debug("context sweep progress callback raised", exc_info=True)
+
+    points: list[ContextPoint] = []
+    for size in sorted(set(sweep.context_sizes)):
+        if size <= 0:
+            continue
+        levels = sweep.levels_for_size(size)
+        for index, level in enumerate(levels):
+            point = _run_context_job(config, sweep, size, level, attempts,
+                                     lambda n=1, s=size, c=level: tick(s, c, n))
+            points.append(point)
+            if point.skipped and index == 0 and len(levels) > 1:
+                # The level-1 probes were all context-limit refusals, so the
+                # prompt itself is too long - firing the same request louder
+                # does not change the answer, it just multiplies the bill.
+                # Complete the grid with skipped copies instead of probing.
+                skipped_note = (
+                    f"skipped without probing: level-1 probes at this size hit "
+                    f"the context limit ({point.skip_reason})"
+                )
+                for skipped_level in levels[1:]:
+                    points.append(ContextPoint(
+                        context_tokens=size,
+                        concurrency=skipped_level,
+                        requests=0,
+                        errors=0,
+                        wall_ms=0.0,
+                        latency=LatencyStats(),
+                        ttft=LatencyStats(),
+                        prompt_tokens=0,
+                        output_tokens=0,
+                        skipped=True,
+                        skip_reason=point.skip_reason,
+                        notes=[skipped_note],
+                    ))
+                break
+
+    return points
+
+
+def _run_context_job(
+    config: ClientConfig,
+    sweep: ContextSweepConfig,
+    size: int,
+    level: int,
+    attempts: int,
+    tick,
+) -> ContextPoint:
+    """Run the probes for one grid cell and aggregate them into a point."""
+    probes = sweep.probes_for_size(size, level)
+    concurrency = sweep.concurrency_for_size(size) if not sweep.concurrency_levels else level
+    timeout = sweep.timeout_for_size(size)
+    nonce_base = 10_000 + (size + level) % 10_000
+
+    def job(idx: int) -> _Sample:
+        # Each probe gets its own client config so the per-size timeout
+        # cannot leak into the next size's measurements.
+        worker_config = ClientConfig(
+            base_url=config.base_url,
+            api_key=config.api_key,
+            model=config.model,
+            max_tokens=config.max_tokens,
+            temperature=config.temperature,
+            seed=config.seed,
+            timeout=timeout,
+            stream=config.stream,
+            max_retries=config.max_retries,
+            retry_delay=config.retry_delay,
+            request_stream_usage=config.request_stream_usage,
+            extra_headers=config.extra_headers,
+        )
+        client = ChatClient(worker_config)
+        return _probe(
+            client,
+            _context_prompt(nonce_base + idx, size),
+            sweep.probe_max_tokens,
+            attempts,
+        )
+
+    started = time.perf_counter()
+    results: list[_Sample] = []
+    if concurrency > 1 and probes > 1:
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futures = [pool.submit(job, i) for i in range(probes)]
+            for future in as_completed(futures):
+                try:
+                    results.append(future.result())
+                except Exception as e:  # noqa: BLE001
+                    results.append(
+                        _Sample(metrics=RequestMetrics(ok=False, error=str(e)))
+                    )
+                tick()
+    else:
+        for i in range(probes):
+            results.append(job(i))
+            tick()
+    wall_ms = (time.perf_counter() - started) * 1000.0
+
+    skipped = results and all(_is_context_limit_error(r) for r in results)
+    skip_reason = ""
+    if skipped:
+        skip_reason = results[0].metrics.error or "context length exceeded"
+
+    ok = [s for s in results if s.ok]
+    point = ContextPoint(
+        context_tokens=size,
+        concurrency=concurrency,
+        requests=len(results),
+        errors=len(results) - len(ok),
+        wall_ms=wall_ms,
+        latency=LatencyStats.from_samples([s.metrics.latency_ms for s in ok]),
+        ttft=LatencyStats.from_samples(
+            [s.metrics.ttft_ms for s in ok if s.metrics.ttft_ms is not None]
+        ),
+        prompt_tokens=sum(s.metrics.prompt_tokens for s in ok),
+        output_tokens=sum(s.metrics.completion_tokens for s in ok),
+        skipped=skipped,
+        skip_reason=skip_reason,
+    )
+    if sweep.concurrency_levels:
+        requested = max(
+            {max(1, min(MAX_CONCURRENCY, lv)) for lv in sweep.concurrency_levels}
+        )
+        if concurrency < requested:
+            cap = min(MAX_CONCURRENCY, max(1, sweep.max_large_concurrency))
+            point.notes.append(
+                f"requested concurrency {requested} clamped to {concurrency} "
+                f"(cap {cap} for sizes >= {sweep.large_threshold_tokens:,} tokens)"
+            )
+    if not ok and not skipped:
+        point.notes.append(
+            f"All {len(results)} probes failed (not a context-limit refusal)."
+        )
+    return point
+
+
+# ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
 
@@ -405,6 +720,57 @@ def _ms(value: float | None) -> str:
 
 def _rate(value: float | None, unit: str = "tok/s") -> str:
     return "n/a" if value is None else f"{value:.1f} {unit}"
+
+
+def format_context_sweep_markdown(points: list[ContextPoint]) -> str:
+    """Render a context-length sweep as a markdown section."""
+    lines = [
+        "## Context scalability",
+        "",
+        "Time-to-first-token and single-request latency at increasing prompt sizes. "
+        "Prefill throughput is derived from TTFT, so sizes with an unavailable TTFT "
+        "show `n/a` there. 'skipped' means the endpoint rejected the size outright.",
+        "",
+        "| Context (tokens) | Concurrency | Probes | Errors | p50 latency | p95 latency | "
+        "TTFT mean | Prefill tok/s | Output tok/s | Note |",
+        "|------------------|-------------|--------|--------|-------------|-------------|"
+        "-----------|-----------------|----------------|------|",
+    ]
+    for point in sorted(points, key=lambda p: (p.context_tokens, p.concurrency)):
+        if point.skipped:
+            note = point.skip_reason or "context limit"
+            lines.append(
+                f"| {point.context_tokens:,} | - | {point.requests} | - | - | - | - | - | - | skipped: {note} |"
+            )
+            continue
+        lines.append(
+            f"| {point.context_tokens:,} | {point.concurrency} | {point.requests} "
+            f"| {point.errors} | {_ms(point.latency.p50)} | {_ms(point.latency.p95)} "
+            f"| {_ms(point.ttft.mean)} | {_rate(point.prompt_tokens_per_sec)} "
+            f"| {_rate(point.output_tokens_per_sec)} | {'; '.join(point.notes) or ''} |"
+        )
+    lines.append("")
+
+    # One scalability line per concurrency level: how much prefill throughput
+    # is lost between the smallest and largest size that level actually
+    # measured. Only worth stating when both ends of the range exist.
+    for level in sorted({p.concurrency for p in points if not p.skipped}):
+        measured = sorted(
+            (p for p in points
+             if p.concurrency == level and not p.skipped and p.prompt_tokens_per_sec),
+            key=lambda p: p.context_tokens,
+        )
+        if len(measured) < 2:
+            continue
+        first, last = measured[0], measured[-1]
+        ratio = first.prompt_tokens_per_sec / last.prompt_tokens_per_sec
+        lines.append(
+            f"- c={level}: prefill fell {ratio:.1f}x from "
+            f"{first.context_tokens // 1000}k to {last.context_tokens // 1000}k."
+        )
+    if lines and lines[-1] != "":
+        lines.append("")
+    return "\n".join(lines)
 
 
 def format_perf_markdown(report: PerfReport) -> str:

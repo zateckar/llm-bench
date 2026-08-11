@@ -45,15 +45,32 @@ def start_benchmark(
     workers: int = 1,
     run_perf: bool = False,
     concurrency_levels: tuple[int, ...] = (1, 2, 4, 8),
+    run_context: bool = False,
+    context_sizes: tuple[int, ...] = (),
+    context_concurrency: int | tuple[int, ...] = 4,
 ) -> None:
     """Start a benchmark run in a background thread."""
     thread = threading.Thread(
         target=_run_benchmark,
         args=(run_id, model, category, limit, test_ids, difficulty, workers,
-              run_perf, concurrency_levels),
+              run_perf, concurrency_levels, run_context, context_sizes,
+              context_concurrency),
         daemon=True,
     )
     thread.start()
+
+
+def _coerce_context_levels(context_concurrency: int | tuple[int, ...]) -> tuple[int, ...]:
+    """Coerce the context-sweep concurrency argument into a level tuple.
+
+    Older callers pass a bare int, the run form now passes the parsed list;
+    both end up here, sorted and de-duplicated.
+    """
+    if isinstance(context_concurrency, (list, tuple)):
+        levels = [int(level) for level in context_concurrency]
+    else:
+        levels = [int(context_concurrency)]
+    return tuple(sorted({max(1, level) for level in levels}))
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +207,9 @@ def _run_benchmark(
     workers: int,
     run_perf: bool,
     concurrency_levels: tuple[int, ...],
+    run_context: bool,
+    context_sizes: tuple[int, ...],
+    context_concurrency: int,
 ) -> None:
     from app.config import TESTS_DIR
     from app.services.url_guard import UnsafeURLError, validate_endpoint
@@ -337,7 +357,59 @@ def _run_benchmark(
     if run_perf:
         perf_json = _run_perf_phase(run_id, config, concurrency_levels)
 
+    if run_context and context_sizes:
+        perf_json = _merge_context_phase(
+            run_id, config, context_sizes, context_concurrency, perf_json
+        )
+
     _summarise_and_finish(run_id, results, total, workers, duration_ms, perf_json, "")
+
+
+def _merge_context_phase(
+    run_id: int,
+    config: ClientConfig,
+    context_sizes: tuple[int, ...],
+    context_concurrency: int | tuple[int, ...],
+    perf_json: str | None,
+) -> str | None:
+    """Run the context-length sweep and merge the results into perf_json."""
+    from perf import ContextSweepConfig, run_context_sweep
+
+    levels = _coerce_context_levels(context_concurrency)
+    sweep = ContextSweepConfig(
+        context_sizes=tuple(sorted(set(context_sizes))),
+        # A single level keeps the pre-grid sweep exactly; only several levels
+        # turn it into a context x concurrency grid.
+        concurrency_per_size=levels[0],
+        concurrency_levels=levels if len(levels) > 1 else (),
+    )
+    expected = sweep.total_requests()
+    _update_progress(run_id, "", 0, expected, "Starting context scalability sweep", "context")
+
+    def progress(phase: str, done: int, total: int) -> None:
+        _update_progress(run_id, phase, done, total, f"Context sweep: {phase}", "context")
+
+    try:
+        points = run_context_sweep(config, sweep, progress=progress)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Context sweep failed for run %d", run_id)
+        points = None
+
+    base: dict = {}
+    if perf_json:
+        try:
+            parsed = json.loads(perf_json)
+            if isinstance(parsed, dict):
+                base = parsed
+        except json.JSONDecodeError:
+            logger.warning("perf_json for run %d was not valid JSON; replacing", run_id)
+
+    if points is None:
+        base.setdefault("context_sweep_error", "context sweep failed; see logs")
+        return json.dumps(base)
+
+    base["context_sweep"] = [p.to_dict() for p in points]
+    return json.dumps(base)
 
 
 def _run_perf_phase(

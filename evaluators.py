@@ -224,12 +224,16 @@ def strip_think_blocks(response: str) -> str:
     )
     if tail:
         cleaned = cleaned[tail.end():]
-    # An unterminated opening tag means everything after it is scratchpad.
+    # An unterminated opening tag is a malformed tag, not a scratchpad marker:
+    # drop the tag itself but keep the text after it, so a model that wraps its
+    # final answer in a typo'd tag is still graded on the answer.
     cleaned = re.sub(
-        r"<(?:think|thinking|reasoning|scratchpad)>.*\Z", " ", cleaned,
-        flags=re.DOTALL | re.IGNORECASE,
+        r"<(?:think|thinking|reasoning|scratchpad)>", " ", cleaned,
+        flags=re.IGNORECASE,
     )
-    return cleaned if cleaned.strip() else response
+    # A response that is nothing but scratchpad means there is no answer to
+    # score; it must come back empty, not fall through to grading the musing.
+    return cleaned
 
 
 def keyword_pattern(keyword: str) -> str:
@@ -275,6 +279,10 @@ def non_empty_lines(text: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 _NUM_RE = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
+
+# A number read as the asserted answer that is written as a percentage means a
+# fraction: "the answer is 75%" claims 0.75, not 75.
+_POST_PERCENT_RE = re.compile(r"\s*[\)\]'\"\u201d]*%")
 
 # Phrases that introduce an asserted answer. Bare "=" and ":" are deliberately
 # excluded: the last "=" in a worked solution is usually an intermediate step in
@@ -357,6 +365,17 @@ def extract_numbers(text: str, expand_fractions: bool = True) -> list[float]:
     return out
 
 
+def _final_number_value(num: re.Match, tail_after_number: str) -> float | None:
+    """Convert a numeric match to the asserted value, honoring a trailing ``%``."""
+    try:
+        value = float(num.group(0))
+    except ValueError:
+        return None
+    if _POST_PERCENT_RE.match(tail_after_number):
+        value /= 100.0
+    return value
+
+
 def extract_final_number(text: str) -> tuple[float | None, str]:
     """Best-effort extraction of the number the model is *asserting* as its answer.
 
@@ -366,7 +385,9 @@ def extract_final_number(text: str) -> tuple[float | None, str]:
       3. The last number on the last non-empty line (models put the answer last).
       4. The last number anywhere.
 
-    Returns ``(value, how)`` where ``how`` names the strategy, for the detail text.
+    A number immediately followed by ``%`` is read as a percentage, so a stated
+    "75%" is 0.75. Returns ``(value, how)`` where ``how`` names the strategy,
+    for the detail text.
     """
     body = strip_think_blocks(text).strip()
     if not body:
@@ -376,35 +397,29 @@ def extract_final_number(text: str) -> tuple[float | None, str]:
 
     single = _NUM_RE.fullmatch(cleaned_all.strip().rstrip(".%"))
     if single:
-        try:
-            return float(single.group(0)), "bare number"
-        except ValueError:
-            pass
+        value = _final_number_value(single, cleaned_all.strip()[single.end():])
+        if value is not None:
+            return value, "bare number"
 
     for match in reversed(list(_FINAL_MARKERS.finditer(cleaned_all))):
         tail = cleaned_all[match.end():]
         num = _NUM_RE.match(tail)
         if num:
-            try:
-                return float(num.group(0)), "stated answer"
-            except ValueError:
-                continue
+            value = _final_number_value(num, tail[num.end():])
+            if value is not None:
+                return value, "stated answer"
 
     lines = [line for line in cleaned_all.splitlines() if line.strip()]
     if lines:
-        nums = _NUM_RE.findall(lines[-1])
-        if nums:
-            try:
-                return float(nums[-1]), "last line"
-            except ValueError:
-                pass
+        for candidate in reversed(list(_NUM_RE.finditer(lines[-1]))):
+            value = _final_number_value(candidate, lines[-1][candidate.end():])
+            if value is not None:
+                return value, "last line"
 
-    nums = _NUM_RE.findall(cleaned_all)
-    if nums:
-        try:
-            return float(nums[-1]), "last number"
-        except ValueError:
-            pass
+    for candidate in reversed(list(_NUM_RE.finditer(cleaned_all))):
+        value = _final_number_value(candidate, cleaned_all[candidate.end():])
+        if value is not None:
+            return value, "last number"
     return None, "no number found"
 
 
@@ -638,11 +653,28 @@ def test_versioned_store():
 }
 
 
-def _extract_code(response: str) -> str | None:
-    """Pull a Python code block (or a best-effort def/class span) from a response."""
+def _block_defines(block: str, names: set[str]) -> bool:
+    """True when the block defines a function/class matching a fixture name."""
+    for name in names:
+        if re.search(rf"^\s*(?:def|class)\s+{re.escape(name)}\b", block, re.MULTILINE):
+            return True
+    return False
+
+
+def _extract_code(response: str, fixture_names: set[str] | None = None) -> str | None:
+    """Pull a Python code block (or a best-effort def/class span) from a response.
+
+    When fixture names are available, prefer the first fenced block that defines
+    one of them: a debugging answer that quotes the buggy original after the fix
+    would otherwise redefine the function when all blocks are concatenated.
+    """
     body = strip_think_blocks(response)
     blocks = re.findall(r"```(?:python|py|python3)?\s*\n(.*?)```", body, re.DOTALL | re.IGNORECASE)
     if blocks:
+        if fixture_names:
+            for block in blocks:
+                if _block_defines(block, fixture_names):
+                    return block
         # Concatenate every block: models frequently split a class and its
         # helpers across fences, and a trailing "usage" block is harmless.
         return "\n\n".join(blocks)
@@ -751,9 +783,17 @@ def eval_mcq(response: str, expected: Any, **_) -> tuple[float, str]:
             break
 
     if not found:
-        # Last resort: a lone letter token anywhere in a short response.
-        tokens = re.findall(r"\b([A-Za-z])\b", body)
-        found = list(dict.fromkeys(t.upper() for t in tokens if t.upper() in valid))
+        # Last resort: a lone letter token anywhere in a short response. Only
+        # trust this when the text also carries an answer cue - otherwise prose
+        # articles like "A"/"I" would read as option letters and spuriously
+        # fail a correct free-form answer as "Ambiguous".
+        has_cue = re.search(
+            r"answer|option|choice|correct|boxed|^\s*\*+\s*\(?[A-Za-z]\)?",
+            body, re.IGNORECASE | re.MULTILINE,
+        )
+        if has_cue:
+            tokens = re.findall(r"\b([A-Za-z])\b", body)
+            found = list(dict.fromkeys(t.upper() for t in tokens if t.upper() in valid))
 
     if not found:
         return 0.0, f"No option letter found; expected {answer}"
@@ -881,6 +921,14 @@ def eval_numeric_match(response: str, expected: Any, **_) -> tuple[float, str]:
     for candidate in candidates:
         if _numbers_equal(value, candidate, rel_tol, abs_tol):
             return 1.0, f"Correct ({how}): {value:g}"
+        # An integer expected value is a count, so a more precise answer that
+        # rounds to it ("533.33" for 533) is still correct - but only a true
+        # round-to-integer (±0.5, half-open) plus the precision window, so
+        # "533.99" for 533 fails: it rounds to 534, not 533.
+        if candidate == int(candidate):
+            window = max(0.5, abs_tol)
+            if abs(value - candidate) <= window + 1e-9 and round(value) == candidate:
+                return 1.0, f"Correct ({how}): {value:g} rounds to {candidate:g}"
 
     return 0.0, f"Got {value:g} ({how}), expected {target:g}"
 
@@ -935,7 +983,7 @@ def eval_code_exec(response: str, expected: Any, **_) -> tuple[float, str]:
     if not fixtures:
         return 0.0, "Misconfigured question: no code fixtures"
 
-    code = _extract_code(response)
+    code = _extract_code(response, {str(f.get("function")) for f in fixtures})
     if code is None:
         return 0.0, "No code block found"
     code = _strip_disallowed_imports(code)
@@ -1346,6 +1394,11 @@ def eval_command_correctness(response: str, expected: Any, **_) -> tuple[float, 
     Optional entries (``required: false``) no longer award a free point when
     absent; they are simply excluded from the denominator. Previously an answer
     could score points for commands it never produced.
+
+    Forbidden patterns are matched against the *command content* only: fenced
+    code blocks, backtick-quoted inline code, and lines that start with a shell
+    prompt (``$ `` or ``> ``). Mentioning a dangerous flag in an explanatory
+    sentence ("do NOT use --bind 0.0.0.0") is not running the command.
     """
     entries = list(expected or [])
     if not entries:
@@ -1370,9 +1423,14 @@ def eval_command_correctness(response: str, expected: Any, **_) -> tuple[float, 
         found = safe_re_search(str(cmd.get("pattern", "")), body, re.IGNORECASE) is not None
         details.append(f"{desc} (optional): {'present' if found else 'absent'}")
 
+    command_text = "\n".join(
+        re.findall(r"```[^\n]*\n?(.*?)```", body, re.DOTALL)
+        + re.findall(r"`([^`\n]+)`", body)
+        + [line for line in body.splitlines() if re.match(r"\s*[$>]\s", line)]
+    )
     forbidden = [
         e for e in entries if e.get("forbidden")
-        and safe_re_search(str(e.get("pattern", "")), body, re.IGNORECASE)
+        and safe_re_search(str(e.get("pattern", "")), command_text, re.IGNORECASE)
     ]
     if forbidden:
         return 0.0, "Dangerous/incorrect command present: " + ", ".join(
@@ -1419,7 +1477,15 @@ def eval_multi_step_solution(response: str, expected: Any, **_) -> tuple[float, 
 
     for i, step in enumerate(ordered_steps, 1):
         desc = step.get("step") or step.get("description") or f"Step {i}"
-        match = safe_re_search(str(step.get("pattern", "")), body, re.IGNORECASE | re.DOTALL)
+        try:
+            compiled = re.compile(str(step.get("pattern", "")), re.IGNORECASE | re.DOTALL)
+        except re.error as e:
+            logger.warning("Invalid regex pattern %r: %s", step.get("pattern"), e)
+            details.append(f"{desc}: MISSING")
+            continue
+        # Search after the previous step: an early incidental mention must not
+        # poison the order check for the real, later occurrence.
+        match = compiled.search(body, last_pos + 1) if require_order else compiled.search(body)
         if not match:
             details.append(f"{desc}: MISSING")
             continue

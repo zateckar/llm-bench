@@ -39,6 +39,49 @@ def _parse_concurrency(raw: str) -> tuple[int, ...]:
     return accepted or DEFAULT_CONCURRENCY_LEVELS
 
 
+def _parse_context_sizes(raw: str) -> tuple[int, ...]:
+    """Parse a comma-separated list of context sizes in tokens.
+
+    Kept intentionally simple: only strictly positive integers larger than one
+    token are accepted; the probe sizes are validated again by the sweep itself.
+    """
+    sizes: set[int] = set()
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            value = int(part)
+        except ValueError:
+            continue
+        if value >= 1000:
+            sizes.add(value)
+    return tuple(sorted(sizes))
+
+
+def _parse_context_concurrency(raw) -> tuple[int, ...]:
+    """Parse the context-sweep concurrency field into a level list.
+
+    Accepts a comma-separated list (a context x concurrency grid) or a bare
+    int for backward compatibility with older callers. Each level is clamped
+    to 1..64, matching the form's documented limits; unparseable input falls
+    back to the long-standing default.
+    """
+    raw = str(raw if raw not in (None, "") else 4)
+    levels: set[int] = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            levels.add(int(part))
+        except ValueError:
+            continue
+    if not levels:
+        return (4,)
+    return tuple(sorted(max(1, min(64, level)) for level in levels))
+
+
 @router.get("/admin/run")
 async def admin_run_page(request: Request):
     user = _admin_required(request)
@@ -65,6 +108,7 @@ async def admin_run_page(request: Request):
     except Exception as e:  # noqa: BLE001 - surfaced in the UI instead of a 500
         suite_error = str(e)
 
+    import perf
     from perf import MAX_CONCURRENCY
 
     return templates.TemplateResponse(
@@ -84,6 +128,7 @@ async def admin_run_page(request: Request):
                 "1,8,32,128",
                 "1,16,64,256",
             ],
+            "default_context_sizes": ",".join(str(s) for s in perf.DEFAULT_CONTEXT_SIZES),
         },
     )
 
@@ -98,6 +143,9 @@ async def admin_start_run(
     workers: int = Form(1),
     run_perf: str = Form(""),
     concurrency: str = Form("1,2,4,8"),
+    run_context: str = Form(""),
+    context_sizes: str = Form(""),
+    context_concurrency: str = Form("4"),
 ):
     user = _admin_required(request)
     if isinstance(user, RedirectResponse):
@@ -125,6 +173,9 @@ async def admin_start_run(
         workers=workers,
         run_perf=bool(run_perf),
         concurrency_levels=_parse_concurrency(concurrency),
+        run_context=bool(run_context),
+        context_sizes=_parse_context_sizes(context_sizes),
+        context_concurrency=_parse_context_concurrency(context_concurrency),
     )
 
     return RedirectResponse(url=f"/admin/run/{run_id}/progress", status_code=302)

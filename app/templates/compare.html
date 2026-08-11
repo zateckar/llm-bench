@@ -90,9 +90,13 @@
                     {% set cat_data = run.categories.get(cat, {}) %}
                     <td class="text-center">
                         {% if cat_data %}
-                        <span class="text-sm font-medium {% if cat_data.avg_score >= 0.7 %}text-emerald-400{% elif cat_data.avg_score >= 0.5 %}text-yellow-400{% else %}text-red-400{% endif %}">
-                            {{ "%.1f"|format(cat_data.avg_score * 100) }}%
-                        </span>
+                            {% if cat_data.avg_score is not none %}
+                            <span class="text-sm font-medium {% if cat_data.avg_score >= 0.7 %}text-emerald-400{% elif cat_data.avg_score >= 0.5 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                                {{ "%.1f"|format(cat_data.avg_score * 100) }}%
+                            </span>
+                            {% else %}
+                            <span class="text-sm text-slate-500" title="All requests in this category were transport errors">n/a</span>
+                            {% endif %}
                         <span class="text-xs text-slate-500 ml-1">({{ cat_data.passed }}/{{ cat_data.scored or cat_data.total }})</span>
                         {% else %}
                         <span class="text-slate-600">-</span>

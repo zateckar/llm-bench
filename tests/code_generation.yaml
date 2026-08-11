@@ -29,6 +29,11 @@
     - function: fibonacci
       args: [90]
       expected: 2880067194370816120
+    # Large-input fixture: n in the thousands rules out the naive exponential
+    # recursion and the O(2^n) version; only an O(n) (or better) loop/DP finishes in time.
+    - function: fibonacci
+      args: [1000]
+      expected: 43466557686937456435688527675040625802564660517371780402481729089536555417949051890403879840079255169295922593080322634775209689623239873322471161642996440906533187938298969649928516003704476137795166849228875
 
 - id: CG-02
   category: Code Generation

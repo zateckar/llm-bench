@@ -307,6 +307,72 @@ class ConcurrencyPoint:
 
 
 @dataclass
+class ContextPoint:
+    """One rung of the context-length scalability sweep.
+
+    ``skipped`` is set (with ``skip_reason``) when the endpoint refused the
+    size entirely - e.g. its context window is smaller than the target. A
+    skipped point is excluded from charts rather than drawn as an error bar.
+    """
+
+    context_tokens: int
+    concurrency: int
+    requests: int
+    errors: int
+    wall_ms: float
+    latency: LatencyStats
+    ttft: LatencyStats
+    prompt_tokens: int
+    output_tokens: int
+    skipped: bool = False
+    skip_reason: str = ""
+    notes: list[str] = field(default_factory=list)
+
+    @property
+    def error_rate(self) -> float:
+        return self.errors / self.requests if self.requests else 0.0
+
+    @property
+    def prompt_tokens_per_sec(self) -> float | None:
+        """Server-side ingestion rate: prompt tokens per second of TTFT window.
+
+        Uses TTFT (not total latency) so queueing behind concurrent probes does
+        not hide prefill throughput. None when no streamed TTFT was observed.
+        """
+        mean_ttft = self.ttft.mean
+        if not mean_ttft or mean_ttft <= 0:
+            return None
+        avg_prompt = self.prompt_tokens / self.requests if self.requests else 0
+        return avg_prompt / (mean_ttft / 1000.0)
+
+    @property
+    def output_tokens_per_sec(self) -> float | None:
+        """Aggregate generation rate across the probes at this size."""
+        if not self.wall_ms:
+            return None
+        return self.output_tokens / (self.wall_ms / 1000.0)
+
+    def to_dict(self) -> dict:
+        return {
+            "context_tokens": self.context_tokens,
+            "concurrency": self.concurrency,
+            "requests": self.requests,
+            "errors": self.errors,
+            "error_rate": self.error_rate,
+            "wall_ms": self.wall_ms,
+            "prompt_tokens": self.prompt_tokens,
+            "output_tokens": self.output_tokens,
+            "prompt_tokens_per_sec": self.prompt_tokens_per_sec,
+            "output_tokens_per_sec": self.output_tokens_per_sec,
+            "latency": self.latency.to_dict(),
+            "ttft": self.ttft.to_dict(),
+            "skipped": self.skipped,
+            "skip_reason": self.skip_reason,
+            "notes": self.notes,
+        }
+
+
+@dataclass
 class PerfReport:
     """Everything the performance suite measured."""
 

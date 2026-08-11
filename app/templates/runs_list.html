@@ -86,6 +86,7 @@
                         {% if run.output_tokens_per_sec %}
                         {{ "%.1f"|format(run.output_tokens_per_sec) }} tok/s
                         {% if run.perf_json %}<span class="text-violet-400" title="A dedicated performance suite was run">&#9679;</span>{% endif %}
+                            {% if run.perf_json and '"context_sweep"' in run.perf_json %}<span class="text-blue-400" title="A context scalability sweep was run">C</span>{% endif %}
                         {% else %}-{% endif %}
                     </td>
                     <td class="text-xs font-mono text-slate-500" title="{{ run.test_suite_hash or 'N/A' }}">{{ run.test_suite_hash or '-' }}</td>

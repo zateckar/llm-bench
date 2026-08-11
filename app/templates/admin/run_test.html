@@ -27,7 +27,10 @@
     <form method="POST" action="/admin/run" class="card p-6 space-y-5"
           x-data="{
             perf: false,
+            context: false,
             concurrency: '1,2,4,8',
+            contextSizes: '{{ default_context_sizes }}',
+            contextConcurrency: '4',
             maxLevel: {{ max_concurrency }},
             get levels() {
                 return this.concurrency.split(',')
@@ -150,6 +153,42 @@
                     the endpoint's capacity rather than an exact measurement. The run also holds one
                     socket per in-flight request, so make sure the host's file-descriptor limit allows it.
                 </p>
+            </div>
+        </div>
+
+        <div class="border-t border-slate-700 pt-5 space-y-3">
+            <label class="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" name="run_context" value="1" x-model="context"
+                       class="mt-1 rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-blue-500">
+                <span>
+                    <span class="text-sm font-medium text-slate-300">Also run the context-length scalability sweep</span>
+                    <span class="block text-xs text-slate-500 mt-0.5">
+                        Measures time-to-first-token and latency at increasing prompt sizes so you can see
+                        where prefill cost and rate limits take over. Sizes below 192k get a small concurrent
+                        burst; larger sizes are sampled serially to keep token use bounded.
+                    </span>
+                </span>
+            </label>
+
+            <div x-show="context" x-collapse>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Context sizes (tokens)</label>
+                <input type="text" name="context_sizes" x-model="contextSizes"
+                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500">
+                <p class="text-xs text-slate-500 mt-1">
+                    Comma-separated token counts. The default spans 32k&ndash;1M.
+                </p>
+
+                <div class="mt-3">
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Concurrency levels</label>
+                    <input type="text" name="context_concurrency" x-model="contextConcurrency"
+                           class="w-40 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500">
+                    <p class="text-xs text-slate-500 mt-1">
+                        Comma-separated, each 1&ndash;64. A single value keeps the classic sweep: sizes below
+                        192k get one burst of max(concurrency, 3) probes and larger sizes one serial probe.
+                        Several values (e.g. <code>1,4,8</code>) measure every size at every level - a
+                        context &times; concurrency grid; levels on large sizes are clamped to 4.
+                    </p>
+                </div>
             </div>
         </div>
 
