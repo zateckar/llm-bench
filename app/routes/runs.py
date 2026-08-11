@@ -20,8 +20,40 @@ def _is_evaluator_error(detail: str) -> bool:
     return detail.startswith("Evaluator error:") or detail.startswith("Unknown evaluator:")
 
 
+# Keys the detail page assumes exist on the perf report. Runs benchmarked
+# before a given field was added lack it entirely; filling the defaults here
+# keeps the template from special-casing every perf_json schema era.
+_EMPTY_LATENCY_STATS: dict = {
+    "count": 0,
+    "mean_ms": None,
+    "stdev_ms": None,
+    "min_ms": None,
+    "p50_ms": None,
+    "p90_ms": None,
+    "p95_ms": None,
+    "p99_ms": None,
+    "max_ms": None,
+}
+
+_PERF_DEFAULTS: dict = {
+    "slo_capacity": None,
+    "capacity_users": None,
+    "cache_probe": None,
+    "slo_ttft_p95_ms": 2000.0,
+    "slo_stream_tps_p50": 15.0,
+    "slo_error_rate": 0.01,
+    "requests_per_user_hour": 60.0,
+}
+
+_CONCURRENCY_POINT_DEFAULTS: dict = {
+    "stream_tps": lambda: dict(_EMPTY_LATENCY_STATS),
+    "task_stats": dict,
+}
+
+
 def _parse_perf(raw: str | None) -> dict | None:
-    """Decode the stored performance report, tolerating a partial/failed write."""
+    """Decode the stored performance report, tolerating a partial/failed write
+    and upgrading older reports to the current schema."""
     if not raw:
         return None
     try:
@@ -29,7 +61,18 @@ def _parse_perf(raw: str | None) -> dict | None:
     except (TypeError, ValueError):
         logger.warning("Could not decode perf_json for a run; ignoring it")
         return None
-    return data if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return None
+    for key, fallback in _PERF_DEFAULTS.items():
+        data.setdefault(key, fallback)
+    points = data.get("concurrency")
+    if isinstance(points, list):
+        for point in points:
+            if not isinstance(point, dict):
+                continue
+            for key, factory in _CONCURRENCY_POINT_DEFAULTS.items():
+                point.setdefault(key, factory())
+    return data
 
 
 def _context_points(perf: dict | None) -> list[dict]:
