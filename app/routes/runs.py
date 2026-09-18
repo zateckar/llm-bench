@@ -205,6 +205,41 @@ async def run_detail(request: Request, run_id: int):
     )
 
 
+@router.post("/runs/{run_id}/stop")
+async def stop_run(request: Request, run_id: int):
+    """Stop an active run and make it removable.
+
+    The worker checks the terminal status before starting further requests, and
+    its final update is conditional so a late worker cannot turn a stopped run
+    back into ``completed`` or ``running``.
+    """
+    try:
+        await require_admin(request)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=302)
+
+    run = await fetch_one("SELECT status FROM test_runs WHERE id = ?", (run_id,))
+    if not run:
+        return RedirectResponse(url="/runs", status_code=302)
+
+    if run["status"] in ("running", "pending"):
+        await execute_transaction(
+            [
+                (
+                    """UPDATE test_runs
+                          SET status = 'failed', completed_at = CURRENT_TIMESTAMP,
+                              error_message = 'Stopped by administrator.'
+                        WHERE id = ? AND status IN ('running', 'pending')""",
+                    (run_id,),
+                ),
+                ("DELETE FROM benchmark_progress WHERE run_id = ?", (run_id,)),
+            ]
+        )
+        logger.info("Stopped benchmark run %d", run_id)
+
+    return RedirectResponse(url=f"/runs/{run_id}", status_code=302)
+
+
 @router.post("/runs/{run_id}/delete")
 async def delete_run(request: Request, run_id: int):
     try:

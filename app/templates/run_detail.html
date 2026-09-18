@@ -72,6 +72,15 @@
                 </button>
             </form>
             {% endif %}
+            {% if run.status in ('running', 'pending') and user and user.role == 'admin' %}
+            <form method="POST" action="/runs/{{ run.id }}/stop" class="inline"
+                  x-data
+                  x-on:submit.prevent="if(confirm('Stop this benchmark?')) $el.submit()">
+                <button type="submit" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-900/50 text-amber-400 hover:bg-amber-900/70 transition-colors">
+                    Stop benchmark
+                </button>
+            </form>
+            {% endif %}
         </div>
     </div>
 

@@ -107,8 +107,12 @@ def _update_progress(
         db.execute(
             """INSERT OR REPLACE INTO benchmark_progress
                    (run_id, current_test, current_index, total, status_message, phase)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (run_id, current_test, index, total, message, phase),
+               SELECT ?, ?, ?, ?, ?, ?
+                WHERE EXISTS (
+                    SELECT 1 FROM test_runs
+                     WHERE id = ? AND status IN ('pending', 'running')
+                )""",
+            (run_id, current_test, index, total, message, phase, run_id),
         )
         db.commit()
     finally:
@@ -124,7 +128,11 @@ def _store_result(run_id: int, index: int, result: Result) -> None:
                    (run_id, test_id, category, prompt, response, score, detail, evaluator,
                     question_index, prompt_tokens, completion_tokens, passed, pass_threshold,
                     difficulty, weight, latency_ms, ttft_ms, request_ok)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                WHERE EXISTS (
+                    SELECT 1 FROM test_runs
+                     WHERE id = ? AND status IN ('pending', 'running')
+                )""",
             (
                 run_id, q.id, q.category, q.prompt, result.response, result.score,
                 result.detail, q.evaluator, index,
@@ -132,7 +140,7 @@ def _store_result(run_id: int, index: int, result: Result) -> None:
                 1 if result.passed and not result.is_transport_error else 0,
                 q.pass_threshold, q.difficulty, q.effective_weight,
                 result.metrics.latency_ms or None, result.metrics.ttft_ms,
-                0 if result.is_transport_error else 1,
+                0 if result.is_transport_error else 1, run_id,
             ),
         )
         db.commit()
@@ -176,7 +184,7 @@ def _finish_run(
                       latency_p50_ms = ?, latency_p95_ms = ?, latency_p99_ms = ?,
                       ttft_p50_ms = ?, ttft_p95_ms = ?, output_tokens_per_sec = ?,
                       perf_json = ?
-                WHERE id = ?""",
+                WHERE id = ? AND status IN ('pending', 'running')""",
             (
                 status, datetime.now(timezone.utc).isoformat(), total, scored, passed,
                 avg, weighted, errors, error_message, total_prompt, total_completion,
@@ -187,6 +195,61 @@ def _finish_run(
         )
         db.execute("DELETE FROM benchmark_progress WHERE run_id = ?", (run_id,))
         db.commit()
+    finally:
+        db.close()
+
+
+def _mark_run_failed(run_id: int, message: str, workers: int = 1) -> None:
+    """Best-effort terminal update used when normal finalisation itself fails.
+
+    This deliberately updates only active rows. A stop request or a previous
+    finalisation must win over a late exception from the background thread.
+    """
+    db = _connect()
+    try:
+        db.execute(
+            """UPDATE test_runs
+                  SET status = 'failed', completed_at = ?,
+                      error_message = CASE
+                          WHEN error_message IS NULL OR error_message = ?
+                          THEN ?
+                          ELSE error_message
+                      END,
+                      workers = COALESCE(workers, ?)
+                WHERE id = ? AND status IN ('pending', 'running')""",
+            (
+                datetime.now(timezone.utc).isoformat(),
+                "",
+                message,
+                workers,
+                run_id,
+            ),
+        )
+        db.execute("DELETE FROM benchmark_progress WHERE run_id = ?", (run_id,))
+        db.commit()
+    finally:
+        db.close()
+
+
+def _safe_mark_run_failed(run_id: int, message: str, workers: int = 1) -> None:
+    """Never let an exception in the failure path escape the runner thread."""
+    try:
+        _mark_run_failed(run_id, _sanitize_error_detail(message), workers)
+    except Exception:  # noqa: BLE001
+        # There is no reliable database action left to take, but the exception
+        # is logged so an operator can distinguish a DB outage from a run error.
+        logger.exception("Could not mark benchmark run %d as failed", run_id)
+
+
+def _run_is_active(run_id: int) -> bool:
+    """Return whether a worker may still write to the run."""
+    db = _connect()
+    try:
+        row = db.execute(
+            "SELECT 1 FROM test_runs WHERE id = ? AND status IN ('pending', 'running')",
+            (run_id,),
+        ).fetchone()
+        return row is not None
     finally:
         db.close()
 
@@ -241,6 +304,44 @@ def _run_benchmark(
     slo_errors: float | None,
     req_per_user_h: float | None,
 ) -> None:
+    """Run a benchmark and make every unexpected failure terminal.
+
+    Keep this wrapper outside the implementation so failures during imports,
+    endpoint validation, suite hashing, or database setup cannot strand a run
+    in ``running`` before the implementation's more detailed guards begin.
+    """
+    try:
+        _run_benchmark_impl(
+            run_id, model, category, limit, test_ids, difficulty, workers,
+            run_perf, concurrency_levels, run_context, context_sizes,
+            context_concurrency, workload_mix, shared_prefix, slo_ttft_ms,
+            slo_tps, slo_errors, req_per_user_h,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Benchmark run %d failed outside the normal lifecycle", run_id)
+        _safe_mark_run_failed(run_id, str(e), workers)
+
+
+def _run_benchmark_impl(
+    run_id: int,
+    model: dict,
+    category: str | None,
+    limit: int | None,
+    test_ids: list[str] | None,
+    difficulty: str | None,
+    workers: int,
+    run_perf: bool,
+    concurrency_levels: tuple[int, ...],
+    run_context: bool,
+    context_sizes: tuple[int, ...],
+    context_concurrency: int | tuple[int, ...],
+    workload_mix: str,
+    shared_prefix: bool,
+    slo_ttft_ms: float | None,
+    slo_tps: float | None,
+    slo_errors: float | None,
+    req_per_user_h: float | None,
+) -> None:
     from app.config import TESTS_DIR
     from app.services.url_guard import UnsafeURLError, validate_endpoint
     from evaluators import EVALUATORS
@@ -250,22 +351,33 @@ def _run_benchmark(
 
     db = _connect()
     try:
-        db.execute(
-            "UPDATE test_runs SET status='running', started_at=?, workers=? WHERE id=?",
+        cursor = db.execute(
+                """UPDATE test_runs
+                  SET status = 'running', started_at = ?, workers = ?
+                WHERE id = ? AND status IN ('pending', 'running')""",
             (datetime.now(timezone.utc).isoformat(), workers, run_id),
         )
         db.commit()
     finally:
         db.close()
 
+    # A stop request can win the race with a thread that has just been
+    # scheduled. Do not resurrect a terminal run as running.
+    if cursor.rowcount != 1:
+        return
+
     empty = LatencyStats()
 
     def fail(message: str) -> None:
-        _finish_run(
-            run_id, total=0, scored=0, passed=0, avg=0.0, weighted=0.0, errors=0,
-            duration_ms=0.0, workers=workers, latency=empty, ttft=empty,
-            throughput=None, perf_json=None, error_message=message,
-        )
+        try:
+            _finish_run(
+                run_id, total=0, scored=0, passed=0, avg=0.0, weighted=0.0, errors=0,
+                duration_ms=0.0, workers=workers, latency=empty, ttft=empty,
+                throughput=None, perf_json=None, error_message=message,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("Normal failure finalisation failed for run %d", run_id)
+            _safe_mark_run_failed(run_id, message, workers)
 
     # Validate the endpoint once, up front: a blocked URL should fail the run
     # immediately rather than producing N identical per-question errors.
@@ -283,6 +395,9 @@ def _run_benchmark(
     except Exception as e:  # noqa: BLE001
         logger.exception("Failed to load the test suite for run %d", run_id)
         fail(f"Failed to load the test suite: {e}")
+        return
+
+    if not _run_is_active(run_id):
         return
 
     suite_hash = compute_test_suite_hash(TESTS_DIR)
@@ -333,9 +448,13 @@ def _run_benchmark(
 
         def work(index: int, q: Question, client: ChatClient) -> None:
             nonlocal completed
+            if not _run_is_active(run_id):
+                return
             response, tokens, metrics = client.complete(
                 q.prompt, q.system_prompt, max_tokens=q.max_tokens
             )
+            if not _run_is_active(run_id):
+                return
             if metrics.ok:
                 score, detail = evaluate(q, response)
             else:
@@ -383,6 +502,8 @@ def _run_benchmark(
             else:
                 client = ChatClient(config)
                 for i, q in enumerate(questions):
+                    if not _run_is_active(run_id):
+                        return
                     work(i, q, client)
         except Exception as e:  # noqa: BLE001
             logger.exception("Benchmark run %d failed", run_id)
@@ -392,10 +513,15 @@ def _run_benchmark(
             )
             return
 
+        if not _run_is_active(run_id):
+            return
+
         duration_ms = (time.perf_counter() - started) * 1000.0
 
         perf_json: str | None = None
         if run_perf:
+            if not _run_is_active(run_id):
+                return
             perf_json = _run_perf_phase(
                 run_id, config, concurrency_levels,
                 workload_mix=workload_mix, shared_prefix=shared_prefix,
@@ -404,11 +530,14 @@ def _run_benchmark(
             )
 
         if run_context and context_sizes:
+            if not _run_is_active(run_id):
+                return
             perf_json = _merge_context_phase(
                 run_id, config, context_sizes, context_concurrency, perf_json
             )
 
-        _summarise_and_finish(run_id, results, total, workers, duration_ms, perf_json, "")
+        if _run_is_active(run_id):
+            _summarise_and_finish(run_id, results, total, workers, duration_ms, perf_json, "")
     except Exception as e:  # noqa: BLE001
         logger.exception("Benchmark run %d failed", run_id)
         fail(str(e))

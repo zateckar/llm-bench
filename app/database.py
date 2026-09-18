@@ -2,6 +2,7 @@
 
 import aiosqlite
 from pathlib import Path
+from datetime import datetime, timezone
 
 from app.config import DATABASE_PATH, DATA_DIR
 
@@ -88,6 +89,40 @@ async def init_db():
         await db.executescript(schema)
 
         await _apply_migrations(db)
+
+        # Daemon benchmark threads do not survive an application restart. Any
+        # run that was still active at startup is therefore an interrupted run,
+        # not a run that can continue writing to the database. Mark it terminal
+        # so it no longer blocks cleanup or keeps the dashboard occupied.
+        cursor = await db.execute(
+            "SELECT id FROM test_runs WHERE status IN ('pending', 'running')"
+        )
+        interrupted_ids = [row[0] for row in await cursor.fetchall()]
+        if interrupted_ids:
+            interrupted_at = datetime.now(timezone.utc).isoformat()
+            await db.execute(
+                """UPDATE test_runs
+                      SET status = 'failed', completed_at = ?,
+                          error_message = CASE
+                              WHEN error_message IS NULL OR error_message = ''
+                              THEN 'Benchmark interrupted when the application stopped.'
+                              ELSE error_message
+                          END
+                    WHERE status IN ('pending', 'running')""",
+                (interrupted_at,),
+            )
+            placeholders = ", ".join("?" for _ in interrupted_ids)
+            await db.execute(
+                f"DELETE FROM benchmark_progress WHERE run_id IN ({placeholders})",
+                tuple(interrupted_ids),
+            )
+
+        # Older databases could contain progress rows left behind by a run that
+        # was deleted before foreign-key enforcement was enabled.
+        await db.execute(
+            """DELETE FROM benchmark_progress
+                 WHERE run_id NOT IN (SELECT id FROM test_runs)"""
+        )
 
         # Seed admin user if not exists
         from app.config import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL

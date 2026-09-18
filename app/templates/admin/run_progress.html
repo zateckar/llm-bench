@@ -11,6 +11,13 @@
             <h1 class="text-2xl font-bold text-white">Benchmark Progress</h1>
             <p class="text-slate-400 mt-1">Run #{{ run.id }}</p>
         </div>
+        {% if run.status in ('running', 'pending') %}
+        <form method="POST" action="/runs/{{ run.id }}/stop" class="ml-auto"
+              x-data
+              x-on:submit.prevent="if(confirm('Stop this benchmark?')) $el.submit()">
+            <button type="submit" class="btn-ghost text-sm text-amber-400 hover:text-amber-300">Stop benchmark</button>
+        </form>
+        {% endif %}
     </div>
 
     <div class="card p-6">

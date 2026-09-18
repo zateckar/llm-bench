@@ -95,6 +95,13 @@
                         <div class="flex items-center justify-end gap-1">
                             {% if run.status in ('running', 'pending') %}
                             <a href="/admin/run/{{ run.id }}/progress" class="btn-ghost text-xs px-2 py-1">View Progress</a>
+                            {% if user and user.role == 'admin' %}
+                            <form method="POST" action="/runs/{{ run.id }}/stop" class="inline"
+                                  x-data
+                                  x-on:submit.prevent="if(confirm('Stop this benchmark?')) $el.submit()">
+                                <button type="submit" class="btn-ghost text-xs px-2 py-1 text-amber-400 hover:text-amber-300">Stop</button>
+                            </form>
+                            {% endif %}
                             {% else %}
                             <a href="/runs/{{ run.id }}" class="btn-ghost text-xs px-2 py-1">View</a>
                             {% endif %}
