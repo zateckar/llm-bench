@@ -77,9 +77,9 @@
                         <label class="block text-xs font-medium text-slate-400 mb-1">Model</label>
                         <select x-model.number="run.model_id" @change="setModel(run, $el)" required
                                 class="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm">
-                            <option :value="null" disabled>Select a model</option>
+                            <option value="" selected disabled>Select a model</option>
                             {% for model in models %}
-                            <option value="{{ model.id }}">{{ model.name }} ({{ model.model_id }})</option>
+                            <option value="{{ model.id }}" :selected="run.model_id === {{ model.id }}">{{ model.name }} ({{ model.model_id }})</option>
                             {% endfor %}
                         </select>
                     </div>
