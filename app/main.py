@@ -41,9 +41,10 @@ _SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 async def csrf_protect(request: Request, call_next):
     """Origin-based CSRF protection for state-changing requests.
 
-    Combined with the SameSite=strict session cookie, this rejects cross-site
-    form submissions: a forged POST from another origin will either omit the
-    cookie (SameSite) or carry a mismatched Origin/Referer (checked here).
+    Combined with the SameSite=lax session cookie, this rejects cross-site
+    form submissions: lax already withholds the cookie on cross-site POSTs
+    (only top-level GETs are exempt), and this Origin/Referer check is the
+    authoritative guard for everything else.
     """
     if request.method not in _SAFE_METHODS:
         origin = request.headers.get("origin")

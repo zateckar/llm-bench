@@ -99,14 +99,30 @@ def login_redirect() -> RedirectResponse:
 
 
 def set_session_cookie(response: RedirectResponse, user_id: int, token_version: int = 0) -> None:
-    """Set session cookie on response."""
+    """Set session cookie on response.
+
+    samesite="lax" (not "strict") so top-level navigations from bookmarks,
+    external links, and tab restore still carry the session; cross-site POSTs
+    remain protected by the Origin/Referer check in the CSRF middleware.
+    Strict was silently dropping the cookie on those entries and reading as an
+    untimely logout. An explicit Expires accompanies Max-Age because some
+    browsers cap Max-Age-only cookies more aggressively.
+    """
+    from datetime import datetime, timedelta, timezone
+    from email.utils import format_datetime
+
     token = create_session_token(user_id, token_version)
+    expires = format_datetime(
+        datetime.now(timezone.utc) + timedelta(seconds=SESSION_MAX_AGE),
+        usegmt=True,
+    )
     response.set_cookie(
         "session",
         token,
         max_age=SESSION_MAX_AGE,
+        expires=expires,
         httponly=True,
-        samesite="strict",
+        samesite="lax",
         secure=COOKIE_SECURE,
     )
 
@@ -117,6 +133,6 @@ def clear_session_cookie(response: RedirectResponse) -> None:
     response.delete_cookie(
         "session",
         path="/",
-        samesite="strict",
+        samesite="lax",
         secure=COOKIE_SECURE,
     )
