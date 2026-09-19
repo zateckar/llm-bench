@@ -7,14 +7,28 @@
         specTemplate: {{ spec_defaults_json }},
         runs: [],
         tzOffset: '',
+        nextKey: 1,
         init() {
             this.tzOffset = String(new Date().getTimezoneOffset());
             const prefill = {{ prefill_json }};
             const source = prefill && prefill.length ? prefill : [this.specTemplate];
-            this.runs = source.map(s => JSON.parse(JSON.stringify(s)));
+            this.runs = source.map(s => this._newRun(s));
         },
-        addRun() { this.runs.push(JSON.parse(JSON.stringify(this.specTemplate))); },
-        removeRun(i) { if (this.runs.length > 1) this.runs.splice(i, 1); }
+        // Each run gets a stable unique key so Alpine's x-for never reuses a
+        // DOM <select> for a different run object — that reuse is what left a
+        // cloned run's model_id null and produced 'Run N has no model selected'.
+        _newRun(src) {
+            const r = JSON.parse(JSON.stringify(src));
+            r._key = this.nextKey++;
+            return r;
+        },
+        setModel(run, el) {
+            const v = el.value;
+            run.model_id = v === '' ? null : parseInt(v, 10);
+        },
+        addRun() { this.runs.push(this._newRun(this.specTemplate)); },
+        removeRun(i) { if (this.runs.length > 1) this.runs.splice(i, 1); },
+        payload() { return JSON.stringify(this.runs.map(({_key, ...rest}) => rest)); }
      }">
     <div>
         <h1 class="text-2xl font-bold text-white">{{ heading }}</h1>
@@ -48,7 +62,7 @@
             </div>
         </div>
 
-        <template x-for="(run, i) in runs" :key="i">
+        <template x-for="(run, i) in runs" :key="run._key">
             <div class="card p-5 space-y-4">
                 <div class="flex items-center justify-between">
                     <h2 class="text-sm font-semibold text-white">Run <span x-text="i + 1"></span></h2>
@@ -58,7 +72,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label class="block text-xs font-medium text-slate-400 mb-1">Model</label>
-                        <select x-model.number="run.model_id" required
+                        <select x-model.number="run.model_id" @change="setModel(run, $el)" required
                                 class="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm">
                             <option :value="null" disabled>Select a model</option>
                             {% for model in models %}
@@ -141,7 +155,7 @@
 
         <button type="button" @click="addRun()" class="btn-ghost w-full text-sm">+ Add another run</button>
 
-        <input type="hidden" name="runs_json" :value="JSON.stringify(runs)">
+        <input type="hidden" name="runs_json" :value="payload()">
 
         <button type="submit" class="btn-primary w-full">Create Plan</button>
         <p class="text-xs text-slate-500 text-center">
