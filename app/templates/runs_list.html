@@ -14,7 +14,7 @@
     </div>
 
     {% if runs %}
-    <div class="card overflow-hidden">
+    <div class="card overflow-x-auto">
         <table class="w-full">
             <thead>
                 <tr>
@@ -34,11 +34,11 @@
             <tbody>
                 {% for run in runs %}
                 <tr>
-                    <td class="font-mono text-sm text-slate-400">#{{ run.id }}</td>
-                    <td>
+                    <td class="font-mono text-sm text-slate-400 whitespace-nowrap">#{{ run.id }}</td>
+                    <td class="min-w-40">
                         <div>
-                            <p class="text-sm font-medium text-slate-200">{{ run.model_name }}</p>
-                            <p class="text-xs text-slate-500">{{ run.model_id }}</p>
+                            <p class="text-sm font-medium text-slate-200 break-words">{{ run.model_name }}</p>
+                            <p class="text-xs text-slate-500 truncate max-w-48">{{ run.model_id }}</p>
                         </div>
                     </td>
                     <td>
