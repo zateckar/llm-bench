@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Edit Model - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <div>
+        <h1 class="text-2xl font-bold text-white">Edit Model</h1>
+        <p class="text-slate-400 mt-1">#{{ model.id }} — update connection details. Existing runs keep their recorded model name/id.</p>
+    </div>
+
+    {% if error %}
+    <div class="p-3 rounded-lg bg-red-900/30 border border-red-800 text-sm text-red-300">{{ error }}</div>
+    {% endif %}
+
+    <div class="card p-5">
+        <form method="POST" action="/admin/models/{{ model.id }}/edit" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Name</label>
+                <input type="text" name="name" required value="{{ model.name }}" class="input-field">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Model ID</label>
+                <input type="text" name="model_id" value="{{ model.model_id }}" class="input-field">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Base URL</label>
+                <input type="url" name="base_url" required value="{{ model.base_url }}" class="input-field">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">API Key</label>
+                <input type="password" name="api_key" placeholder="Leave blank to keep the stored key" class="input-field">
+                <p class="text-xs text-slate-500 mt-1">Blank keeps the current key; it is never shown here.</p>
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-slate-300 mb-1">Description (optional)</label>
+                <input type="text" name="description" value="{{ model.description or '' }}" class="input-field">
+            </div>
+            <div class="md:col-span-2 flex gap-3">
+                <button type="submit" class="btn-primary">Save Changes</button>
+                <a href="/admin/models" class="btn-ghost">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

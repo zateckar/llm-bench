@@ -9,20 +9,65 @@
     </div>
 
     <!-- Run selector -->
-    <div class="card p-5">
-        <form method="GET" action="/compare" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-2">Select runs to compare (hold Ctrl/Cmd to select multiple)</label>
-                <select name="runs" multiple size="6"
-                        class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
-                    {% for run in completed_runs %}
-                    <option value="{{ run.id }}" {% if run.id|string in selected_ids %}selected{% endif %}>
-                        #{{ run.id }} — {{ run.model_name }} ({{ run.model_id }}) — {{ "%.1f"|format(run.avg_score * 100) }}% — {{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }}{% if run.test_suite_hash %} [{{ run.test_suite_hash }}]{% endif %}
-                    </option>
-                    {% endfor %}
-                </select>
+    <div class="card p-5" x-data="{
+        query: '',
+        picked: new Set([{% for id in selected_ids %}'{{ id }}'{% if not loop.last %}, {% endif %}{% endfor %}]),
+        get count() { return this.picked.size; },
+        matches(run) {
+            const q = this.query.trim().toLowerCase();
+            if (!q) return true;
+            return (run.text).includes(q);
+        },
+        toggle(id) { this.picked.has(id) ? this.picked.delete(id) : this.picked.add(id); },
+        presetLatestPerModel() {
+            const seen = new Set();
+            this.picked.clear();
+            for (const r of this.runsMeta) {
+                if (!seen.has(r.model)) { seen.add(r.model); this.picked.add(String(r.id)); }
+            }
+        },
+        runsMeta: [
+            {% for run in completed_runs %}
+            { id: {{ run.id }}, model: {{ (run.model_name)|tojson }},
+              text: {{ ('#' ~ run.id ~ ' ' ~ run.model_name ~ ' ' ~ run.model_id ~ ' ' ~ (run.avg_score * 100)|round(1) ~ '% ' ~ (run.test_suite_hash or ''))|tojson|lower }} },
+            {% endfor %}
+        ]
+     }">
+        <form method="GET" action="/compare" class="space-y-3" id="compareForm">
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+                <label class="text-sm font-medium text-slate-300">Select runs to compare</label>
+                <div class="flex items-center gap-3">
+                    <button type="button" @click="presetLatestPerModel()"
+                            class="text-xs text-blue-400 hover:text-blue-300">Latest per model</button>
+                    <span class="text-xs text-slate-400"><span x-text="count"></span> selected</span>
+                </div>
             </div>
-            <button type="submit" class="btn-primary">Compare Selected</button>
+            <input type="text" x-model="query" placeholder="Filter by model, id, score, hash…"
+                   class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
+
+            <div class="max-h-64 overflow-y-auto rounded-lg border border-slate-700 divide-y divide-slate-800">
+                {% for run in completed_runs %}
+                <label class="flex items-center gap-3 px-3 py-2 hover:bg-slate-800/60 cursor-pointer transition-colors"
+                       x-show="matches(runsMeta[{{ loop.index0 }}])"
+                       :class="picked.has('{{ run.id }}') ? 'bg-slate-800/80' : ''">
+                    <input type="checkbox" name="runs" value="{{ run.id }}"
+                           :checked="picked.has('{{ run.id }}')"
+                           @change="toggle('{{ run.id }}')"
+                           class="rounded bg-slate-700 border-slate-600 text-blue-500">
+                    <span class="font-mono text-xs text-slate-500 w-10">#{{ run.id }}</span>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm text-slate-200 truncate">{{ run.model_name }} <span class="text-slate-500 text-xs">({{ run.model_id }})</span></p>
+                    </div>
+                    <span class="text-xs text-slate-500">{{ run.created_at[:10] if run.created_at else '' }}</span>
+                    <span class="text-sm font-medium w-14 text-right {% if run.avg_score >= 0.7 %}text-emerald-400{% elif run.avg_score >= 0.5 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                        {{ "%.1f"|format(run.avg_score * 100) }}%
+                    </span>
+                    <span class="text-xs text-slate-500 w-16 text-right">{{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }}</span>
+                    {% if run.test_suite_hash %}<span class="text-xs font-mono text-slate-600">[{{ run.test_suite_hash[:8] }}]</span>{% endif %}
+                </label>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn-primary" :disabled="count < 2">Compare Selected</button>
         </form>
     </div>
 

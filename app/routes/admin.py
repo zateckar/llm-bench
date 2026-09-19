@@ -459,6 +459,60 @@ async def admin_create_model(
     return RedirectResponse(url="/admin/models", status_code=302)
 
 
+@router.get("/admin/models/{model_id}/edit")
+async def admin_edit_model_page(request: Request, model_id: int):
+    user = _admin_required(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    model = await fetch_one("SELECT * FROM models WHERE id = ?", (model_id,))
+    if not model:
+        return RedirectResponse(url="/admin/models", status_code=302)
+    return templates.TemplateResponse(request, "admin/model_edit.html", {"model": model})
+
+
+@router.post("/admin/models/{model_id}/edit")
+async def admin_edit_model(
+    request: Request,
+    model_id: int,
+    name: str = Form(...),
+    base_url: str = Form(...),
+    api_key: str = Form(""),
+    model_id_str: str = Form("", alias="model_id"),
+    description: str = Form(""),
+):
+    user = _admin_required(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    model = await fetch_one("SELECT * FROM models WHERE id = ?", (model_id,))
+    if not model:
+        return RedirectResponse(url="/admin/models", status_code=302)
+
+    from app.services.url_guard import validate_endpoint, UnsafeURLError
+
+    try:
+        validate_endpoint(base_url)
+    except UnsafeURLError as e:
+        return templates.TemplateResponse(
+            request, "admin/model_edit.html",
+            {"model": dict(model, name=name, base_url=base_url,
+                           model_id=model_id_str, description=description),
+             "error": f"Invalid base URL: {e}"},
+            status_code=400,
+        )
+
+    # Blank API key keeps the stored one, so the secret is never round-tripped
+    # into the page or required for an unrelated field edit.
+    new_key = api_key if api_key else model["api_key"]
+    new_model_id = model_id_str or model["model_id"]
+    await execute(
+        """UPDATE models SET name = ?, base_url = ?, api_key = ?, model_id = ?, description = ?
+           WHERE id = ?""",
+        (name, base_url, new_key, new_model_id, description, model_id),
+    )
+    return RedirectResponse(url="/admin/models", status_code=302)
+
+
 @router.post("/admin/models/{model_id}/delete")
 async def admin_delete_model(request: Request, model_id: int):
     user = _admin_required(request)
