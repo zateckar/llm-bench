@@ -93,7 +93,7 @@
                             {% if run.perf_json and '"context_sweep"' in run.perf_json %}<span class="text-blue-400" title="A context scalability sweep was run">C</span>{% endif %}
                         {% else %}-{% endif %}
                     </td>
-                    <td class="text-xs font-mono text-slate-500" title="{{ run.test_suite_hash or 'N/A' }}">{{ run.test_suite_hash or '-' }}</td>
+                    <td class="text-xs font-mono text-slate-500 whitespace-nowrap" title="{{ run.test_suite_hash or 'N/A' }}">{{ (run.test_suite_hash or '-')[:8] }}</td>
                     <td class="text-sm text-slate-500">{{ run.created_at[:16].replace('T', ' ') if run.created_at else '-' }}</td>
                     <td class="text-right whitespace-nowrap">
                         <div class="flex items-center justify-end gap-1">
