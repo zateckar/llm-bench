@@ -38,6 +38,12 @@ except ImportError:  # pragma: no cover - dependency is declared in pyproject
 
 from models import DIFFICULTY_WEIGHTS, Question
 
+# The C loader (libyaml) is a byte-for-byte-compatible drop-in for safe_load
+# and roughly an order of magnitude faster; with the pure-Python loader every
+# suite load costs a few hundred ms of scanning on every page/run that needs
+# the questions.
+_YAML_LOADER = getattr(yaml, "CSafeLoader", None) if yaml else None
+
 # Evaluators whose scores carry meaningful partial credit get a lower default
 # bar; everything else must be fully correct. Individual questions may still
 # override this with an explicit `pass_threshold`.
@@ -77,7 +83,7 @@ def load_yaml_tests(yaml_path: str | Path) -> list[Question]:
         raise FileNotFoundError(f"Test file not found: {path}")
 
     with open(path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+        data = yaml.load(f, Loader=_YAML_LOADER or yaml.SafeLoader)
 
     if not isinstance(data, list):
         raise SuiteError(

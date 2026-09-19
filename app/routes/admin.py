@@ -27,6 +27,38 @@ def _admin_required(request: Request):
 MAX_WORKERS = 16
 DEFAULT_CONCURRENCY_LEVELS = (1, 2, 4, 8)
 
+# The GET /admin/run page re-loads the whole YAML suite on every view to list
+# exactly the categories present. The suite only changes via file edits, so a
+# cache keyed on every YAML file's mtime is safe and cuts the page load.
+_suite_cache: dict = {"key": None, "payload": None}
+
+
+def _suite_summary():
+    """(categories, difficulties, question_count, error) for the run form."""
+    from app.config import TESTS_DIR
+    from pathlib import Path as _Path
+
+    files = sorted(_Path(TESTS_DIR).glob("*.yaml"))
+    try:
+        key = tuple((f.name, f.stat().st_mtime_ns) for f in files)
+    except OSError as e:
+        return [], [], 0, str(e)
+    if _suite_cache["key"] == key:
+        return _suite_cache["payload"]
+    try:
+        from test_loader import load_all_tests
+
+        questions = load_all_tests(TESTS_DIR)
+        categories = sorted({q.category for q in questions} | {'Interactive Tool Use', 'Long Context Quality'})
+        order = {"easy": 0, "medium": 1, "hard": 2, "expert": 3}
+        difficulties = sorted({q.difficulty for q in questions}, key=lambda d: order.get(d, 9))
+        payload = (categories, difficulties, len(questions), None)
+    except Exception as e:  # noqa: BLE001 - surfaced in the UI instead of a 500
+        payload = ([], [], 0, str(e))
+    _suite_cache["key"] = key
+    _suite_cache["payload"] = payload
+    return payload
+
 
 def _parse_concurrency(raw: str) -> tuple[int, ...]:
     """Parse a comma-separated concurrency list, falling back to the default.
@@ -94,21 +126,7 @@ async def admin_run_page(request: Request):
 
     # Offer exactly the categories and difficulty tiers the suite actually
     # contains, rather than a hand-maintained list that drifts out of date.
-    categories: list[str] = []
-    difficulties: list[str] = []
-    question_count = 0
-    suite_error = None
-    try:
-        from app.config import TESTS_DIR
-        from test_loader import load_all_tests
-
-        questions = load_all_tests(TESTS_DIR)
-        question_count = len(questions)
-        categories = sorted({q.category for q in questions} | {'Interactive Tool Use','Long Context Quality'})
-        order = {"easy": 0, "medium": 1, "hard": 2, "expert": 3}
-        difficulties = sorted({q.difficulty for q in questions}, key=lambda d: order.get(d, 9))
-    except Exception as e:  # noqa: BLE001 - surfaced in the UI instead of a 500
-        suite_error = str(e)
+    categories, difficulties, question_count, suite_error = _suite_summary()
 
     import perf
     from perf import MAX_CONCURRENCY

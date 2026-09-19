@@ -88,5 +88,12 @@ async def root():
 
 
 if __name__ == "__main__":
+    import os
+
     import uvicorn
-    uvicorn.run("app.main:app", host=HOST, port=PORT, reload=True)
+
+    # Reload watches the whole tree and re-imports on every file change; it
+    # roughly doubles request latency under load. Off by default, opt in with
+    # RELOAD=1 for development.
+    uvicorn.run("app.main:app", host=HOST, port=PORT,
+                reload=os.getenv("RELOAD", "").lower() in ("1", "true"))
