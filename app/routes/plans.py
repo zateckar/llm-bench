@@ -72,16 +72,33 @@ def _plan_spec_defaults() -> dict:
 
 
 def _parse_plan_runs(raw: str) -> list[dict]:
-    """Decode and structurally validate the builder's runs_json payload."""
+    """Decode and structurally validate the builder's runs_json payload.
+
+    The browser sends whatever the Alpine bindings produced; model ids are
+    accepted as ints or numeric strings and normalised to ints here so a
+    stringly-typed select binding cannot 422 an otherwise valid plan.
+    """
     try:
         specs = json.loads(raw or "")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid plan payload") from exc
     if not isinstance(specs, list) or not specs or len(specs) > 50:
         raise HTTPException(status_code=422, detail="A plan needs 1..50 runs")
-    for spec in specs:
-        if not isinstance(spec, dict) or not isinstance(spec.get("model_id"), int):
-            raise HTTPException(status_code=422, detail="Each run needs a model")
+    for i, spec in enumerate(specs, start=1):
+        if not isinstance(spec, dict):
+            raise HTTPException(status_code=422, detail=f"Run {i} is malformed")
+        model_id = spec.get("model_id")
+        if isinstance(model_id, str) and model_id.strip():
+            try:
+                model_id = int(model_id)
+            except ValueError:
+                model_id = None
+        if isinstance(model_id, bool) or not isinstance(model_id, int):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Run {i} has no model selected",
+            )
+        spec["model_id"] = model_id
     return specs
 
 
