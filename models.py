@@ -40,6 +40,9 @@ class Question:
     description: str | None = None
     # Per-question generation overrides (long-output tests need more headroom).
     max_tokens: int | None = None
+    metadata: dict = field(default_factory=dict)
+    # Local simulation definition, never included in the model's prompt.
+    interaction: dict | None = None
 
     @property
     def effective_weight(self) -> float:
@@ -56,6 +59,7 @@ class TokenUsage:
     # prefilling. Both common report shapes are normalised here (vLLM's
     # prompt_cache_hit_tokens, OpenAI's prompt_tokens_details.cached_tokens).
     cached_tokens: int = 0
+    prompt_tokens_estimated: bool = False
 
     @property
     def total_tokens(self) -> int:
@@ -83,6 +87,8 @@ class RequestMetrics:
     # either means a genuine miss or that the server does not report hits;
     # callers can only rely on it being *nonzero*.
     cached_tokens: int = 0
+    finish_reason: str | None = None
+    prompt_tokens_estimated: bool = False
 
     @property
     def decode_ms(self) -> float | None:
@@ -115,10 +121,18 @@ class Result:
     tokens: TokenUsage = field(default_factory=TokenUsage)
     metrics: RequestMetrics = field(default_factory=RequestMetrics)
     cached: bool = False
+    outcome: str = ""
+    diagnostics: dict = field(default_factory=dict)
+
+    @property
+    def is_scored(self) -> bool:
+        return self.metrics.ok and self.outcome not in {
+            "endpoint_error", "unsupported_context", "evaluator_error", "cancelled"
+        }
 
     @property
     def passed(self) -> bool:
-        return self.score >= self.question.pass_threshold - SCORE_EPSILON
+        return self.is_scored and self.score >= self.question.pass_threshold - SCORE_EPSILON
 
     @property
     def is_transport_error(self) -> bool:
@@ -144,7 +158,7 @@ class CategoryResult:
     @property
     def scored(self) -> list[Result]:
         """Results that actually produced a model answer."""
-        return [r for r in self.results if not r.is_transport_error]
+        return [r for r in self.results if r.is_scored]
 
     @property
     def errors(self) -> int:

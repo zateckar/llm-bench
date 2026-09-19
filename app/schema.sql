@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS test_runs (
     ttft_p95_ms REAL,
     output_tokens_per_sec REAL,         -- effective throughput for this run
     perf_json TEXT,                     -- serialised PerfReport, when the perf suite ran
+    quality_config_json TEXT,
+    quality_json TEXT,
     FOREIGN KEY (model_id) REFERENCES models(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
@@ -79,6 +81,8 @@ CREATE TABLE IF NOT EXISTS test_results (
     latency_ms REAL,
     ttft_ms REAL,
     request_ok INTEGER DEFAULT 1,       -- 0 when the call failed at the transport layer
+    quality_scored INTEGER,             -- NULL on legacy rows; excludes evaluator/unsupported errors
+    quality_metadata_json TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (run_id) REFERENCES test_runs(id)
 );

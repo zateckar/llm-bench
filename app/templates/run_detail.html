@@ -36,10 +36,11 @@
             <p class="text-slate-400 mt-1">{{ run.model_name }} ({{ run.model_id }})</p>
         </div>
         <div class="ml-auto flex items-center gap-3">
+            <a href="/runs/{{ run.id }}/report.html" class="btn-primary" download>Download HTML</a>
             {% if run.status == 'completed' %}
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-pass"
                   title="A question passes only when it reaches its own pass threshold, so partial credit never counts as a pass.">
-                {{ run.passed_questions }}/{{ run.scored_questions or run.total_questions }} passed ({{ "%.1f"|format(run.avg_score * 100) }}%)
+                {{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }} passed ({{ "%.1f"|format(run.avg_score * 100) }}%)
             </span>
             {% if run.weighted_score %}
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-slate-800 text-slate-300"
@@ -108,6 +109,8 @@
             <p class="text-sm text-slate-300 mt-1 truncate">{{ run.error_message or 'None' }}</p>
         </div>
     </div>
+
+    {% include "quality_summary.html" %}
 
     <!-- Performance measured while running the questions -->
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -421,7 +424,7 @@
             {% for row in difficulty_rows %}
             <div class="rounded-lg bg-slate-800/50 p-3">
                 <p class="text-xs text-slate-500 uppercase tracking-wider">{{ row.difficulty }}</p>
-                <p class="text-lg font-semibold text-slate-200 mt-1">{{ row.passed }}/{{ row.scored or row.total }}</p>
+                <p class="text-lg font-semibold text-slate-200 mt-1">{{ row.passed }}/{{ row.scored if row.scored is not none else row.total }}</p>
                 <p class="text-xs text-slate-500">{{ "%.0f%%"|format((row.avg_score or 0) * 100) }} average score</p>
             </div>
             {% endfor %}
@@ -498,14 +501,14 @@
                         </div>
                         {% else %}
                         <div class="w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold bg-slate-800 text-slate-500"
-                             title="All requests in this category were transport errors">
+                             title="No scored answers in this category">
                             &mdash;
                         </div>
                         {% endif %}
                         <div>
                             <p class="font-medium text-slate-200">{{ cat.category }}</p>
                             <p class="text-xs text-slate-500">
-                                {{ cat.passed }}/{{ cat.scored or cat.total }} passed
+                                {{ cat.passed }}/{{ cat.scored if cat.scored is not none else cat.total }} passed
                                 {%- if cat.weighted_score is not none %} &middot; {{ "%.0f%%"|format(cat.weighted_score * 100) }} weighted{% endif %}
                                 {%- if cat.avg_latency_ms %} &middot; {{ ms(cat.avg_latency_ms) }} avg latency{% endif %}
                             </p>
@@ -633,7 +636,7 @@
     // Pie chart
     const pieCtx = document.getElementById('pieChart').getContext('2d');
     const passedCount = {{ run.passed_questions }};
-    const failedCount = {{ run.scored_questions or run.total_questions }} - {{ run.passed_questions }};
+    const failedCount = {{ run.scored_questions if run.scored_questions is not none else run.total_questions }} - {{ run.passed_questions }};
 
     new Chart(pieCtx, {
         type: 'doughnut',

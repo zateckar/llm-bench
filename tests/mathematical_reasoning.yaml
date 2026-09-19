@@ -1,244 +1,251 @@
-# Mathematical Reasoning Test Suite
-#
-# Every expected value here was derived in closed form; `numeric_match` accepts
-# only the model's *final* asserted number, with a tolerance implied by the
-# precision the prompt asks for. There is no credit for the right value showing
-# up as an intermediate step.
+# Challenge suite v2. Answer-key derivations: challenge_oracles.py.
+# All parts must pass; no keyword-only credit. IDs intentionally differ from v1.
 
-- id: MR-01
+- id: MR2-01
   category: Mathematical Reasoning
-  difficulty: medium
-  prompt: "A retailer applies a 'Triple Tier' discount: 25% off the original price, then a further 15% off that price, then a loyalty coupon of 10% off the twice-discounted price. Sales tax of 8% is then applied to the final checkout price. What is the net percentage discount from the original price, including the sales tax? Reply with just the number rounded to two decimal places (e.g. 35.12 for 35.12%)."
-  evaluator: numeric_match
-  expected: 38.04
-
-- id: MR-02
-  category: Mathematical Reasoning
-  difficulty: medium
-  prompt: "A train travels from station A to station B at 90 km/h but stops for 15 minutes due to a signal delay. It then returns from B to A at 120 km/h with no delays. The distance between A and B is 180 km. What is the average speed for the entire round trip, in km/h? Reply with just the number rounded to two decimal places."
-  evaluator: numeric_match
-  expected: 96.0
-
-- id: MR-03
-  category: Mathematical Reasoning
-  difficulty: hard
-  prompt: "How many distinct arrangements of the letters in the word 'PROBABILITY' have the two 'I's non-adjacent? Reply with just the number."
-  evaluator: numeric_match
-  expected: 8164800.0
-
-- id: MR-04
-  category: Mathematical Reasoning
-  difficulty: medium
-  prompt: "A biased coin lands heads with probability 0.6. In 5 independent flips, what is the probability of getting exactly 3 heads? Express the answer as a decimal rounded to four decimal places. Reply with just the number."
-  evaluator: numeric_match
-  expected: 0.3456
-
-- id: MR-05
-  category: Mathematical Reasoning
-  difficulty: hard
-  prompt: "A hemispherical bowl of radius 6 cm, flat side up, is filled with water to a depth of 3 cm. What is the volume of the water in cubic centimetres? Use pi = 3.14159. Reply with just the number rounded to two decimal places."
-  evaluator: numeric_match
-  expected: 141.37
-
-- id: MR-06
-  category: Mathematical Reasoning
-  difficulty: hard
-  description: "Base-rate neglect: the intuitive answer is ~0.99"
-  prompt: "A screening test for a disease has 99% sensitivity and 95% specificity. The disease affects 0.5% of the population. A randomly chosen person tests positive. What is the probability that they actually have the disease? Express the answer as a decimal rounded to four decimal places. Reply with just the number."
-  evaluator: numeric_match
-  expected: 0.0905
-
-- id: MR-07
-  category: Mathematical Reasoning
-  difficulty: medium
-  prompt: "A bag contains 5 red, 4 blue and 3 green marbles. Three marbles are drawn without replacement. What is the probability of drawing exactly one of each colour? Express the answer as a fraction in lowest terms."
-  evaluator: regex_all
-  expected:
-    patterns:
-      - '(?:\b3\s*/\s*11\b|\\frac\{3\}\{11\}|\{3\}\{11\})'
-
-- id: MR-08
-  category: Mathematical Reasoning
-  difficulty: medium
-  prompt: "Given tan(x) = -3/4 with x in the second quadrant, what is sin(2x)? Express the answer as a decimal. Reply with just the number."
-  evaluator: numeric_match
-  expected: -0.96
-
-- id: MR-09
-  category: Mathematical Reasoning
-  difficulty: medium
-  prompt: "An infinite geometric series has first term 12 and sum 16. What is the sum of its first 4 terms? Express the answer as a decimal. Reply with just the number."
-  evaluator: numeric_match
-  expected: 15.9375
-
-- id: MR-10
-  category: Mathematical Reasoning
-  difficulty: hard
-  description: "Circulant 4x4 determinant; the sign is the part models get wrong"
-  prompt: "What is the determinant of the matrix [[1, 2, 3, 4], [2, 3, 4, 1], [3, 4, 1, 2], [4, 1, 2, 3]]? Reply with just the number."
-  evaluator: numeric_match
-  expected: -160.0
-
-- id: MR-11
-  category: Mathematical Reasoning
-  difficulty: medium
-  prompt: "What is the value of the second derivative of f(x) = ln(x^2 + 1) at x = 2? Express the answer as a decimal. Reply with just the number."
-  evaluator: numeric_match
-  expected: -0.24
-
-- id: MR-12
-  category: Mathematical Reasoning
-  difficulty: medium
-  prompt: "A 13 m ladder leans against a vertical wall. Its base is pulled away from the wall at a constant 2 m/s. How fast is the top sliding down the wall, in m/s, when the base is 5 m from the wall? Reply with the absolute speed rounded to two decimal places."
-  evaluator: numeric_match
-  expected: 0.83
-
-- id: MR-13
-  category: Mathematical Reasoning
-  difficulty: hard
-  prompt: "What is the remainder when 2^1000 is divided by 13? Reply with just the number."
-  evaluator: numeric_match
-  expected: 3.0
-
-- id: MR-14
-  category: Mathematical Reasoning
-  difficulty: hard
-  prompt: "What are the last two digits of 7^2024? Reply with the two digits only (for example 07)."
-  evaluator: numeric_match
-  expected: 1.0
-
-- id: MR-15
-  category: Mathematical Reasoning
-  difficulty: hard
-  prompt: "An acute triangle has sides of length 7, 8 and 10. What is its area? Reply with just the number rounded to two decimal places."
-  evaluator: numeric_match
-  expected: 27.81
-
-- id: MR-16
-  category: Mathematical Reasoning
-  difficulty: hard
-  prompt: "How many permutations of 5 distinct objects leave no object in its original position (i.e. have no fixed point)? Reply with just the number."
-  evaluator: numeric_match
-  expected: 44.0
-
-- id: MR-17
-  category: Mathematical Reasoning
-  difficulty: hard
-  prompt: "How many integers from 1 to 1000 inclusive are divisible by none of 2, 3 and 5? Reply with just the number."
-  evaluator: numeric_match
-  expected: 266.0
-
-- id: MR-18
-  category: Mathematical Reasoning
-  difficulty: hard
-  prompt: "Two fair six-sided dice are rolled repeatedly until the sum is either 7 or 8. What is the probability that a sum of 7 occurs before a sum of 8? Express the answer as a decimal rounded to four decimal places. Reply with just the number."
-  evaluator: numeric_match
-  expected: 0.5455
-
-- id: MR-19
-  category: Mathematical Reasoning
-  difficulty: hard
-  prompt: "What is the expected number of rolls of a fair six-sided die needed to observe every face at least once? Express the answer as a decimal rounded to two decimal places. Reply with just the number."
-  evaluator: numeric_match
-  expected: 14.7
-
-- id: MR-20
-  category: Mathematical Reasoning
-  difficulty: hard
-  prompt: "Evaluate the definite integral of x^2 * e^x from x = 0 to x = 1. Express the answer as a decimal rounded to four decimal places. Reply with just the number."
-  evaluator: numeric_match
-  expected: 0.7183
-
-- id: MR-21
-  category: Mathematical Reasoning
-  difficulty: medium
-  prompt: "Evaluate the infinite sum of 1/(n(n+2)) for n = 1, 2, 3, ... Express the answer as a decimal. Reply with just the number."
-  evaluator: numeric_match
-  expected: 0.75
-
-- id: MR-22
-  category: Mathematical Reasoning
-  difficulty: hard
-  prompt: "An open-top box is made from a 12 cm by 12 cm square sheet by cutting an x by x square from each corner and folding up the sides. What is the maximum possible volume in cubic centimetres? Reply with just the number."
-  evaluator: numeric_match
-  expected: 128.0
-
-- id: MR-23
-  category: Mathematical Reasoning
-  difficulty: hard
-  description: "Multi-part: every sub-answer must be right, so guessing one does not help"
+  difficulty: expert
+  source: challenge-v2
+  description: Digit constraints jointly with modular arithmetic
   prompt: |
-    Answer all three parts, then end your reply with a single line in exactly this format:
-    `ANSWERS: <a>, <b>, <c>`
-
-    (a) How many ways can 10 identical balls be placed into 4 distinct boxes so that no box is empty?
-    (b) What is the sum of the decimal digits of 2^20?
-    (c) The sequence is defined by a(1) = 1 and a(n+1) = 2*a(n) + 1. What is a(10)?
-  evaluator: regex_all
+    Consider eight-digit base-4 numbers (digits 0,1,2,3), with no leading zero
+    and no equal adjacent digits. Count those whose digit sum is 12, and among
+    those count the numbers divisible by 7 (interpreting the number in base 4).
+    Return JSON {"sum_12": ..., "also_divisible_by_7": ...} with integer counts.
+  evaluator: json_match
   expected:
-    patterns:
-      - '(?im)^\s*ANSWERS:\s*84\s*,\s*31\s*,\s*1023\s*\.?\s*$'
-
-- id: MR-24
+    value:
+      sum_12: 1129
+      also_divisible_by_7: 137
+    mode: exact
+  max_tokens: 8192
+- id: MR2-02
   category: Mathematical Reasoning
   difficulty: expert
-  description: "Steinmetz solid: volume of the intersection of two perpendicular cylinders"
-  prompt: "Two solid cylinders of radius 1 have axes that intersect perpendicularly. What is the volume of the region common to both? Reply with just the number rounded to four decimal places."
-  evaluator: numeric_match
-  expected: 5.3333
-
-- id: MR-25
+  source: challenge-v2
+  description: Bounded compositions with parity and ordering restrictions
+  prompt: |
+    Put 17 indistinguishable tokens into five labeled boxes A,B,C,D,E.
+    Each box holds at most 6. A holds at least 2, B holds an even number (zero
+    allowed), C holds strictly fewer than D, and E holds at least 1.
+    Count valid allocations and those valid allocations with E holding at least 4.
+    Return JSON {"count": ..., "with_last_at_least_4": ...}.
+  evaluator: json_match
+  expected:
+    value:
+      count: 236
+      with_last_at_least_4: 124
+    mode: exact
+  max_tokens: 8192
+- id: MR2-03
   category: Mathematical Reasoning
   difficulty: expert
-  description: "Requires the derivative trick or a generating-function argument"
-  prompt: "Evaluate the infinite sum of n/2^n for n = 0, 1, 2, ... Reply with just the number."
-  evaluator: numeric_match
-  expected: 2.0
-
-- id: MR-26
+  source: challenge-v2
+  description: Bayesian conditioning on a selective reporting process
+  prompt: |
+    Select urn A with probability 1/4, otherwise urn B. A has 4 red and 2 blue
+    balls; B has 2 red and 5 blue. Draw three balls without replacement.
+    An observer sends a report with probability 1 if exactly two draws are red,
+    probability 1/3 if exactly one is red, and probability 0 otherwise.
+    The report reveals nothing besides the fact that it was sent.
+    Return JSON with report_probability, urn_A_given_report, two_red_given_report.
+    Express every probability as [numerator,denominator] in lowest terms.
+  evaluator: json_match
+  expected:
+    value:
+      report_probability:
+      - 5
+      - 12
+      urn_A_given_report:
+      - 2
+      - 5
+      two_red_given_report:
+      - 108
+      - 175
+    mode: exact
+  max_tokens: 8192
+- id: MR2-04
   category: Mathematical Reasoning
   difficulty: expert
-  description: "Basel problem; the value is irrational-adjacent, not 1.5"
-  prompt: "What is the value of the infinite sum 1/1^2 + 1/2^2 + 1/3^2 + 1/4^2 + ... rounded to four decimal places? Reply with just the number."
-  evaluator: numeric_match
-  expected: 1.6449
-
-- id: MR-27
+  source: challenge-v2
+  description: Coupled expected hitting times with self-loops
+  prompt: |
+    A Markov chain has transient states A,B,C and absorbing state Z.
+    From A: B with probability 1/2, C with probability 1/2.
+    From B: A, C, Z with probability 1/3 each.
+    From C: A with probability 1/4, C with probability 1/2, Z with probability 1/4.
+    Each transition, including a self-loop or entry to Z, costs one step.
+    Return JSON with keys A,B,C giving the expected steps to first reach Z from
+    each state, each as [numerator,denominator] in lowest terms.
+  evaluator: json_match
+  expected:
+    value:
+      A:
+      - 17
+      - 3
+      B:
+      - 9
+      - 2
+      C:
+      - 29
+      - 6
+    mode: exact
+  max_tokens: 8192
+- id: MR2-05
   category: Mathematical Reasoning
   difficulty: expert
-  description: "Repeated integration by parts; sign errors are the usual failure"
-  prompt: "Evaluate the definite integral of x^3 * e^x from x = 0 to x = 1. Reply with just the number rounded to four decimal places."
-  evaluator: numeric_match
-  expected: 0.5634
-
-- id: MR-28
+  source: challenge-v2
+  description: Non-coprime congruences plus coprimality filtering
+  prompt: |
+    Let S contain integers n from 1 through 5000 satisfying n mod 12 = 5,
+    n mod 18 = 11, and gcd(n,35)=1.
+    Return JSON {"count": |S|, "sum": sum of S, "smallest": min S, "largest": max S}.
+  evaluator: json_match
+  expected:
+    value:
+      count: 96
+      sum: 240240
+      smallest: 29
+      largest: 4997
+    mode: exact
+  max_tokens: 8192
+- id: MR2-06
   category: Mathematical Reasoning
   difficulty: expert
-  description: "Onto functions need Stirling numbers or inclusion-exclusion, not 3^5"
-  prompt: "How many surjective (onto) functions are there from a set of 5 elements to a set of 3 elements? Reply with just the number."
-  evaluator: numeric_match
-  expected: 150.0
-
-- id: MR-29
+  source: challenge-v2
+  description: Derangements with adjacency, relative order, and parity
+  prompt: |
+    Permute the numbers 1 through 7. No number may equal its one-based position;
+    1 and 2 must not be adjacent; and 3 must occur before 4.
+    Count all such permutations and how many of them are even (have an even number
+    of inversions). Return JSON {"count": ..., "even_permutations": ...}.
+  evaluator: json_match
+  expected:
+    value:
+      count: 608
+      even_permutations: 308
+    mode: exact
+  max_tokens: 8192
+- id: MR2-07
   category: Mathematical Reasoning
   difficulty: expert
-  description: "Euler's totient of a highly composite number"
-  prompt: "How many integers in the range 1 to 360 inclusive are coprime to 360? Reply with just the number."
-  evaluator: numeric_match
-  expected: 96.0
-
-- id: MR-30
+  source: challenge-v2
+  description: Conditional dice probability with multiplicities
+  prompt: |
+    Roll four independent fair six-sided dice. Event E means their sum is at
+    least 17 AND exactly three distinct face values appear. Let F mean at least
+    one die shows 6. Compute P(E) and P(F|E).
+    Return JSON {"event_probability": [numerator,denominator],
+    "six_given_event": [numerator,denominator]}, with fractions in lowest terms.
+  evaluator: json_match
+  expected:
+    value:
+      event_probability:
+      - 4
+      - 27
+      six_given_event:
+      - 15
+      - 16
+    mode: exact
+  max_tokens: 8192
+- id: MR2-08
   category: Mathematical Reasoning
   difficulty: expert
-  description: "Large power digit sum; must compute 2^100 exactly, not approximate"
-  prompt: "What is the sum of the decimal digits of 2^100? Reply with just the number."
-  evaluator: numeric_match
-  expected: 115.0
-
-- id: MR-31
+  source: challenge-v2
+  description: Lattice-path counting with a corridor, obstacles, and waypoint
+  prompt: |
+    Paths on the integer grid go from (0,0) to (7,6) using only steps (1,0) and (0,1).
+    A path must never visit (2,2), (3,4), or (5,3), must visit (4,2), and must satisfy
+    y <= x+1 at every visited point, including endpoints.
+    Return JSON {"paths": number of valid paths}.
+  evaluator: json_match
+  expected:
+    value:
+      paths: 126
+    mode: exact
+  max_tokens: 8192
+- id: MR2-09
   category: Mathematical Reasoning
   difficulty: expert
-  description: "Legendre's formula; the answer is not simply 5*5 or 10"
-  prompt: "What is the smallest positive integer n such that n! is divisible by 10^5? Reply with just the number."
-  evaluator: numeric_match
-  expected: 25.0
+  source: challenge-v2
+  description: Integer quadratic optimization with coupled constraints
+  prompt: |
+    Integers x,y,z each lie between 0 and 12 inclusive and obey
+    2*x+3*y+z=24 and x+y+z>=10.
+    Minimize 3*x^2+2*y^2+z^2-2*x*y-4*y*z.
+    Return JSON {"minimum": ..., "minimizers": [[x,y,z], ...]} containing EVERY
+    minimizing triple in lexicographic order.
+  evaluator: json_match
+  expected:
+    value:
+      minimum: -49
+      minimizers:
+      - - 0
+        - 5
+        - 9
+    mode: exact
+  max_tokens: 8192
+- id: MR2-10
+  category: Mathematical Reasoning
+  difficulty: expert
+  source: challenge-v2
+  description: Symmetry counting with periodic configurations
+  prompt: |
+    Color the nine positions of a circle with A,B,C, using each color exactly
+    three times. Adjacent positions, including position 9 next to 1, must have
+    different colors. Colors are named: exchanging A and B is not an equivalence.
+    Count configurations (1) on labeled positions 1..9, (2) identifying rotations
+    only, (3) identifying both rotations and reflections. Do not assume all
+    configurations have nine distinct rotations.
+    Return JSON {"labeled": ..., "up_to_rotation": ...,
+    "up_to_rotation_and_reflection": ...}.
+  evaluator: json_match
+  expected:
+    value:
+      labeled: 132
+      up_to_rotation: 16
+      up_to_rotation_and_reflection: 8
+    mode: exact
+  max_tokens: 8192
+- id: MR2-11
+  category: Mathematical Reasoning
+  difficulty: expert
+  source: challenge-v2
+  description: Non-uniform coupon collection from two initial states
+  prompt: |
+    Independent draws produce types 1,2,3,4 with probabilities 1/10,2/10,3/10,4/10.
+    Compute expected additional draws to collect all types (a) starting empty,
+    (b) starting with types 1 and 4 already collected.
+    Return JSON {"from_empty": [numerator,denominator],
+    "after_types_1_and_4": [numerator,denominator]}, fractions in lowest terms.
+  evaluator: json_match
+  expected:
+    value:
+      from_empty:
+      - 445
+      - 36
+      after_types_1_and_4:
+      - 19
+      - 3
+    mode: exact
+  max_tokens: 8192
+- id: MR2-12
+  category: Mathematical Reasoning
+  difficulty: expert
+  source: challenge-v2
+  description: Factorial valuations with multiple limiting primes
+  prompt: |
+    Let B = 2^7 * 3^4 * 5^2. Find the smallest positive integer n for which B^8 divides n!.
+    Return JSON {"n": ..., "valuations": [v2(n!),v3(n!),v5(n!)],
+    "previous_max_power": largest integer k such that B^k divides (n-1)!}.
+    vp(m) is the exponent of prime p in m.
+  evaluator: json_match
+  expected:
+    value:
+      n: 70
+      valuations:
+      - 67
+      - 32
+      - 16
+      previous_max_power: 7
+    mode: exact
+  max_tokens: 8192

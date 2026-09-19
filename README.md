@@ -10,7 +10,7 @@ Built with **Python 3.13**, **FastAPI**, **HTMX**, **Tailwind CSS** and **SQLite
 
 ### Quality
 
-273 questions across 23 categories, each graded by a rule-based evaluator. Every question declares its own **pass threshold** (1.0 by default), so partial credit never counts as a pass:
+269 static questions across 23 categories, plus seeded reasoning and interactive tasks (276 questions by default). Every question declares its own **pass threshold** (1.0 by default), so partial credit never counts as a pass:
 
 | Area | Categories |
 |------|-----------|
@@ -24,7 +24,17 @@ Built with **Python 3.13**, **FastAPI**, **HTMX**, **Tailwind CSS** and **SQLite
 
 Each question carries a **difficulty** tier (`easy` / `medium` / `hard` / `expert`) that feeds a difficulty-weighted score alongside the raw average, so a model that only clears the easy items cannot hide behind a flat percentage.
 
-Roughly 40% of items execute the model's code in a sandboxed subprocess and compare returned values structurally, rather than pattern-matching prose about the code.
+54 items execute the model's code in a sandboxed subprocess and compare returned values structurally, rather than pattern-matching prose about the code.
+
+The **challenge-v2** revision replaces 106 familiar puzzles, routine calculations, and generic planning questions with 56 harder questions across logical reasoning, mathematics, advanced coding, agentic use cases, tool use, and reading comprehension. Tasks include constrained optimization, exact conditional probabilities, transaction replay, concurrent-update recovery, and code with boundary and tie-breaking requirements. All requested JSON fields must match; code must pass every fixture. Expert reasoning questions allow up to 8,192 output tokens.
+
+Difficulty tiers are author estimates, not measured model rankings. Compare models on the same suite hash and decoding settings; scores from before this revision are not directly comparable. Establishing how well the new questions separate particular models requires fresh runs of those models.
+
+Quality runs now add four generated problem families (assignment optimization, constrained binary strings, selective-report probability, and Boolean constraints) and three interactive environments (concurrent document updates, uncertain payment outcomes, and paginated deletion previews). They vary deterministically by **question seed**, variant index, and development/evaluation split. The evaluation split generates different instances; its public generator is not a secret test set. The fixed YAML questions remain shared anchors.
+
+Advanced coding receives 197 additional deterministic cases by default, including larger inputs, boundary conditions, and randomized combinations. Independent implementations and metamorphic checks verify the fixtures. Interactive models issue one JSON action per turn and receive the simulated result before choosing the next action. Scoring checks final state and authorization, while reporting excess calls separately. These environments never access real files, payments, or services. They test interaction through a portable text protocol, not native provider function-calling syntax.
+
+Optional **long-context quality** tasks measure answer accuracy at exact `cl100k_base` reference-token lengths. Relevant records occur near the beginning, middle, and end, mixed with drafts, older revisions, near-matching identifiers, and unrelated records. Reports show provider-reported prompt-token counts separately: different tokenizers need not agree. Unsupported context sizes are recorded separately from incorrect answers. This is independent of the performance context sweep.
 
 ### Performance
 
@@ -66,6 +76,14 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The admin credentials come 
 
 From the admin UI you can filter by category and difficulty, choose how many questions to run concurrently, and optionally run the performance suite as part of the same run. Results, latency percentiles, throughput, the concurrency sweep and a difficulty breakdown all appear on the run detail page, and runs can be compared side by side on both quality and performance.
 
+### Downloading and comparing reports
+
+Click **Download HTML** on a run page, or select two or more runs on **Compare Runs** and click **Download comparison HTML**. Each download is one self-contained file with embedded SVG charts and CSS. It opens offline without JavaScript, fonts, or other external assets and includes printable summaries, quality diagnostics, provenance, and expandable saved prompts, responses, and evaluator details.
+
+Comparisons include question-phase latency and throughput plus dedicated performance measurements: single-stream decode, prefill, peak output and request rates, SLO capacity, cache effects, concurrency curves, and context scaling. The online comparison and downloaded reports share the same performance tables and charts. Missing measurements remain `n/a`; measured zeroes remain zero. Different workloads, worker counts, cache conditions, and tested concurrency ranges can affect comparisons.
+
+Authenticated download endpoints are `/runs/{id}/report.html` and `/compare/report.html?runs=1&runs=2` (comma-separated IDs also work). Older runs can be exported; unavailable diagnostics are omitted or marked `n/a`. Active or failed runs are clearly labeled as partial snapshots. Exports contain saved benchmark content but omit model configuration credentials and endpoint URLs.
+
 ### Running the CLI benchmark
 
 ```bash
@@ -92,8 +110,30 @@ Useful options:
 | `--perf-requests N` | minimum requests per concurrency level (default 8) |
 | `--no-cache` | re-query the model; the cache file is neither read nor modified |
 | `--report path.md` | where to write the markdown report |
+| `--suite-seeds 19,23` | reproducible question seeds; distinct from the model's decoding seed |
+| `--suite-split evaluation` | use the evaluation generator stream (default `development`) |
+| `--variants 3` | variants per generated family and seed (1–10) |
+| `--static-only` | disable generated reasoning, interactive tasks, and extra code fixtures |
+| `--quality-context-sizes 8192,32768,131072` | add answer-accuracy tests at these reference context sizes |
+| `--input-price 2 --output-price 8` | estimate USD cost using supplied per-million-token rates |
 
-The run writes `report.md`, and `report.perf.json` when the performance suite ran.
+The run writes `report.md`, `report.quality.json` for quality runs, and `report.perf.json` when the performance suite ran. Interactive tasks always use fresh environments and bypass the response cache.
+
+For example, run reproducible evaluation variants and long-context quality checks:
+
+```bash
+uv run python benchmark.py --suite-split evaluation --suite-seeds 19,23 --variants 2 --quality-context-sizes 8192,32768,131072 --no-cache
+```
+
+Long-context sizes are optional because they substantially increase prompt-token spend. `tiktoken` downloads its hash-verified reference vocabulary on first use; `TIKTOKEN_CACHE_DIR` can point to a prepopulated cache. Docker images preload it during the build, so production runs need no vocabulary download.
+
+Compare two saved reports without model calls:
+
+```bash
+uv run python quality_report.py model-a.quality.json model-b.quality.json
+```
+
+The web run form exposes the same seeds, split, variants, context sizes, and pricing. Run detail pages show diagnostics and a downloadable quality JSON; the comparison page shows capability alongside cost and latency plus paired differences.
 
 Responses are cached in `.benchmark_cache.json`, keyed by a fingerprint of the endpoint, prompt, evaluator, expected value, pass threshold and decoding parameters — so editing a question, or pointing the same model name at a different endpoint, invalidates its cached result automatically, and re-scoring after an evaluator fix costs no tokens.
 
@@ -138,6 +178,27 @@ uv run python selftest_evaluators.py
 - **No false passes.** Every evaluator has at least one adversarial case — a plausible-looking wrong answer — that must score below the pass bar. Each corresponds to a real scoring defect: a number that appears only as an intermediate step, half the required keywords, required steps in the wrong order, a correct label under the wrong item number, a response that hedges and then fabricates specifics, a review that finds most issues and then declares the code secure.
 - **No false failures.** Every evaluator has correct answers that must score 1.0, including awkward-but-valid forms: an `int` where the fixture says `float`, a tuple where it says a list, a dict with different key ordering, and a reasoning model's `<think>` block preceding the real answer.
 - **End to end.** A hand-written ideal answer and a hand-written lazy answer are run through real questions from `tests/`, and must pass and fail respectively.
+
+**`selftest_challenges.py`** verifies all 56 challenge questions against executable
+answer derivations and reviewed policy traces. It accepts correct solutions and
+rejects answers with a single wrong or missing field, reordered results, and code
+with deliberately broken boundary handling. This check also runs in CI:
+
+```bash
+uv run python selftest_challenges.py
+```
+
+**`selftest_quality.py`** tests generator reproducibility and separate evaluation streams, independent answer derivations, differential code oracles, metamorphic properties, exact long-context sizes, adaptive tool agents, failed and unauthorized actions, output truncation, SQLite storage, and complete CLI/web runner agreement using fake clients. No live model endpoint is needed:
+
+```bash
+uv run python selftest_quality.py
+```
+
+**`selftest_reports.py`** verifies HTML downloads, offline assets, authentication, comparison metrics, legacy/partial runs, excluded answers, skipped context measurements, and escaping of untrusted content using a temporary database:
+
+```bash
+uv run python selftest_reports.py
+```
 
 ### Evaluation methodology & known limitations
 
@@ -252,6 +313,10 @@ takes to update the questions — repeat the two commands above.
 
 ## Interpreting a run
 
+- **Category/family-balanced capability** gives each capability category equal weight and each question family equal weight within its category. Generated variants are averaged within their family. Creative-writing constraint compliance is reported separately and does not claim to measure artistic quality. The legacy all-item average and difficulty-weighted scores remain available.
+- **95% intervals** use a deterministic 1,000-draw bootstrap of families within fixed categories. Variants stay clustered; intervals require at least two families in every included category. These describe sampled-item uncertainty, not model run-to-run variability or guaranteed generalization. Paired comparisons use only identical question fingerprints answered by both models, reject mismatched decoding protocols, and disclose unmatched and excluded items.
+- **Failure diagnostics** distinguish incorrect task results, formatting failures, creative-writing compliance failures, output truncation, endpoint errors, unsupported context, evaluator errors, and cancellation. Formatting and truncation remain scored failures. Endpoint/unsupported/evaluator/cancelled items are excluded, with coverage shown; a missing answer never becomes a pass.
+- **Cost estimates** require both user-supplied rates and include fresh quality-call usage only. They exclude unknown billing, unreported failed-request usage, performance-suite usage, and provider cache discounts. Interactive task latency is the sum of its model-call latencies; call counts and excess calls are separate metrics.
 - **Average score** is the mean per-question score; **weighted** applies the difficulty weights (easy 1.0, medium 1.5, hard 2.0, expert 3.0).
 - **Passed** counts only questions that reached their own threshold. It is not the same as "scored above 50%".
 - **Request errors** are transport failures. They are excluded from every percentage — a 502 from the endpoint is not evidence about the model — and are listed separately so they can be re-run.

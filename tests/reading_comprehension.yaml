@@ -1,201 +1,194 @@
-# Reading Comprehension Test Suite
-#
-# The previous version asked questions whose answers were stated verbatim in the
-# passage ("How many countries does the Amazon span?" - "nine countries"), which
-# tests string matching, not comprehension. Every item here requires at least two
-# steps over the passage: arithmetic, unit conversion, entity chaining, scope
-# judgement, or spotting an unsupported claim. Distractor figures are included on
-# purpose.
+# Challenge suite v2. Answer-key derivations: challenge_oracles.py.
+# All parts must pass; no keyword-only credit. IDs intentionally differ from v1.
 
-- id: RC-01
-  category: Reading Comprehension
-  difficulty: medium
-  description: "Two-step area computation with a distractor percentage"
-  prompt: |
-    Passage: The Amazon rainforest covers approximately 5,500,000 square kilometres and spans nine countries in South America. Brazil contains about 60% of the forest and Peru about 13%; the remaining share is divided among the other seven countries. The forest is home to roughly 10% of all known species on Earth.
-
-    Question: How many square kilometres of the forest lie outside both Brazil and Peru? Reply with just the number, rounded to the nearest thousand.
-  evaluator: numeric_match
-  expected: 1485000.0
-
-- id: RC-02
-  category: Reading Comprehension
-  difficulty: medium
-  description: "Elapsed-time arithmetic across four legs, including an implicit wait"
-  prompt: |
-    Passage: Sarah left home at 8:00 AM and drove 30 minutes to the station, where she parked. She boarded the 8:45 AM train. The journey took 2 hours and 15 minutes. On arrival she took a 20-minute taxi ride to the office.
-
-    Question: How many minutes elapsed in total between leaving home and arriving at the office? Reply with just the number.
-  evaluator: numeric_match
-  expected: 200.0
-
-- id: RC-03
+- id: RC2-01
   category: Reading Comprehension
   difficulty: hard
-  description: "Tiered pricing: must apply the included-seat allowance and the annual discount"
+  source: challenge-v2
+  description: Reconcile withdrawals and reinstatements without misreading an exception
   prompt: |
-    Passage: The Basic plan costs $12 per user per month with a five-user minimum. The Pro plan costs $20 per user per month for the first 10 users, who are included in the plan, with each additional user billed at $18 per month. Customers who pay annually receive two months free.
-
-    Question: A company with 14 users on the Pro plan pays annually. What is its total annual cost in dollars? Reply with just the number.
-  evaluator: numeric_match
-  expected: 2720.0
-
-- id: RC-04
-  category: Reading Comprehension
-  difficulty: hard
-  description: "Growth rate vs. absolute growth; the highest-rate company is not the answer"
-  prompt: |
-    Passage: In 2023 Company A reported revenue of $5.0M, up 20% on 2022. Company B reported $4.0M, up 25%. Company C reported $6.0M, up 15%.
-
-    Question: Which company added the most revenue in absolute terms during 2023, and how much did it add? Give the company letter and the amount in millions of dollars rounded to two decimal places, in the form `A / 0.00`.
-  evaluator: regex_all
+    A register originally lists applications a=12, b=9, c=7, d=16, e=11 units.
+    A later notice withdraws b and c. The final notice reinstates c and confirms d;
+    confirmation does not add a second copy. The unit figures never change.
+    The summary includes all applications except those still withdrawn. Its
+    "over ten" measure counts applications with strictly more than 10 units,
+    not their units. Return JSON with included (IDs sorted), total (units), and
+    over_ten (application count). The original register is not the final state.
+  evaluator: json_match
   expected:
-    patterns:
-      - '(?i)\bA\b\s*/\s*0\.83\b'
-
-- id: RC-05
-  category: Reading Comprehension
-  difficulty: hard
-  description: "Scope judgement: which claim the passage does NOT support"
-  prompt: |
-    Passage: Using its Near-Infrared Spectrograph, the James Webb Space Telescope detected carbon dioxide in the atmosphere of WASP-39b, a hot gas giant 700 light-years from Earth. The detection was made by measuring starlight filtered through the planet's atmosphere during transit. The result was published in Nature.
-
-    Which one of the following is NOT supported by the passage?
-    A) JWST measured starlight that passed through WASP-39b's atmosphere
-    B) WASP-39b is a gas giant
-    C) WASP-39b's atmosphere could support microbial life
-    D) The finding appeared in the journal Nature
-
-    Reply with the letter only.
-  evaluator: mcq
-  expected:
-    answer: C
-    options: ABCD
-
-- id: RC-06
-  category: Reading Comprehension
-  difficulty: hard
-  description: "Entity chaining plus a blood-relation vs. in-law distinction"
-  prompt: |
-    Passage: Alice is Bob's sister. Carol is Alice's daughter. Dave is Carol's brother. Eve is married to Dave. Frank is Eve's father.
-
-    Question: Counting only Bob, Carol, Dave, Eve and Frank, how many of them are related to Alice by blood? Reply with just the number.
-  evaluator: numeric_match
-  expected: 3.0
-
-- id: RC-07
-  category: Reading Comprehension
-  difficulty: hard
-  description: "Difference then unit conversion"
-  prompt: |
-    Passage: Mount Everest stands 8,848.86 metres above sea level. K2, the second-highest peak, stands 8,611 metres. One metre equals 3.28084 feet.
-
-    Question: How much taller is Everest than K2, in feet? Reply with just the number, rounded to the nearest whole foot.
-  evaluator: numeric_match
-  expected:
-    value: 780.0
-    tolerance: 1.0
-
-- id: RC-08
-  category: Reading Comprehension
-  difficulty: medium
-  description: "Chained proportions of a subgroup"
-  prompt: |
-    Passage: Of 1,200 survey respondents, 45% identified as engineers. Of those engineers, 60% reported using Python daily. Of that Python-using group, exactly one third also reported using Rust.
-
-    Question: How many respondents both used Python daily and used Rust? Reply with just the number.
-  evaluator: numeric_match
-  expected: 108.0
-
-- id: RC-09
-  category: Reading Comprehension
-  difficulty: hard
-  description: "Comparative chain expressed only in relative terms"
-  prompt: |
-    Passage: Product X sold 12,000 units. Product W outsold X by 3,000 units. Product Y outsold W by half as many units as W outsold X. Product Z sold 1,000 fewer units than X.
-
-    Question: What is the combined unit total for all four products? Reply with just the number.
-  evaluator: numeric_match
-  expected: 54500.0
-
-- id: RC-10
-  category: Reading Comprehension
-  difficulty: hard
-  description: "Conditional rule application with a floor and a cap"
-  prompt: |
-    Passage: The agreement guarantees 99.95% monthly uptime. For each full 0.1 percentage point that measured uptime falls below 99.95%, the customer receives a service credit of 10% of the monthly fee, capped at 50% of the fee. The monthly fee is $25,000.
-
-    Question: Measured uptime for the month was 99.61%. What service credit is owed, in dollars? Reply with just the number.
-  evaluator: numeric_match
-  expected: 7500.0
-
-- id: RC-11
-  category: Reading Comprehension
-  difficulty: hard
-  description: "Internal contradiction detection"
-  prompt: |
-    Passage:
-    (1) The cluster runs 12 worker nodes, each with 64 GB of RAM.
-    (2) Total cluster memory is therefore 768 GB.
-    (3) Each worker reserves 8 GB for the operating system.
-    (4) That leaves 672 GB available to workloads across the cluster.
-    (5) The scheduler is configured to allow at most 700 GB of workload requests.
-
-    Question: Which single numbered statement is inconsistent with the others?
-    A) Statement 2
-    B) Statement 3
-    C) Statement 4
-    D) Statement 5
-
-    Reply with the letter only.
-  evaluator: mcq
-  expected:
-    answer: D
-    options: ABCD
-
-- id: RC-12
-  category: Reading Comprehension
-  difficulty: hard
-  description: "Multi-part extraction where every part must be correct"
-  prompt: |
-    Passage: Incident INC-2024-0892 began when Redis node-3 was OOM-killed at 14:28 UTC. P99 latency for payment-service spiked from 200 ms to 5.2 s at 14:32. The alert fired at 14:33 and on-call engineer Taylor acknowledged at 14:35. Taylor identified connection-pool exhaustion at 14:38, restarted node-3 and raised the pool size at 14:42. Latency returned to baseline at 14:45. The underlying memory leak was introduced in release v2.3.1.
-
-    Answer all three parts, then end your reply with a single line in exactly this format:
-    `ANSWERS: <a>, <b>, <c>`
-
-    (a) How many minutes elapsed between the root-cause event and the remediation being applied?
-    (b) By what factor did P99 latency increase at 14:32?
-    (c) How many minutes did the elevated latency last, from spike to baseline?
-  evaluator: regex_all
-  expected:
-    patterns:
-      - '(?im)^\s*ANSWERS:\s*14\s*,\s*26\s*,\s*13\s*\.?\s*$'
-
-- id: RC-13
+    value:
+      included:
+      - a
+      - c
+      - d
+      - e
+      total: 46
+      over_ten: 3
+    mode: exact
+- id: RC2-02
   category: Reading Comprehension
   difficulty: expert
-  description: "Conditional probability over a two-step process; the answer is 0.640, not the naive 40%"
+  source: challenge-v2
+  description: 'Bitemporal reading: effective dates differ from known-at dates'
   prompt: |
-    Passage: A clinical study enrolled patients over two years. In Year 1, 60% of the cohort received Treatment X and 40% received Treatment Y. In Year 2, 30% of the Year-1 X group was switched to Y, and 20% of the Year-1 Y group was switched to X. No patients entered or left the study in Year 2.
-
-    Question: Among the patients who were on Treatment Y at the end of Year 2, what fraction had been on Treatment Y since Year 1 (i.e. were never switched)? Express it as a decimal rounded to three places. Reply with just the number.
-  evaluator: numeric_match
-  expected: 0.64
-
-- id: RC-14
+    A fictional rate ledger records (effective day, recorded day, rate):
+    (1,1,100),(5,8,120),(5,12,110),(10,10,150),(10,15,140).
+    To answer "rate for service day D as known on day K", use only records with
+    effective<=D and recorded<=K. Choose the greatest effective day, then the
+    greatest recorded day. Later corrections do not change what was known earlier.
+    Answer (D,K) queries in order: (6,7),(6,9),(6,13),(11,11),(11,14),(11,16).
+    Return JSON {"rates": [six integers]}.
+  evaluator: json_match
+  expected:
+    value:
+      rates:
+      - 100
+      - 120
+      - 110
+      - 150
+      - 150
+      - 140
+    mode: exact
+  max_tokens: 8192
+- id: RC2-03
+  category: Reading Comprehension
+  difficulty: hard
+  source: challenge-v2
+  description: Policy exceptions and strict boundary interpretation
+  prompt: |
+    Use only this fictional retention policy: standard records are deleted once
+    older than 30 days. Premium records instead use 90 days. A hold overrides
+    both and prevents deletion regardless of age. "Older than" is strict.
+    Records (id,age,premium,hold): (a,40,false,false),(b,40,true,false),
+    (c,95,true,false),(d,120,false,true),(e,30,false,false),(f,91,false,false).
+    Return JSON {"delete": sorted IDs eligible now, "retain": all other IDs sorted}.
+  evaluator: json_match
+  expected:
+    value:
+      delete:
+      - a
+      - c
+      - f
+      retain:
+      - b
+      - d
+      - e
+    mode: exact
+- id: RC2-04
+  category: Reading Comprehension
+  difficulty: hard
+  source: challenge-v2
+  description: Separate physical stock, reservations, returns, and availability
+  prompt: |
+    A store starts with 37 sellable units and no reservations. In chronological
+    order: receive 18 sellable units; reserve 20; ship 12 of those reserved units;
+    cancel reservations for 3 unshipped units; receive 7 returned units, of which
+    only 4 pass inspection and enter sellable stock (the other 3 never enter it);
+    remove 6 damaged units from the unreserved sellable stock; reserve 9 more units.
+    Reserving/cancelling changes reservations, not physical stock. Shipping reduces
+    both. Available equals physical sellable stock minus outstanding reservations.
+    Return JSON with physical_sellable, reserved, available, and damaged_removed
+    (only the units removed from stock, excluding returns rejected at inspection).
+  evaluator: json_match
+  expected:
+    value:
+      physical_sellable: 41
+      reserved: 14
+      available: 27
+      damaged_removed: 6
+    mode: exact
+- id: RC2-05
   category: Reading Comprehension
   difficulty: expert
-  description: "Must combine the per-week rates with the two silent weeks to get the uncounted total"
+  source: challenge-v2
+  description: Track cohort origins across simultaneous transfers and withdrawals
   prompt: |
-    Passage: A legal review team examined exactly 4,800 contracts over 12 weeks, exactly 400 contracts every week. Senior reviewers averaged 120 of those 400 contracts each week, junior reviewers the rest. Management's quarterly report, however, counted only the first 10 weeks of work.
-
-    Question: How many contracts reviewed by the team were left out of the quarterly report, and which group contributed more to that uncounted work? Give the number and then the group adjective, in the form `N / Group`.
-  evaluator: regex_all
+    A training program begins with group A=240 people and B=160. Simultaneously,
+    one quarter of ORIGINAL A transfers to B and one eighth of ORIGINAL B transfers
+    to A. After the transfers, 15 people from the original-A members who stayed in
+    A withdraw; 25 people from the original-B members who stayed in B withdraw.
+    No transferees withdraw and no other changes occur.
+    Return JSON with final_A, final_B, retained_original_A_in_A, and A_fraction
+    (fraction of all remaining participants in A, as a reduced [numerator,denominator]).
+  evaluator: json_match
   expected:
-    patterns:
-      - '(?i)\b800\b\s*/\s*juniors?\b|\b800 contracts?\b.{0,60}juniors?'
-      - '(?i)\bjuniors?\b'
-      - '(?i)\b800\b\x20'
-    must_not:
-      # The passage gives a 400/week average, so 'to compute this exactly we need to know how work varied week to week' is a hallucinated hedge - the passage fixes it at 400/week.
-      - '(?i)\bcannot (?:be )?determined\b|\binsufficient information\b|\bnot enough (?:data|information)\b'
+    value:
+      final_A: 185
+      final_B: 175
+      retained_original_A_in_A: 165
+      A_fraction:
+      - 37
+      - 72
+    mode: exact
+  max_tokens: 8192
+- id: RC2-06
+  category: Reading Comprehension
+  difficulty: expert
+  source: challenge-v2
+  description: Union overlapping downtime before exclusions and clipping
+  prompt: |
+    A report covers minute interval [0,45). Incident intervals are [4,15),
+    [12,23), [26,35), [39,48). Approved maintenance intervals [10,14) and [28,32)
+    are excluded wherever they overlap incidents. Count the union of incident
+    time within the reporting window, excluding maintenance, without double-counting
+    overlaps. The downtime budget is at most 25 minutes. All intervals are half-open.
+    Return JSON with counted_downtime, meets_budget (boolean), and excess_minutes
+    (zero if within budget, otherwise counted downtime minus budget).
+  evaluator: json_match
+  expected:
+    value:
+      counted_downtime: 26
+      meets_budget: false
+      excess_minutes: 1
+    mode: exact
+  max_tokens: 8192
+- id: RC2-07
+  category: Reading Comprehension
+  difficulty: expert
+  source: challenge-v2
+  description: Invoice ordering, threshold basis, and explicit cent rounding
+  prompt: |
+    An invoice buys 3 items at 1999 cents each and 2 at 1250 cents each. Apply a
+    15% merchandise-only coupon, rounding the DISCOUNT to nearest cent, half up.
+    Shipping is free only when merchandise AFTER the rounded discount is at least
+    7500 cents; otherwise shipping is 650 cents. Tax is 8.25% of discounted merchandise
+    plus shipping, rounded to nearest cent, half up. Round only the discount and tax.
+    Return JSON of integer cents: subtotal, discount, shipping, tax, total.
+  evaluator: json_match
+  expected:
+    value:
+      subtotal: 8497
+      discount: 1275
+      shipping: 650
+      tax: 649
+      total: 8521
+    mode: exact
+  max_tokens: 8192
+- id: RC2-08
+  category: Reading Comprehension
+  difficulty: expert
+  source: challenge-v2
+  description: Resolve approved revisions independently for each region
+  prompt: |
+    For the day-20 report, choose each region's latest APPROVED quota with effective
+    day <=20; ties in effective day use the larger revision. Unapproved entries
+    and future entries have no effect. Entries (region,revision,effective,quota,approved):
+    (north,1,5,40,true),(south,1,5,30,true),(north,2,12,45,false),
+    (south,2,18,35,true),(north,3,21,50,true),(east,1,15,20,true),
+    (east,2,15,22,true),(south,3,19,99,false).
+    Return JSON with quotas (region->quota), revisions (region->selected revision),
+    and total (sum of selected quotas). Do not sum revisions or silently accept drafts.
+  evaluator: json_match
+  expected:
+    value:
+      quotas:
+        east: 22
+        north: 40
+        south: 35
+      revisions:
+        east: 2
+        north: 1
+        south: 2
+      total: 97
+    mode: exact
+  max_tokens: 8192

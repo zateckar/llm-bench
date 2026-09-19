@@ -8,6 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+.uv-cache/
+.tokenizer-cache/
 
 # Benchmark cache
 .benchmark_cache.json

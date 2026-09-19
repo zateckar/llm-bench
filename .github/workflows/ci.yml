@@ -43,6 +43,18 @@ jobs:
       - name: Self-test the evaluators
         run: uv run python selftest_evaluators.py
 
+      - name: Verify challenge answers and reject near misses
+        run: uv run python selftest_challenges.py
+
+      - name: Verify generated, interactive, and long-context evaluation
+        run: uv run python selftest_quality.py
+
+      - name: Self-test performance and report compatibility
+        run: uv run python selftest_perf.py
+
+      - name: Verify portable HTML reports and comparisons
+        run: uv run python selftest_reports.py
+
       - name: Lint
         run: uvx ruff check .
 

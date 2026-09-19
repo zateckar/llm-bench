@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<title>{% if comparison %}Benchmark comparison{% else %}Run #{{ runs[0].id }} · {{ runs[0].model_name }}{% endif %} — LLM Bench</title>
+<style>body{margin:0;padding:32px 24px;background:#eaf0f7}main{max-width:1320px;margin:auto}{% include "report_styles.css" %}</style>
+</head><body><main class="report-shell">
+    <header class="report-hero">
+        <div class="hero-top"><span class="eyebrow">LLM BENCH / {% if comparison %}COMPARISON{% else %}RUN REPORT{% endif %}</span><span class="offline-badge">SELF-CONTAINED · OFFLINE</span></div>
+        <h1>{% if comparison %}Benchmark comparison{% else %}{{ runs[0].model_name }}{% endif %}</h1>
+        <p>{% if comparison %}{{ runs|length }} runs · quality, speed, and capacity in one view.{% else %}Run #{{ runs[0].id }} · {{ runs[0].model_id }} · {{ runs[0].status }}{% endif %}</p>
+        <p class="small" style="margin-top:18px">Snapshot generated {{ generated_at }}</p>
+    </header>
+    <div class="run-cards">
+    {% for run in runs %}{% set s = run.quality.get('summary', {}) %}
+    <article class="panel run-card" style="--run-color:{{ colors[loop.index0 % colors|length] }}">
+        <p class="eyebrow muted">RUN {{ run.id }} · {{ run.status }}</p><h3>{{ run.model_name }}</h3><p class="small muted">{{ run.model_id }}</p>
+        <div class="score">{{ fmt(s.get('category_balanced'), '%') }}</div><p class="small muted">Category/family-balanced capability</p>
+        <p class="small muted">{% if s.get('category_balanced_ci95') %}95% interval {{ fmt(s.category_balanced_ci95[0], '%') }} – {{ fmt(s.category_balanced_ci95[1], '%') }}{% else %}Confidence interval unavailable{% endif %}</p>
+        <div class="mini-metrics"><div><span class="small muted">Question latency p50</span><strong>{{ fmt(run.latency_p50_ms, 'ms') }}</strong></div><div><span class="small muted">Peak output under load</span><strong>{{ fmt(run.perf.get('peak_output_tokens_per_sec'), 'tok/s') }}</strong></div></div>
+    </article>{% endfor %}
+    </div>
+    {% if runs|map(attribute='test_suite_hash')|unique|list|length > 1 %}<p class="notice">These runs use different suite fingerprints. Overall scores may cover different questions; paired comparisons below use identical questions only.</p>{% endif %}
+    {% for run in runs %}{% if run.status != 'completed' %}<p class="notice">{{ run.label }} is {{ run.status }}. This is a partial snapshot, with {{ run.recorded_questions }} recorded results.</p>{% endif %}{% if run.error_message %}<p class="notice">{{ run.label }}: {{ run.error_message }}</p>{% endif %}{% endfor %}
+    <section class="report-section"><div class="section-heading"><span class="section-number">01</span><h2>Quality & coverage</h2></div>
+    {% if overview_charts %}<div class="report-grid">{% for chart in overview_charts %}<div class="panel"><h3 class="chart-title">{{ chart.title }}</h3><div class="chart">{{ chart.svg }}</div></div>{% endfor %}</div>{% endif %}
+    <div class="panel subsection"><h3>Scorecard</h3><div class="table-wrap"><table><thead><tr><th>Metric</th>{% for run in runs %}<th>{{ run.label }}</th>{% endfor %}</tr></thead><tbody>
+        <tr><td>Passed / scored / recorded</td>{% for run in runs %}<td>{{ run.passed_questions }} / {{ run.scored_questions }} / {{ run.recorded_questions }}</td>{% endfor %}</tr>
+        <tr><td>All-item average</td>{% for run in runs %}<td>{{ fmt(run.avg_score if run.scored_questions else none, '%') }}</td>{% endfor %}</tr>
+        <tr><td>Difficulty-weighted average</td>{% for run in runs %}<td>{{ fmt(run.weighted_score if run.scored_questions else none, '%') }}</td>{% endfor %}</tr>
+        <tr><td>Creative-writing compliance</td>{% for run in runs %}<td>{{ fmt(run.quality.get('summary', {}).get('compliance_score'), '%') }}</td>{% endfor %}</tr>
+        <tr><td>Quality-call cost estimate</td>{% for run in runs %}<td>{{ fmt(run.quality.get('summary', {}).get('estimated_cost_usd'), '$') }}</td>{% endfor %}</tr>
+    </tbody></table></div>
+    <p class="small muted subsection">Balanced capability gives equal weight to categories and question families. Variants are clustered for confidence intervals, which measure sampled-item uncertainty, not run-to-run variability. Creative-writing compliance measures constraints, not artistic quality. Cost uses supplied rates for fresh quality calls; it excludes performance calls, unreported failed usage, and cache discounts. Missing measurements are n/a.</p>
+    {% for row in quality_comparisons %}{% set c = row.comparison %}<p class="notice"><strong>#{{ row.right }} minus #{{ row.left }}:</strong>
+        {% if c.compatible %}{{ '%+.1f'|format(c.balanced_difference*100) }} percentage points{% if c.ci95 %} (95% paired interval {{ '%+.1f'|format(c.ci95[0]*100) }} to {{ '%+.1f'|format(c.ci95[1]*100) }}){% endif %}.
+        {{ c.paired }} identical capability questions scored by both; {{ c.excluded_pairs }} pairs excluded; {{ c.left_unmatched }}/{{ c.right_unmatched }} unmatched.
+        {% else %}{{ c.reason }}{% endif %}</p>{% endfor %}
+    </div>
+    {% if category_names %}<div class="panel subsection"><h3>Category scores</h3><div class="table-wrap"><table><thead><tr><th>Category</th>{% for run in runs %}<th>{{ run.label }}</th>{% endfor %}</tr></thead><tbody>
+    {% for category in category_names %}<tr><td>{{ category }}</td>{% for run in runs %}{% set c = run.categories.get(category, {}) %}<td style="--run-color:{{ colors[loop.index0 % colors|length] }}">{{ fmt(c.get('avg_score'), '%') }}{% if c %}<span class="small muted"> · {{ c.passed }}/{{ c.scored }}</span>{% endif %}
+        {% if c.get('avg_score') is not none %}<div class="spark-track"><div class="spark-fill" style="width:{{ [0, [100, c.avg_score*100]|min]|max }}%"></div></div>{% endif %}</td>{% endfor %}</tr>{% endfor %}
+    </tbody></table></div></div>{% endif %}
+    {% for run in runs %}{% set s = run.quality.get('summary', {}) %}{% if s %}<div class="panel subsection"><h3>{{ run.label }} · Diagnostics</h3><p class="small muted">{% for outcome, count in s.get('outcomes', {}).items() %}{{ outcome|replace('_', ' ') }}: {{ count }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+        {% set a = s.get('interactive', {}) %}{% if a.get('tasks') %}<p class="small subsection">Interactive tasks: {{ a.successes }}/{{ a.tasks }} succeeded · {{ a.calls }} calls · {{ a.unnecessary_calls }} excess calls · {{ a.violations }} authorization violations.</p>{% endif %}
+        {% if s.get('context_quality') %}<div class="table-wrap"><table><thead><tr><th>Long-context reference tokens</th><th>Scored / total</th><th>Accuracy</th><th>Unsupported</th><th>Mean server prompt tokens</th></tr></thead><tbody>{% for row in s.context_quality %}<tr><td>{{ fmt(row.reference_tokens, 'int') }}</td><td>{{ row.scored }} / {{ row.count }}</td><td>{{ fmt(row.accuracy, '%') }}</td><td>{{ row.unsupported }}</td><td>{{ fmt(row.server_prompt_tokens_mean, 'int') }}</td></tr>{% endfor %}</tbody></table></div><p class="small muted">Reference lengths use cl100k_base; provider token counts can differ.</p>{% endif %}
+    </div>{% endif %}{% endfor %}
+    </section>
+    {% include "performance_report.html" %}
+    <section class="report-section"><div class="section-heading"><span class="section-number">03</span><h2>Run provenance</h2></div>
+    <div class="report-grid">{% for run in runs %}<div class="panel"><h3>{{ run.label }}</h3><div class="meta-list">
+        <div><strong>Suite fingerprint</strong>{{ run.test_suite_hash or 'Not recorded' }}</div><div><strong>Started</strong>{{ run.started_at or 'Not recorded' }}</div><div><strong>Completed</strong>{{ run.completed_at or 'Not recorded' }}</div><div><strong>Status</strong>{{ run.status }}</div>
+    </div>{% if run.quality %}<details><summary>Generation and decoding settings</summary><pre>{{ run.quality.get('quality_config', {})|tojson(indent=2) }}</pre><pre>{{ run.quality.get('protocol', {})|tojson(indent=2) }}</pre></details>{% endif %}</div>{% endfor %}</div></section>
+    <section class="report-section"><div class="section-heading"><span class="section-number">04</span><h2>Question results</h2></div>
+    {% if comparison %}<div class="panel subsection"><h3>Question-by-question comparison</h3><p class="small muted">Rows align by category and question ID. Different suite fingerprints can contain different prompts under the same ID; only the paired capability comparison verifies identical full questions.</p>
+    {% for group in comparison_data %}<details><summary>{{ group.category }}</summary><div class="table-wrap"><table><thead><tr><th>Question</th>{% for run in runs %}<th>{{ run.label }}</th>{% endfor %}</tr></thead><tbody>
+    {% for row in group.results %}<tr><td>{{ row.test_id }}</td>{% for run in runs %}<td>{{ fmt(row.get('run_' ~ run.id ~ '_score'), '%') }}</td>{% endfor %}</tr>{% endfor %}
+    </tbody></table></div></details>{% endfor %}</div>{% endif %}
+    <p class="muted small">Expand a run and question to inspect the saved prompt, answer, and evaluator detail. All content is embedded in this file.</p>
+    {% for run in runs %}<div class="panel subsection"><details><summary>{{ run.label }} · {{ run.recorded_questions }} results</summary>
+    {% for result in run.results %}<details><summary>{{ result.category }} / {{ result.test_id }} · {{ fmt(result.score if result.scored else none, '%') }} · {{ result.outcome|replace('_', ' ') }}</summary><div class="result-text">
+        <p class="small muted">{{ result.difficulty }} · {{ result.evaluator }} · latency {{ fmt(result.latency_ms, 'ms') }} · TTFT {{ fmt(result.ttft_ms, 'ms') }} · {{ result.prompt_tokens }} + {{ result.completion_tokens }} tokens</p>
+        <p><strong>Evaluation:</strong> {{ result.detail or 'No detail recorded' }}</p><p><strong>Prompt</strong></p><pre>{{ result.prompt or '' }}</pre><p><strong>Response</strong></p><pre>{{ result.response or '' }}</pre>
+    </div></details>{% else %}<p class="muted subsection">No question results recorded.</p>{% endfor %}</details></div>{% endfor %}</section>
+    <footer class="report-footer"><span>LLM BENCH · {{ generated_at }}</span><span>Embedded graphics & styles · No external assets · Browser print supported</span></footer>
+</main></body></html>

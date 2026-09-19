@@ -17,7 +17,7 @@
                         class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
                     {% for run in completed_runs %}
                     <option value="{{ run.id }}" {% if run.id|string in selected_ids %}selected{% endif %}>
-                        #{{ run.id }} — {{ run.model_name }} ({{ run.model_id }}) — {{ "%.1f"|format(run.avg_score * 100) }}% — {{ run.passed_questions }}/{{ run.scored_questions or run.total_questions }}{% if run.test_suite_hash %} [{{ run.test_suite_hash }}]{% endif %}
+                        #{{ run.id }} — {{ run.model_name }} ({{ run.model_id }}) — {{ "%.1f"|format(run.avg_score * 100) }}% — {{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }}{% if run.test_suite_hash %} [{{ run.test_suite_hash }}]{% endif %}
                     </option>
                     {% endfor %}
                 </select>
@@ -27,6 +27,9 @@
     </div>
 
     {% if selected_runs|length >= 2 %}
+    <div class="flex justify-end">
+        <a class="btn-primary" href="/compare/report.html?{% for run in selected_runs %}runs={{ run.id }}{% if not loop.last %}&amp;{% endif %}{% endfor %}" download>Download comparison HTML</a>
+    </div>
     <!-- Version mismatch warning -->
     {% set hashes = [] %}
     {% for run in selected_runs %}
@@ -45,6 +48,25 @@
         </div>
     </div>
     {% endif %}
+
+    <section class="card p-5 space-y-3">
+        <h2 class="text-lg font-semibold text-white">Capability, cost, and latency</h2>
+        <table class="w-full text-sm"><thead><tr><th>Run</th><th>Balanced capability</th><th>95% interval</th><th>Quality cost estimate</th><th>p50 task latency</th></tr></thead><tbody>
+        {% for run in selected_runs %}{% if run.quality %}{% set s = run.quality.summary %}
+        <tr><td>#{{ run.id }} {{ run.model_name }}</td><td>{{ '%.1f%%'|format(s.category_balanced*100) if s.category_balanced is not none else 'n/a' }}</td>
+            <td>{% if s.category_balanced_ci95 %}{{ '%.1f'|format(s.category_balanced_ci95[0]*100) }}–{{ '%.1f'|format(s.category_balanced_ci95[1]*100) }}%{% else %}n/a{% endif %}</td>
+            <td>{{ '$%.6f'|format(s.estimated_cost_usd) if s.estimated_cost_usd is not none else 'Not configured' }}</td>
+            <td>{{ '%.0f ms'|format(s.latency_p50_ms) if s.latency_p50_ms is not none else 'n/a' }}</td></tr>
+        {% endif %}{% endfor %}</tbody></table>
+        {% for row in quality_comparisons %}{% set c = row.comparison %}
+        <p class="text-sm text-slate-300">#{{ row.right }} minus #{{ row.left }}:
+            {% if c.compatible %}{{ '%+.1f'|format(c.balanced_difference*100) }} percentage points
+            {% if c.ci95 %}(95% paired interval {{ '%+.1f'|format(c.ci95[0]*100) }} to {{ '%+.1f'|format(c.ci95[1]*100) }}){% endif %};
+            {{ c.paired }} identical questions scored by both; {{ c.excluded_pairs }} pairs excluded; {{ c.left_unmatched }}/{{ c.right_unmatched }} unmatched.
+            {% else %}{{ c.reason }}{% endif %}
+        </p>{% endfor %}
+        <p class="text-xs text-slate-500">Intervals resample question families within categories; variants are clustered together. They do not measure run-to-run variability. Cost estimates use supplied rates and fresh quality calls only. Older runs have no quality diagnostics.</p>
+    </section>
 
     <!-- Radar Chart Overlay -->
     <div class="card p-5">
@@ -95,9 +117,9 @@
                                 {{ "%.1f"|format(cat_data.avg_score * 100) }}%
                             </span>
                             {% else %}
-                            <span class="text-sm text-slate-500" title="All requests in this category were transport errors">n/a</span>
+                            <span class="text-sm text-slate-500" title="No scored answers in this category">n/a</span>
                             {% endif %}
-                        <span class="text-xs text-slate-500 ml-1">({{ cat_data.passed }}/{{ cat_data.scored or cat_data.total }})</span>
+                        <span class="text-xs text-slate-500 ml-1">({{ cat_data.passed }}/{{ cat_data.scored if cat_data.scored is not none else cat_data.total }})</span>
                         {% else %}
                         <span class="text-slate-600">-</span>
                         {% endif %}
@@ -113,7 +135,7 @@
                         <span class="text-sm font-bold {% if run.avg_score >= 0.7 %}text-emerald-400{% elif run.avg_score >= 0.5 %}text-yellow-400{% else %}text-red-400{% endif %}">
                             {{ "%.1f"|format(run.avg_score * 100) }}%
                         </span>
-                        <span class="text-xs text-slate-500 ml-1">({{ run.passed_questions }}/{{ run.scored_questions or run.total_questions }})</span>
+                        <span class="text-xs text-slate-500 ml-1">({{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }})</span>
                     </td>
                     {% endfor %}
                 </tr>
@@ -131,83 +153,12 @@
         </table>
     </div>
 
-    <!-- Performance comparison -->
-    <div class="card p-5">
-        <h2 class="text-lg font-semibold text-white mb-4">Performance</h2>
-        <p class="text-xs text-slate-500 mb-3">
-            Latency figures come from the question run itself. Runs executed with more than one
-            concurrent worker include server-side queueing, so compare those only against runs with the
-            same worker count.
-        </p>
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead>
-                    <tr>
-                        <th class="text-left">Metric</th>
-                        {% for run in selected_runs %}
-                        <th class="text-center">#{{ run.id }} {{ run.model_name }}</th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-slate-400">Workers</td>
-                        {% for run in selected_runs %}
-                        <td class="text-center text-slate-300">{{ run.workers or 1 }}</td>
-                        {% endfor %}
-                    </tr>
-                    <tr>
-                        <td class="text-slate-400">Latency p50</td>
-                        {% for run in selected_runs %}
-                        <td class="text-center text-slate-300">
-                            {% if run.latency_p50_ms %}{{ "%.0f"|format(run.latency_p50_ms) }} ms{% else %}-{% endif %}
-                        </td>
-                        {% endfor %}
-                    </tr>
-                    <tr>
-                        <td class="text-slate-400">Latency p95</td>
-                        {% for run in selected_runs %}
-                        <td class="text-center text-slate-300">
-                            {% if run.latency_p95_ms %}{{ "%.0f"|format(run.latency_p95_ms) }} ms{% else %}-{% endif %}
-                        </td>
-                        {% endfor %}
-                    </tr>
-                    <tr>
-                        <td class="text-slate-400">TTFT p50</td>
-                        {% for run in selected_runs %}
-                        <td class="text-center text-slate-300">
-                            {% if run.ttft_p50_ms %}{{ "%.0f"|format(run.ttft_p50_ms) }} ms{% else %}-{% endif %}
-                        </td>
-                        {% endfor %}
-                    </tr>
-                    <tr>
-                        <td class="text-slate-400">Output throughput</td>
-                        {% for run in selected_runs %}
-                        <td class="text-center text-slate-300">
-                            {% if run.output_tokens_per_sec %}{{ "%.1f"|format(run.output_tokens_per_sec) }} tok/s{% else %}-{% endif %}
-                        </td>
-                        {% endfor %}
-                    </tr>
-                    <tr>
-                        <td class="text-slate-400">Total tokens</td>
-                        {% for run in selected_runs %}
-                        <td class="text-center text-slate-300">
-                            {{ "{:,}".format((run.total_prompt_tokens or 0) + (run.total_completion_tokens or 0)) }}
-                        </td>
-                        {% endfor %}
-                    </tr>
-                    <tr>
-                        <td class="text-slate-400">Request errors</td>
-                        {% for run in selected_runs %}
-                        <td class="text-center {% if run.error_count %}text-amber-400{% else %}text-slate-500{% endif %}">
-                            {{ run.error_count or 0 }}
-                        </td>
-                        {% endfor %}
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+    {% if performance is defined %}
+    <style>{% include "report_styles.css" %}</style>
+    <div class="report-shell" style="--rp-bg:#1e293b;--rp-text:#e2e8f0;--rp-muted:#94a3b8;--rp-line:#334155;--rp-soft:#0f172a">
+        {% include "performance_report.html" %}
     </div>
+    {% endif %}
 
     <!-- Per-question diff -->
     {% if comparison_data %}
@@ -236,7 +187,7 @@
                             {% set score = result.get('run_' + run.id|string + '_score') %}
                             <span class="flex-1 text-center">
                                 {% if score is none %}
-                                <span class="text-slate-600" title="Test not executed in this run">&mdash;</span>
+                                <span class="text-slate-600" title="Test not executed or excluded from quality scoring">&mdash;</span>
                                 {% else %}
                                 <span class="{% if score >= 0.5 %}text-emerald-400{% else %}text-red-400{% endif %}">
                                     {{ "%.0f"|format(score * 100) }}%
@@ -280,7 +231,7 @@
     const runsData = [
         {% for run in selected_runs %}
         {
-            name: "#{{ run.id }} — {{ run.model_name }}",
+            name: {{ ("#" ~ run.id ~ " — " ~ run.model_name)|tojson }},
             categories: {{ run.categories | tojson }}
         },
         {% endfor %}
@@ -290,7 +241,7 @@
 
     const datasets = runsData.map((r, i) => ({
         label: r.name,
-        data: labels.map(c => r.categories[c] ? r.categories[c].avg_score * 100 : 0),
+        data: labels.map(c => r.categories[c]?.avg_score != null ? r.categories[c].avg_score * 100 : null),
         backgroundColor: colors[i % colors.length].bg,
         borderColor: colors[i % colors.length].border,
         borderWidth: 2,

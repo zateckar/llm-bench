@@ -81,18 +81,24 @@ class ChatClient:
         the caller can record it as an infrastructure error rather than a wrong
         answer.
         """
-        cfg = self.config
-        attempts_allowed = cfg.max_retries if retries is None else retries
-        attempts_allowed = max(1, attempts_allowed)
-
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
+        return self.complete_messages(messages, max_tokens=max_tokens, stream=stream, retries=retries)
+
+    def complete_messages(
+        self, messages: list[dict], *, max_tokens: int | None = None,
+        stream: bool | None = None, retries: int | None = None,
+    ) -> tuple[str, TokenUsage, RequestMetrics]:
+        """Continue a bounded conversation; callers own and retain its history."""
+        cfg = self.config
+        attempts_allowed = max(1, cfg.max_retries if retries is None else retries)
 
         last_error = "unknown error"
         for attempt in range(attempts_allowed):
             started = time.perf_counter()
+            self._last_finish_reason = None
             # Recomputed per attempt: a fallback branch below may clear the
             # capability flags, and the next retry must honour that instead
             # of re-sending the payload that was just rejected.
@@ -156,6 +162,8 @@ class ChatClient:
                 attempts=attempt + 1,
                 streamed=want_stream,
                 cached_tokens=usage.cached_tokens,
+                finish_reason=self._last_finish_reason,
+                prompt_tokens_estimated=usage.prompt_tokens_estimated,
             )
             return text, usage, metrics
 
@@ -199,9 +207,13 @@ class ChatClient:
         if resp.status_code >= 400:
             raise _RetryableStatus(resp.status_code, resp.text[:200])
         data = resp.json()
+        self._last_finish_reason = (data.get("choices") or [{}])[0].get("finish_reason")
         text = _extract_message_text(data.get("choices") or [{}])
         usage_raw = data.get("usage") or {}
         usage = _parse_usage(usage_raw)
+        if not usage.prompt_tokens:
+            usage.prompt_tokens = _estimate_tokens("".join(m.get("content", "") for m in messages))
+            usage.prompt_tokens_estimated = True
         if not usage.completion_tokens and text:
             usage.completion_tokens = _estimate_tokens(text)
         return text, usage, None
@@ -259,6 +271,8 @@ class ChatClient:
                     usage = _parse_usage(usage_raw)
 
                 for choice in event.get("choices") or []:
+                    if choice.get("finish_reason"):
+                        self._last_finish_reason = choice["finish_reason"]
                     delta = choice.get("delta") or {}
                     piece = delta.get("content")
                     reasoning = delta.get("reasoning") or delta.get("reasoning_content")
@@ -285,6 +299,7 @@ class ChatClient:
             # a character-based estimate. Marked as an estimate by the caller.
             usage.completion_tokens = delta_count or _estimate_tokens(text)
         if not usage.prompt_tokens:
+            usage.prompt_tokens_estimated = True
             usage.prompt_tokens = _estimate_tokens(
                 "".join(m.get("content", "") for m in messages)
             )

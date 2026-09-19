@@ -1,327 +1,291 @@
-# Logical Reasoning Test Suite
-#
-# Design notes:
-#  - No bare Yes/No answers. A binary question is a coin flip, so a weak model
-#    scores 50% on it without reasoning at all.
-#  - Every answer is a specific value (a count, a probability, an ordering) that
-#    can be checked exactly, so there is no partial credit to drift over.
-#  - Problems are drawn from puzzles with a single well-established answer.
+# Challenge suite v2. Answer-key derivations: challenge_oracles.py.
+# All parts must pass; no keyword-only credit. IDs intentionally differ from v1.
 
-- id: LR-01
-  category: Logical Reasoning
-  difficulty: hard
-  description: "Bridge-and-torch scheduling; the greedy answer (19) is wrong"
-  prompt: |
-    Four people must cross a bridge at night. They have one torch, the bridge holds at most two people at a time, and anyone crossing must carry the torch. Their individual crossing times are 1, 2, 5 and 10 minutes; a pair crosses at the slower person's pace.
-    What is the minimum total time, in minutes, for all four to get across?
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 17.0
-
-- id: LR-02
-  category: Logical Reasoning
-  difficulty: medium
-  prompt: |
-    A farmer must transport a wolf, a goat and a cabbage across a river. The boat carries the farmer plus at most one item. The wolf eats the goat if left alone with it, and the goat eats the cabbage if left alone with it.
-    What is the minimum number of river crossings (counting every trip in either direction) needed?
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 7.0
-
-- id: LR-03
-  category: Logical Reasoning
-  difficulty: hard
-  description: "Two-egg problem; requires the triangular-number insight, not binary search"
-  prompt: |
-    You have two identical glass balls and a 100-storey building. A ball breaks if dropped from floor N or above, and survives any drop below N (the same unknown N for both balls). Once a ball breaks it cannot be reused.
-    You must determine N exactly. What is the minimum number of drops that guarantees success in the worst case?
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 14.0
-
-- id: LR-04
-  category: Logical Reasoning
-  difficulty: hard
-  prompt: |
-    You have a balance scale and may use it exactly 3 times. Among a set of otherwise identical balls, exactly one is a different weight, and you must identify which ball it is AND whether it is heavier or lighter than the rest.
-    What is the largest number of balls for which this is always possible?
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 12.0
-
-- id: LR-05
-  category: Logical Reasoning
-  difficulty: medium
-  prompt: |
-    At a gathering, every person shook hands with every other person exactly once. A total of 66 handshakes took place.
-    How many people were at the gathering? Reply with just the number.
-  evaluator: numeric_match
-  expected: 12.0
-
-- id: LR-06
+- id: LR2-01
   category: Logical Reasoning
   difficulty: expert
-  description: "Jeep/camel problem; needs the multi-depot transfer argument"
+  source: challenge-v2
+  description: Count all linear arrangements under interacting constraints
   prompt: |
-    A trader has 3000 bananas and a camel. The market is 1000 km away. The camel can carry at most 1000 bananas at a time and eats exactly 1 banana per kilometre travelled, in either direction. The trader may set down bananas anywhere and make as many trips as desired.
-    What is the maximum number of bananas that can be delivered to the market?
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 533.0
-
-- id: LR-07
-  category: Logical Reasoning
-  difficulty: hard
-  prompt: |
-    You have 1000 bottles of wine; exactly one is poisoned. You also have test strips: a strip dipped in any mixture of wines turns red if and only if at least one poisoned drop is present. All strips are used simultaneously in a single round of testing, and each may be dipped in any subset of the bottles.
-    What is the minimum number of test strips that guarantees identifying the poisoned bottle?
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 10.0
-
-- id: LR-08
-  category: Logical Reasoning
-  difficulty: hard
-  prompt: |
-    There are 100 lamps numbered 1 to 100, all switched off. You make 100 passes. On pass k you toggle every lamp whose number is a multiple of k.
-    After all 100 passes, how many lamps are on? Reply with just the number.
-  evaluator: numeric_match
-  expected: 10.0
-
-- id: LR-09
-  category: Logical Reasoning
-  difficulty: medium
-  prompt: |
-    What is the next term in this sequence: 1, 11, 21, 1211, 111221, 312211, ?
-    Reply with only the term.
-  evaluator: regex_all
+    Arrange A,B,C,D,E,F,G in seven positions, using each letter exactly once.
+    A is before D, D is before G, B is before E, and E is before G.
+    Exactly one letter lies between C and F. B is not first. A and B are not adjacent.
+    Return a JSON object with count (the number of valid arrangements), first
+    (lexicographically smallest arrangement), and last (lexicographically largest).
+    Represent each arrangement as a seven-letter string. Use alphabetic order A < B < ... < G.
+  evaluator: json_match
   expected:
-    patterns:
-      - '\b13112221\b'
-
-- id: LR-10
-  category: Logical Reasoning
-  difficulty: hard
-  prompt: |
-    You have an unmarked 3-litre jug and an unmarked 5-litre jug, and an unlimited water supply. You must end up with exactly 4 litres in one of the jugs.
-    Counting each of the following as one operation - filling a jug completely from the supply, emptying a jug completely, or pouring from one jug into the other until the source is empty or the destination is full - what is the minimum number of operations required?
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 6.0
-
-- id: LR-11
+    value:
+      count: 24
+      first: ACBFDEG
+      last: FBCEADG
+    mode: exact
+  max_tokens: 8192
+- id: LR2-02
   category: Logical Reasoning
   difficulty: expert
-  description: "Cheryl's birthday: requires reasoning about what others know"
+  source: challenge-v2
+  description: Enumerate fixed points of mutually referring truth claims
   prompt: |
-    Albert and Bernard want to know Cheryl's birthday. Cheryl gives them this list of 10 possible dates:
-
-    May 15, May 16, May 19
-    June 17, June 18
-    July 14, July 16
-    August 14, August 15, August 17
-
-    Cheryl then tells Albert only the month and tells Bernard only the day.
-
-    Albert: "I don't know when Cheryl's birthday is, but I know that Bernard doesn't know either."
-    Bernard: "At first I didn't know when Cheryl's birthday is, but now I do."
-    Albert: "Then I know when Cheryl's birthday is too."
-
-    What is Cheryl's birthday? Reply with the month and day only.
-  evaluator: regex_all
+    Six speakers A through F are each either truthful (every claim true) or lying
+    (every claim false). They make exactly these claims about their types:
+    A: "Exactly one of B and C is truthful."
+    B: "A is truthful and D is lying."
+    C: "Exactly two of A, B, D are truthful."
+    D: "C and E have the same type."
+    E: "F is lying or B is truthful" (inclusive or).
+    F: "D and A have different types."
+    Find ALL consistent type assignments. Return JSON {"models": [...], "count": ...}.
+    Each model is a six-character T/F string in A,B,C,D,E,F order. Sort the strings
+    lexicographically with F before T. Do not assume the solution is unique.
+  evaluator: json_match
   expected:
-    patterns:
-      - '(?i)(july\D{0,10}\b16\b|\b16\b\D{0,10}july)'
-    must_not:
-      - '(?i)\b(may|june|august)\D{0,10}\b\d{1,2}\b\s*(?:is|as)\s*(?:the|cheryl)'
-
-- id: LR-12
-  category: Logical Reasoning
-  difficulty: medium
-  prompt: |
-    Three ants sit on the three corners of a triangle. Simultaneously, each ant picks one of the two adjacent corners uniformly at random and walks along that edge to it.
-    What is the probability that no two ants meet (neither at a corner nor along an edge)? Express the answer as a decimal.
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 0.25
-
-- id: LR-13
-  category: Logical Reasoning
-  difficulty: medium
-  description: "Quantifier reasoning; the tempting answer (Some A are C) is invalid"
-  prompt: |
-    Given only these two premises:
-      (i) All bloops are razzies.
-      (ii) Some razzies are lazzies.
-
-    Which one of the following MUST be true?
-    A) Some bloops are lazzies
-    B) Some lazzies are razzies
-    C) All lazzies are bloops
-    D) No bloops are lazzies
-
-    Reply with the letter only.
-  evaluator: mcq
-  expected:
-    answer: B
-    options: ABCD
-
-- id: LR-14
-  category: Logical Reasoning
-  difficulty: hard
-  prompt: |
-    What is the next term in this sequence: 4, 9, 25, 49, 121, 169, ?
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 289.0
-
-- id: LR-15
-  category: Logical Reasoning
-  difficulty: medium
-  description: "Affirming the consequent"
-  prompt: |
-    Premise 1: If it is raining, then the ground is wet.
-    Premise 2: The ground is wet.
-
-    Which one of the following is a valid conclusion?
-    A) It is raining
-    B) It is not raining
-    C) Nothing about whether it is raining can be concluded
-    D) It is not the case that the ground is wet
-
-    Reply with the letter only.
-  evaluator: mcq
-  expected:
-    answer: C
-    options: ABCD
-
-- id: LR-16
-  category: Logical Reasoning
-  difficulty: medium
-  description: "Must locate the invalid step, not merely gesture at a trick"
-  prompt: |
-    Three guests check into a room costing $30 and each pays $10. The manager realises the room actually costs $25 and sends the bellboy back with $5. The bellboy keeps $2 and returns $1 to each guest. Now each guest paid $9, for a total of $27, and the bellboy has $2, giving $29.
-
-    Explain precisely which arithmetic step is invalid and why. State what the $27 actually consists of.
-  evaluator: regex_all
-  expected:
-    patterns:
-      # Must identify that adding the bellboy's $2 to the $27 is the error.
-      - '(?i)(should not|shouldn.?t|must not|cannot|incorrect|invalid|wrong|error|mistake|fallac)[\s\S]{0,120}\badd'
-      # Must state that the $27 already contains the bellboy's $2.
-      - '(?i)\$?27[\s\S]{0,160}(already includes|includes the|consists of|is made up of|comprises|\$?25[\s\S]{0,20}\+?[\s\S]{0,20}\$?2)'
-      - '(?i)\$?25\b'
-    must_not:
-      # A response that concludes a dollar really is missing has not solved it.
-      - '(?i)\b(?:a |one )?dollar is (?:genuinely |really |actually )?missing\b'
-      - '(?i)\bthe missing dollar (?:is|went) (?:to|with) the bellboy\b'
-
-- id: LR-17
-  category: Logical Reasoning
-  difficulty: hard
-  prompt: |
-    100 prisoners stand in a line, each wearing a black or white hat. Each prisoner sees the hats of everyone in front of them but not their own or those behind. Starting from the back of the line, each prisoner in turn says "black" or "white"; everyone hears every guess. A prisoner is freed if the colour they say matches their own hat. The prisoners agree on a strategy beforehand but hats are assigned adversarially.
-    Using the optimal strategy, what is the largest number of prisoners that can be guaranteed to be freed?
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 99.0
-
-- id: LR-18
-  category: Logical Reasoning
-  difficulty: medium
-  prompt: |
-    A game show has 4 closed doors; exactly one hides a car. You pick one door. The host, who knows where the car is, then opens two of the other three doors, both revealing goats. You may keep your door or switch to the one remaining closed door.
-    What is the probability of winning the car if you switch? Express the answer as a decimal.
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 0.75
-
-- id: LR-19
-  category: Logical Reasoning
-  difficulty: hard
-  description: "Constraint satisfaction with a unique solution"
-  prompt: |
-    Five runners - A, B, C, D and E - finished a race with no ties. All of the following are true:
-      - A finished before B.
-      - C finished after D.
-      - E finished before A but after D.
-      - B did not finish last.
-
-    List all five runners in finishing order, first to last, separated by commas.
-  evaluator: regex_all
-  expected:
-    patterns:
-      - '(?i)\bD\b\W+\bE\b\W+\bA\b\W+\bB\b\W+\bC\b'
-
-- id: LR-20
-  category: Logical Reasoning
-  difficulty: hard
-  description: "Cognitive-reflection items: the intuitive answer is wrong for each"
-  prompt: |
-    Answer all three, then give a final line in exactly this format: `ANSWERS: <a>, <b>, <c>`
-
-    (a) A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. How many cents does the ball cost?
-    (b) If 5 machines take 5 minutes to make 5 widgets, how many minutes do 100 machines take to make 100 widgets?
-    (c) Lily pads double in area each day and cover a lake in 48 days. On which day is the lake half covered?
-  evaluator: regex_all
-  expected:
-    patterns:
-      - '(?im)^\s*ANSWERS:\s*5\s*,\s*5\s*,\s*47\s*\.?\s*$'
-
-- id: LR-21
+    value:
+      models:
+      - FFFFTF
+      - FFFTFT
+      - TFTTTF
+      count: 3
+    mode: exact
+  max_tokens: 8192
+- id: LR2-03
   category: Logical Reasoning
   difficulty: expert
-  description: "Misère Nim is different from normal Nim; the winning strategy flips"
+  source: challenge-v2
+  description: Precedence scheduling with resource contention
   prompt: |
-    Two players play a game with a single pile of 12 stones. They take turns removing 1, 2 or 3 stones. The player forced to take the LAST stone LOSES (misère rule). Both play optimally. You move first.
-    If you play a winning move, how many stones should you take? If the first player cannot force a win, answer 0.
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 3.0
-
-- id: LR-22
-  category: Logical Reasoning
-  difficulty: expert
-  description: "Maximum over worst case; binary info lower bound plus the strategy to achieve it"
-  prompt: |
-    One of 16 coins is counterfeit and is either heavier or lighter than the rest (you do not know which). You have a balance scale and must determine which coin is counterfeit AND whether it is heavy or light.
-    What is the minimum number of weighings that guarantees success?
-    Reply with just the number.
-  evaluator: numeric_match
-  expected: 4.0
-
-- id: LR-23
-  category: Logical Reasoning
-  difficulty: expert
-  description: "Expected value with recollection: must set up the recursion, not just one round"
-  prompt: |
-    You repeatedly flip a fair coin until you get two consecutive heads for the first time, then stop.
-    What is the expected number of flips? Reply with just the number.
-  evaluator: numeric_match
-  expected: 6.0
-
-- id: LR-24
-  category: Logical Reasoning
-  difficulty: expert
-  description: "Blue-eyed islanders: common knowledge and the induction base both matter"
-  prompt: |
-    On an island there are exactly 100 perfect logicians with blue eyes and 100 with brown eyes. Each can see everyone else's eye colour but never learns their own. If any islander ever deduces their own eye colour, they leave the island at midnight that day. One day a foreigner makes a public announcement, heard by everyone at once: "At least one islander has blue eyes."
-    How many days pass before any islander leaves, counting the announcement day as day 1 (so an islander deducing immediately would leave at midnight after 1 day has passed)?
-    Reply with just the number of days that pass before anyone leaves.
-  evaluator: numeric_match
-  expected: 100.0
-
-- id: LR-25
-  category: Logical Reasoning
-  difficulty: expert
-  description: "Hidden invariant; the parity argument is the whole solution"
-  prompt: |
-    The numbers 1 through 10 are written on a board. You repeatedly perform this operation: erase any two numbers a and b, and write down |a - b|. After 9 operations one number remains.
-    What is the value of the final number, and can it be even? Answer in the form: <final value or 'variable'>, <'can' or 'cannot'> be even. Use exactly that two-part comma format.
-  evaluator: regex_all
+    Seven non-preemptive jobs have durations A=3,B=5,C=2,D=4,E=3,F=5,G=2.
+    Dependencies (predecessor -> successor) are A->D, B->D, B->E, C->F, D->G, E->G.
+    Two identical workers are available at time 0. Each runs at most one job at a
+    time; a job uses one worker. Jobs can start immediately when all predecessors
+    finish. Waiting is allowed, transfer costs are zero, and all jobs must finish.
+    Return JSON {"two_workers": minimum completion time, "total_work": sum of durations}.
+  evaluator: json_match
   expected:
-    patterns:
-      - '(?i)variable'
-      - '(?i)\bcan(not)?\b.{0,20}\beven\b|\bcannot be even\b|\bcan be even\b'
-    must_not:
-      - '(?i)final (number |value )?(is|=)\s*\d+'
+    value:
+      two_workers: 13
+      total_work: 24
+    mode: exact
+  max_tokens: 8192
+- id: LR2-04
+  category: Logical Reasoning
+  difficulty: expert
+  source: challenge-v2
+  description: Shortest state path with exact final-state requirement
+  prompt: |
+    Two jugs have capacities 9 and 4 litres. Both start empty. Allowed unit-cost
+    operations: fill either jug, empty either jug, or pour either into the other
+    until the source is empty or the destination is full. Unlimited water exists.
+    The FINAL state must be (6,0): six litres in the 9-litre jug, the other empty.
+    Return JSON {"operations": minimum number, "shortest_state_paths": number of
+    distinct shortest sequences of states including the initial and final states}.
+    Ignore operations that leave the state unchanged. Different operations reaching
+    the same next state count as the same state-path step.
+  evaluator: json_match
+  expected:
+    value:
+      operations: 9
+      shortest_state_paths: 1
+    mode: exact
+  max_tokens: 8192
+- id: LR2-05
+  category: Logical Reasoning
+  difficulty: expert
+  source: challenge-v2
+  description: Misere game with history-dependent legal moves
+  prompt: |
+    Players alternate removing 1, 3, or 4 stones from one pile. A move cannot use
+    the same number as the immediately previous move (by either player). Taking
+    the last stone loses immediately. A player with no legal move also loses.
+    Initially there is no previous move. Both players play optimally.
+    Return JSON with winning_first_moves (all winning moves from 23 stones, sorted)
+    and losing_sizes (all initial pile sizes from 1 through 24 where the first
+    player loses, sorted). A move removing more stones than remain is illegal.
+  evaluator: json_match
+  expected:
+    value:
+      winning_first_moves:
+      - 1
+      losing_sizes:
+      - 1
+      - 6
+      - 11
+      - 16
+      - 21
+    mode: exact
+  max_tokens: 8192
+- id: LR2-06
+  category: Logical Reasoning
+  difficulty: expert
+  source: challenge-v2
+  description: Satisfiability versus entailment across all models
+  prompt: |
+    Boolean variables A,B,C,D,E,F satisfy every constraint below:
+    A implies B; B implies C; not both C and D; D or E (inclusive);
+    E is true if and only if exactly one of A and F is true;
+    exactly three of the six variables are true.
+    Return JSON with count (satisfying assignments), always_true (variables true
+    in every satisfying assignment), and always_false (variables false in every
+    satisfying assignment). Sort both arrays alphabetically.
+  evaluator: json_match
+  expected:
+    value:
+      count: 2
+      always_true:
+      - E
+      - F
+      always_false:
+      - A
+      - B
+    mode: exact
+  max_tokens: 8192
+- id: LR2-07
+  category: Logical Reasoning
+  difficulty: expert
+  source: challenge-v2
+  description: Successive public-announcement elimination
+  prompt: |
+    The possible dates are Apr-11, Apr-14, Apr-17, Jun-12, Jun-16, Sep-11,
+    Sep-13, Dec-13, Dec-14, Dec-12. M knows only the month and D only the day.
+    Both are perfect logicians; the list and these rules are common knowledge.
+    M: "I do not know the date, and I know D does not know it."
+    D: "Before that statement I did not know, but now I know."
+    M: "Now I know too."
+    Each statement is truthful and incorporates all earlier public statements.
+    Return JSON {"remaining_counts": [number of dates after statement 1, after
+    statement 2, after statement 3], "dates": [all final dates in lexical order]}.
+    Use date strings exactly as given.
+  evaluator: json_match
+  expected:
+    value:
+      remaining_counts:
+      - 5
+      - 3
+      - 1
+      dates:
+      - Sep-11
+    mode: exact
+  max_tokens: 8192
+- id: LR2-08
+  category: Logical Reasoning
+  difficulty: expert
+  source: challenge-v2
+  description: Minimum fault diagnosis with positive and negative evidence
+  prompt: |
+    A diagnostic path alarms if and only if at least one component on it is faulty.
+    Components have fixed states across tests, with no masking or test errors.
+    Paths ABC, BDE, CEF, ADG, EFG alarm; the single-component path D is quiet.
+    Identify the minimum possible number of faulty components and EVERY faulty set
+    of that size consistent with the evidence. Return JSON {"faults": integer,
+    "explanations": [...]}. Encode a set as alphabetically sorted letters without
+    spaces, and sort the explanations lexicographically.
+  evaluator: json_match
+  expected:
+    value:
+      faults: 2
+      explanations:
+      - AE
+    mode: exact
+  max_tokens: 8192
+- id: LR2-09
+  category: Logical Reasoning
+  difficulty: expert
+  source: challenge-v2
+  description: Resource-constrained route optimization
+  prompt: |
+    Directed edges are (from,to,cost,fuel):
+    (S,A,4,2),(S,B,2,4),(A,B,1,1),(A,C,5,1),(B,C,2,3),
+    (B,D,6,1),(C,D,1,1),(C,T,5,2),(D,T,2,3).
+    Travel S to T with total fuel at most 9; no refueling. Minimize total cost,
+    then total fuel, then the lexicographic path string. Also count ALL feasible
+    S-to-T paths under the fuel cap, not just optimal ones.
+    Return JSON {"cost": ..., "fuel": ..., "path": "S...T", "feasible_paths": ...}.
+  evaluator: json_match
+  expected:
+    value:
+      cost: 9
+      fuel: 9
+      path: SBCT
+      feasible_paths: 6
+    mode: exact
+  max_tokens: 8192
+- id: LR2-10
+  category: Logical Reasoning
+  difficulty: expert
+  source: challenge-v2
+  description: Derive serialization constraints from a transaction trace
+  prompt: |
+    Read the operation trace in order:
+    r1(x), r2(y), r3(z), w1(y), r4(x), w2(z), w3(x), w4(w).
+    ri(k)/wi(k) mean transaction i reads/writes item k; w is also the name of an item.
+    For different transactions, two operations conflict exactly when they access
+    the same item and at least one is a write. A conflict adds an edge from the
+    earlier operation's transaction to the later one's. Deduplicate edges.
+    Return JSON {"edges": [...], "serial_orders": [...]} with each edge encoded
+    as two digits (e.g. "12"), and every topological ordering encoded as four digits.
+    Sort both arrays lexicographically. If the graph is cyclic, serial_orders is [].
+  evaluator: json_match
+  expected:
+    value:
+      edges:
+      - '13'
+      - '21'
+      - '32'
+      - '43'
+      serial_orders: []
+    mode: exact
+  max_tokens: 8192
+- id: LR2-11
+  category: Logical Reasoning
+  difficulty: expert
+  source: challenge-v2
+  description: Ranked-choice transfers and deterministic tie handling
+  prompt: |
+    Ballot groups are 6 voters: ABCD; 5: BCDA; 4: CDAB; 3: DCBA; 2: DBAC.
+    Each string ranks candidates from most to least preferred. In each round each
+    ballot counts for its highest-ranked remaining candidate. Eliminate exactly
+    one candidate with the fewest votes; on a tie eliminate the alphabetically
+    earliest. Continue until only one remains, even if a majority occurs earlier.
+    Return JSON with rounds (vote-count objects just BEFORE each elimination,
+    containing only remaining candidates), eliminated (in order), and winner.
+  evaluator: json_match
+  expected:
+    value:
+      rounds:
+      - A: 6
+        B: 5
+        C: 4
+        D: 5
+      - A: 6
+        B: 5
+        D: 9
+      - A: 6
+        D: 14
+      eliminated:
+      - C
+      - B
+      - A
+      winner: D
+    mode: exact
+  max_tokens: 8192
+- id: LR2-12
+  category: Logical Reasoning
+  difficulty: expert
+  source: challenge-v2
+  description: Assignment optimization with forbidden pairs and coupled constraint
+  prompt: |
+    Assign each worker A,B,C,D,E to a different job 1,2,3,4,5. Costs by job are:
+    A: 9,2,7,8,6; B: 6,4,3,7,5; C: 5,8,1,8,3;
+    D: 7,6,9,4,2; E: 8,5,2,9,7.
+    A cannot take job 2; C cannot take job 3; B's job number must be smaller than E's.
+    Minimize total cost. Return JSON {"cost": ..., "assignments": [...]} containing
+    EVERY optimum as a five-digit string listing jobs for A,B,C,D,E. Sort the strings.
+  evaluator: json_match
+  expected:
+    value:
+      cost: 21
+      assignments:
+      - '42153'
+      - '52143'
+    mode: exact
+  max_tokens: 8192

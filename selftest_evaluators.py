@@ -818,15 +818,14 @@ CODE_CASES: list[Case] = [
 # evaluator and threshold; the lazy one must not.
 END_TO_END: list[tuple[str, str, str]] = [
     (
-        "LR-01",
-        "The optimal schedule is 1+2 across, 1 back, 5+10 across, 2 back, 1+2 across. "
-        "The answer is 17.",
-        "The two slowest people cross together, so the answer is 19.",
+        "LR2-01",
+        '{"count":24,"first":"ACBFDEG","last":"FBCEADG"}',
+        '{"count":24,"first":"ABCDEFG","last":"FBCEADG"}',
     ),
     (
-        "LR-13",
-        "B",
-        "A",
+        "LR2-06",
+        '{"count":2,"always_true":["E","F"],"always_false":["A","B"]}',
+        '{"count":2,"always_true":["E"],"always_false":["A","B"]}',
     ),
     (
         "FK-05",
@@ -855,10 +854,9 @@ END_TO_END: list[tuple[str, str, str]] = [
         "The document lists OMEGA-ZULU-9231, OMEGA-ZULU-4417 and OMEGA-YANKEE-8802 as bypass codes.",
     ),
     (
-        "RC-02",
-        "30 minutes driving, 15 minutes waiting, 135 minutes on the train and 20 minutes by "
-        "taxi. The total is 200 minutes.",
-        "She left at 8:00 and arrived at 11:00, so 180 minutes.",
+        "RC2-02",
+        '{"rates":[100,120,110,150,150,140]}',
+        '{"rates":[110,110,110,140,140,140]}',
     ),
     (
         "SE-11",

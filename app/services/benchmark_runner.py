@@ -25,6 +25,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from llm_client import ChatClient, ClientConfig  # noqa: E402
 from models import LatencyStats, Question, Result  # noqa: E402
+from quality_suite import QualityConfig, assemble_questions, suite_hash as quality_suite_hash
+from quality_execution import execute_question
+from quality_report import make_report as make_quality_report, result_record
 
 logger = logging.getLogger(__name__)
 
@@ -127,8 +130,8 @@ def _store_result(run_id: int, index: int, result: Result) -> None:
             """INSERT INTO test_results
                    (run_id, test_id, category, prompt, response, score, detail, evaluator,
                     question_index, prompt_tokens, completion_tokens, passed, pass_threshold,
-                    difficulty, weight, latency_ms, ttft_ms, request_ok)
-               SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    difficulty, weight, latency_ms, ttft_ms, request_ok, quality_metadata_json, quality_scored)
+               SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 WHERE EXISTS (
                     SELECT 1 FROM test_runs
                      WHERE id = ? AND status IN ('pending', 'running')
@@ -137,10 +140,10 @@ def _store_result(run_id: int, index: int, result: Result) -> None:
                 run_id, q.id, q.category, q.prompt, result.response, result.score,
                 result.detail, q.evaluator, index,
                 result.tokens.prompt_tokens, result.tokens.completion_tokens,
-                1 if result.passed and not result.is_transport_error else 0,
+                1 if result.passed and result.is_scored else 0,
                 q.pass_threshold, q.difficulty, q.effective_weight,
                 result.metrics.latency_ms or None, result.metrics.ttft_ms,
-                0 if result.is_transport_error else 1, run_id,
+                1 if result.metrics.ok else 0, json.dumps(result_record(result)), int(result.is_scored), run_id,
             ),
         )
         db.commit()
@@ -344,8 +347,7 @@ def _run_benchmark_impl(
 ) -> None:
     from app.config import TESTS_DIR
     from app.services.url_guard import UnsafeURLError, validate_endpoint
-    from evaluators import EVALUATORS
-    from test_loader import SuiteError, compute_test_suite_hash, load_all_tests
+    from test_loader import SuiteError, load_all_tests
 
     workers = max(1, min(MAX_WORKERS, workers))
 
@@ -388,7 +390,13 @@ def _run_benchmark_impl(
         return
 
     try:
-        questions: list[Question] = load_all_tests(TESTS_DIR)
+        db = _connect()
+        try:
+            raw_options = db.execute("SELECT quality_config_json FROM test_runs WHERE id=?", (run_id,)).fetchone()[0]
+        finally:
+            db.close()
+        quality_config = QualityConfig.from_dict(json.loads(raw_options) if raw_options else {})
+        questions: list[Question] = assemble_questions(load_all_tests(TESTS_DIR),quality_config)
     except SuiteError as e:
         fail(f"Test suite is invalid: {e}")
         return
@@ -399,14 +407,6 @@ def _run_benchmark_impl(
 
     if not _run_is_active(run_id):
         return
-
-    suite_hash = compute_test_suite_hash(TESTS_DIR)
-    db = _connect()
-    try:
-        db.execute("UPDATE test_runs SET test_suite_hash=? WHERE id=?", (suite_hash, run_id))
-        db.commit()
-    finally:
-        db.close()
 
     if test_ids:
         wanted = set(test_ids)
@@ -423,6 +423,13 @@ def _run_benchmark_impl(
         fail("No questions matched the selected filters")
         return
 
+    db = _connect()
+    try:
+        db.execute("UPDATE test_runs SET test_suite_hash=? WHERE id=?", (quality_suite_hash(questions),run_id))
+        db.commit()
+    finally:
+        db.close()
+
     # A crash from here on must not leave the run in 'running' forever (the
     # SSE progress loop would never terminate), so anything unexpected that
     # escapes an inner guard fails the run loudly.
@@ -435,39 +442,14 @@ def _run_benchmark_impl(
 
         _update_progress(run_id, "", 0, total, f"Loaded {total} questions", "quality")
 
-        def evaluate(q: Question, response: str) -> tuple[float, str]:
-            evaluator = EVALUATORS.get(q.evaluator)
-            if evaluator is None:
-                return 0.0, f"Unknown evaluator: {q.evaluator}"
-            try:
-                score, detail = evaluator(response, q.expected)
-            except Exception as e:  # noqa: BLE001
-                logger.warning("Evaluator error for %s: %s", q.id, e)
-                return 0.0, f"Evaluator error: {e}"
-            return max(0.0, min(1.0, float(score))), detail
-
         def work(index: int, q: Question, client: ChatClient) -> None:
             nonlocal completed
             if not _run_is_active(run_id):
                 return
-            response, tokens, metrics = client.complete(
-                q.prompt, q.system_prompt, max_tokens=q.max_tokens
-            )
+            result = execute_question(q,client,cancelled=lambda:not _run_is_active(run_id))
             if not _run_is_active(run_id):
                 return
-            if metrics.ok:
-                score, detail = evaluate(q, response)
-            else:
-                logger.warning(
-                    "Request failed for %s in run %d: %s", q.id, run_id, metrics.error
-                )
-                score = 0.0
-                detail = f"Request failed: {_sanitize_error_detail(metrics.error)}"
-
-            result = Result(
-                question=q, response=response, score=score, detail=detail,
-                tokens=tokens, metrics=metrics,
-            )
+            result.detail = _sanitize_error_detail(result.detail)
             results[index] = result
             _store_result(run_id, index + 1, result)
 
@@ -671,7 +653,7 @@ def _summarise_and_finish(
     error_message: str,
 ) -> None:
     done = [r for r in results if r is not None]
-    scored = [r for r in done if not r.is_transport_error]
+    scored = [r for r in done if r.is_scored]
     passed = sum(1 for r in scored if r.passed)
     errors = len(done) - len(scored)
 
@@ -690,6 +672,20 @@ def _summarise_and_finish(
     )
     output_tokens = sum(r.tokens.completion_tokens for r in scored)
     throughput = output_tokens / (duration_ms / 1000.0) if duration_ms else None
+
+    db = _connect()
+    try:
+        row = db.execute("SELECT tr.quality_config_json, tr.test_suite_hash, m.model_id FROM test_runs tr "
+                         "JOIN models m ON m.id=tr.model_id WHERE tr.id=?", (run_id,)).fetchone()
+        if row:
+            options = QualityConfig.from_dict(json.loads(row[0]) if row[0] else {})
+            config = ClientConfig(base_url='',api_key='',model=row[2],max_tokens=DEFAULT_MAX_TOKENS,
+                                  temperature=DEFAULT_TEMPERATURE)
+            report = make_quality_report(done,options,config,row[1])
+            db.execute("UPDATE test_runs SET quality_json=? WHERE id=?",(json.dumps(report),run_id))
+            db.commit()
+    finally:
+        db.close()
 
     _finish_run(
         run_id,

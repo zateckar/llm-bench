@@ -14,6 +14,11 @@ COPY pyproject.toml uv.lock* ./
 # Install production dependencies into a venv under /app/.venv
 RUN uv sync --frozen --no-dev --no-editable
 
+# Download and verify the reference tokenizer at build time; context-quality
+# runs must not depend on an external vocabulary download in production.
+ENV TIKTOKEN_CACHE_DIR=/app/tokenizer-cache
+RUN .venv/bin/python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
+
 # =============================================================================
 # Stage 2: Runtime
 # =============================================================================
@@ -32,6 +37,7 @@ WORKDIR /app
 
 # Copy the pre-built venv from the builder stage
 COPY --from=builder --chown=llmbench:llmbench /app/.venv /app/.venv
+COPY --from=builder --chown=llmbench:llmbench /app/tokenizer-cache /app/tokenizer-cache
 
 # Copy application code (owned by non-root user)
 COPY --chown=llmbench:llmbench . .
@@ -41,6 +47,7 @@ RUN mkdir -p /app/data && chown llmbench:llmbench /app/data
 
 # Ensure the venv is used
 ENV PATH="/app/.venv/bin:$PATH" \
+    TIKTOKEN_CACHE_DIR="/app/tokenizer-cache" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     # Default to production; override via env file or compose.

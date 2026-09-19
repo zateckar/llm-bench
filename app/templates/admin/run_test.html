@@ -7,7 +7,7 @@
         <h1 class="text-2xl font-bold text-white">Run Benchmark</h1>
         <p class="text-slate-400 mt-1">
             Start a new benchmark run against an LLM model
-            {% if question_count %}&mdash; {{ question_count }} questions in the current suite{% endif %}
+            {% if question_count %}&mdash; {{ question_count }} static questions, plus the generated tasks selected below{% endif %}
         </p>
     </div>
 
@@ -103,6 +103,35 @@
                 </p>
             </div>
         </div>
+
+        <fieldset class="card p-4 space-y-3">
+            <legend class="text-sm font-semibold text-white">Quality evaluation</legend>
+            <p class="text-xs text-slate-400">By default, add four generated reasoning families, three interactive tool tasks, and stronger code tests. Use the same seeds and settings for every model.</p>
+            <div class="grid grid-cols-2 gap-3">
+                <label class="text-sm text-slate-300">Question seeds
+                    <input name="suite_seeds" value="1729" required class="w-full bg-slate-800 rounded px-2 py-1" aria-label="Question seeds">
+                </label>
+                <label class="text-sm text-slate-300">Variant set
+                    <select name="suite_split" class="w-full bg-slate-800 rounded px-2 py-1">
+                        <option value="development">Development</option><option value="evaluation">Evaluation holdout</option>
+                    </select>
+                </label>
+                <label class="text-sm text-slate-300">Variants per family and seed
+                    <input name="variants" type="number" min="1" max="10" value="1" class="w-full bg-slate-800 rounded px-2 py-1">
+                </label>
+                <label class="text-sm text-slate-300">Long-context accuracy sizes
+                    <input name="quality_context_sizes" placeholder="8192,32768,131072" class="w-full bg-slate-800 rounded px-2 py-1">
+                </label>
+                <label class="text-sm text-slate-300">Input $ / million tokens
+                    <input name="input_price" type="number" min="0" step="any" placeholder="Optional" class="w-full bg-slate-800 rounded px-2 py-1">
+                </label>
+                <label class="text-sm text-slate-300">Output $ / million tokens
+                    <input name="output_price" type="number" min="0" step="any" placeholder="Optional" class="w-full bg-slate-800 rounded px-2 py-1">
+                </label>
+            </div>
+            <p class="text-xs text-slate-500">Context sizes count cl100k_base tokens; reports also show the server's token count when available. Blank skips long-context accuracy tests. These add token spend separately from the performance sweep. Supply both prices to estimate cost.</p>
+            <label class="flex gap-2 text-sm text-slate-300"><input name="static_only" type="checkbox" value="1">Static suite only (disable generated reasoning, interactive tasks, and extra code tests)</label>
+        </fieldset>
 
         <div class="border-t border-slate-700 pt-5 space-y-3">
             <label class="flex items-start gap-3 cursor-pointer">

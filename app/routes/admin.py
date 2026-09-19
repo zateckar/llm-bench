@@ -103,7 +103,7 @@ async def admin_run_page(request: Request):
 
         questions = load_all_tests(TESTS_DIR)
         question_count = len(questions)
-        categories = sorted({q.category for q in questions})
+        categories = sorted({q.category for q in questions} | {'Interactive Tool Use','Long Context Quality'})
         order = {"easy": 0, "medium": 1, "hard": 2, "expert": 3}
         difficulties = sorted({q.difficulty for q in questions}, key=lambda d: order.get(d, 9))
     except Exception as e:  # noqa: BLE001 - surfaced in the UI instead of a 500
@@ -174,6 +174,13 @@ async def admin_start_run(
     slo_tps: str = Form(""),
     slo_errors: str = Form(""),
     req_per_user_h: str = Form(""),
+    suite_seeds: str = Form("1729"),
+    suite_split: str = Form("development"),
+    variants: int = Form(1),
+    static_only: str = Form(""),
+    quality_context_sizes: str = Form(""),
+    input_price: str = Form(""),
+    output_price: str = Form(""),
 ):
     user = _admin_required(request)
     if isinstance(user, RedirectResponse):
@@ -184,10 +191,21 @@ async def admin_start_run(
         return RedirectResponse(url="/admin/run", status_code=302)
 
     workers = max(1, min(MAX_WORKERS, workers))
+    from quality_suite import QualityConfig, parse_ints
+    from dataclasses import asdict
+    from fastapi import HTTPException
+    try:
+        quality_config = QualityConfig(generated=not bool(static_only),interactive=not bool(static_only),
+            strengthen_code=not bool(static_only),seeds=parse_ints(suite_seeds),split=suite_split,variants=variants,
+            context_sizes=parse_ints(quality_context_sizes),
+            input_price=float(input_price) if input_price.strip() else None,
+            output_price=float(output_price) if output_price.strip() else None)
+    except (ValueError,TypeError) as exc:
+        raise HTTPException(status_code=422,detail=str(exc)) from exc
 
     run_id = await execute(
-        "INSERT INTO test_runs (model_id, status, created_by, workers) VALUES (?, 'pending', ?, ?)",
-        (model_id, user["id"], workers),
+        "INSERT INTO test_runs (model_id, status, created_by, workers, quality_config_json) VALUES (?, 'pending', ?, ?, ?)",
+        (model_id, user["id"], workers, json.dumps(asdict(quality_config))),
     )
 
     from app.services.benchmark_runner import start_benchmark

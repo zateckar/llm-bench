@@ -1,0 +1,34 @@
+{# Shared by the authenticated comparison page and offline reports. #}
+<section class="report-section">
+    <div class="section-heading"><span class="section-number">PERF</span><h2>Performance</h2></div>
+    <div class="panel">
+        <h3>During the question run</h3>
+        <p class="muted small">These timings depend on the selected questions, output lengths, and worker count. Interactive task latency sums its model calls. Compare like-for-like runs.</p>
+        <div class="table-wrap"><table><thead><tr><th>Metric</th>{% for label in performance.labels %}<th>{{ label }}</th>{% endfor %}</tr></thead><tbody>
+        {% for row in performance.question_rows %}<tr><td>{{ row.label }}</td>{% for value in row['values'] %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}
+        </tbody></table></div>
+        <div class="subsection"><h3>Dedicated performance suite</h3>
+            <p class="muted small">TTFT = time to first token. Higher throughput is better; lower latency is better. SLO capacity depends on the thresholds shown below (zero disables a criterion). Different workload mixes, cache states, streaming modes, or tested concurrency ranges can affect comparisons; older reports may not record all settings.</p>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Metric</th>{% for label in performance.labels %}<th>{{ label }}</th>{% endfor %}</tr></thead><tbody>
+        {% for row in performance.suite_rows %}<tr><td>{{ row.label }}</td>{% for value in row['values'] %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}
+        </tbody></table></div>
+        {% for note in performance.notes %}<p class="notice">{{ note }}</p>{% endfor %}
+    </div>
+    {% if performance.charts %}<div class="report-grid subsection">
+        {% for chart in performance.charts %}<div class="panel"><h3 class="chart-title">{{ chart.title }}</h3>
+        <div class="chart">{{ chart.svg }}</div>
+        <div class="legend">{% for series in chart.series %}<span><i class="dot" style="background:{{ series.color }}"></i>{{ series.label }}</span>{% endfor %}</div>
+        </div>{% endfor %}
+    </div>{% endif %}
+    {% if performance.load_rows %}<div class="panel subsection"><h3>Concurrency measurements</h3>
+    <p class="muted small">Each row is one measured load level. Peak figures above can come from different levels.</p>
+    <div class="table-wrap"><table><thead><tr><th>Run</th><th>Concurrency</th><th>Requests</th><th>Aggregate output</th><th>Request rate</th><th>Latency p95</th><th>TTFT p95</th><th>Stream decode p50</th><th>Error rate</th></tr></thead><tbody>
+    {% for row in performance.load_rows %}<tr><td>{{ row.run }}</td>{% for value in row['values'] %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}
+    </tbody></table></div></div>{% endif %}
+    {% if performance.context_rows %}<div class="panel subsection"><h3>Context scaling measurements</h3>
+    <p class="muted small">Context targets belong to the performance sweep. They are separate from answer accuracy at long context. Skipped cells remain unmeasured.</p>
+    <div class="table-wrap"><table><thead><tr><th>Run</th><th>Target tokens</th><th>Concurrency</th><th>Cold TTFT p50</th><th>Warm TTFT p50</th><th>Prompt throughput</th><th>Output throughput</th><th>Error rate</th><th>Status</th></tr></thead><tbody>
+    {% for row in performance.context_rows %}<tr><td>{{ row.run }}</td>{% for value in row['values'] %}<td>{{ value }}</td>{% endfor %}<td>{{ row.status }}</td></tr>{% endfor %}
+    </tbody></table></div></div>{% endif %}
+</section>

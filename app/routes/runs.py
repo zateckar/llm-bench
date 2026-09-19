@@ -4,7 +4,7 @@ import json
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 
 from app.auth import get_current_user, require_admin
 from app.database import execute, execute_transaction, fetch_all, fetch_one
@@ -13,6 +13,32 @@ from app.templates_config import templates
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get("/runs/{run_id}/report.html")
+async def run_report_download(request: Request, run_id: int):
+    if not await get_current_user(request):
+        return RedirectResponse(url="/login", status_code=302)
+    from app.services.html_reports import load_run, render_report
+
+    run = await load_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return HTMLResponse(render_report([run]), headers={
+        "Content-Disposition": f'attachment; filename="run-{run_id}.html"',
+        "Cache-Control": "no-store",
+    })
+
+
+@router.get("/runs/{run_id}/quality.json")
+async def quality_download(request: Request, run_id: int):
+    if not await get_current_user(request):
+        return RedirectResponse(url="/login",status_code=302)
+    row = await fetch_one("SELECT quality_json FROM test_runs WHERE id=?",(run_id,))
+    if not row or not row.get('quality_json'):
+        raise HTTPException(status_code=404,detail='No quality report for this run')
+    return JSONResponse(json.loads(row['quality_json']),headers={
+        'Content-Disposition':f'attachment; filename="run-{run_id}.quality.json"'})
 
 
 def _is_evaluator_error(detail: str) -> bool:
@@ -136,11 +162,11 @@ async def run_detail(request: Request, run_id: int):
     categories = await fetch_all(
         """SELECT category,
                   COUNT(*) as total,
-                  SUM(request_ok) as scored,
+                  SUM(COALESCE(quality_scored, request_ok)) as scored,
                   SUM(passed) as passed,
-                  AVG(CASE WHEN request_ok = 1 THEN score END) as avg_score,
-                  SUM(CASE WHEN request_ok = 1 THEN score * weight END) /
-                      NULLIF(SUM(CASE WHEN request_ok = 1 THEN weight END), 0) as weighted_score,
+                  AVG(CASE WHEN COALESCE(quality_scored, request_ok) = 1 THEN score END) as avg_score,
+                  SUM(CASE WHEN COALESCE(quality_scored, request_ok) = 1 THEN score * weight END) /
+                      NULLIF(SUM(CASE WHEN COALESCE(quality_scored, request_ok) = 1 THEN weight END), 0) as weighted_score,
                   AVG(latency_ms) as avg_latency_ms,
                   MAX(latency_ms) as max_latency_ms
            FROM test_results WHERE run_id = ?
@@ -179,9 +205,9 @@ async def run_detail(request: Request, run_id: int):
     difficulty_rows = await fetch_all(
         """SELECT difficulty,
                   COUNT(*) as total,
-                  SUM(request_ok) as scored,
+                  SUM(COALESCE(quality_scored, request_ok)) as scored,
                   SUM(passed) as passed,
-                  AVG(CASE WHEN request_ok = 1 THEN score END) as avg_score
+                  AVG(CASE WHEN COALESCE(quality_scored, request_ok) = 1 THEN score END) as avg_score
            FROM test_results WHERE run_id = ?
            GROUP BY difficulty""",
         (run_id,),
@@ -190,10 +216,15 @@ async def run_detail(request: Request, run_id: int):
     difficulty_rows.sort(key=lambda r: tier_order.get(r["difficulty"], 9))
 
     perf_data = _parse_perf(run.get("perf_json"))
+    try:
+        quality_data = json.loads(run.get("quality_json") or "null")
+    except (ValueError,TypeError):
+        quality_data = None
     return templates.TemplateResponse(
         request, "run_detail.html",
         {
             "run": run,
+            "quality": quality_data,
             "categories": categories,
             "results_by_category": results_by_category,
             "evaluator_errors": evaluator_errors,
@@ -310,8 +341,8 @@ async def rerun_failed(request: Request, run_id: int):
 
     # Create new run
     new_run_id = await execute(
-        "INSERT INTO test_runs (model_id, status, created_by) VALUES (?, 'pending', ?)",
-        (original_run["model_id"], user["id"]),
+        "INSERT INTO test_runs (model_id, status, created_by, quality_config_json) VALUES (?, 'pending', ?, ?)",
+        (original_run["model_id"], user["id"], original_run.get("quality_config_json")),
     )
 
     # Start benchmark with only errored questions

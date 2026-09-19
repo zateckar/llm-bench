@@ -1,291 +1,276 @@
-# Agentic Use Cases Test Suite
-#
-# Previously graded with `contains_keywords` against the tool names printed in
-# the prompt itself, so echoing the prompt scored 100%. Items now require ordered
-# reasoning with the specific technical content that distinguishes a workable plan,
-# plus `must_not` rules for the confidently wrong answers, and one item is graded
-# on arithmetic the model has to actually do.
+# Challenge suite v2. Answer-key derivations: challenge_oracles.py.
+# All parts must pass; no keyword-only credit. IDs intentionally differ from v1.
 
-- id: AU-01
-  category: Agentic Use Cases
-  difficulty: hard
-  description: "Gating order matters: tests and review precede merge, deploy must be reversible"
-  prompt: |
-    You are an agent with these actions:
-      run_command, read_file, write_file, create_pull_request, merge_pr, deploy, run_tests, notify
-
-    Produce a deployment plan for shipping a new microservice to production. Make every decision point
-    explicit: what you do if tests fail, if reviewers reject the PR, and if the production deploy is
-    unhealthy. Number the steps.
-  evaluator: multi_step_solution
-  expected:
-    steps:
-      - step: "Run tests before requesting review"
-        pattern: 'run_tests\s*\('
-        order: 1
-      - step: "Halt on test failure rather than proceeding"
-        pattern: '\bif\b[\s\S]{0,120}(?:tests?\s+fail|failed\s*>\s*0|failure)[\s\S]{0,200}(?:stop|abort|halt|do not|don.?t|fix|notify)'
-        order: 2
-      - step: "Open a PR for review"
-        pattern: 'create_pull_request\s*\('
-        order: 3
-      - step: "Merge only after approval"
-        pattern: 'approv[\s\S]{0,200}merge_pr|merge_pr[\s\S]{0,120}(?:only )?(?:if|once|after)[\s\S]{0,60}approv'
-        order: 4
-      - step: "Deploy to staging or a canary before full production"
-        pattern: 'deploy\s*\([^)]*(?:staging|canary|preprod|pre-production)|canary|blue[- ]green|progressive'
-        order: 5
-      - step: "Verify health after deploying"
-        pattern: '(?:health|smoke|verif|monitor|error rate|slo)'
-        order: 6
-      - step: "Rollback path on an unhealthy deploy"
-        pattern: '(?:roll\s?back|revert|redeploy the previous|previous version)'
-        order: 7
-      - step: "Notify on outcome"
-        pattern: 'notify\s*\('
-        order: 8
-    must_not:
-      - '(?is)merge_pr[\s\S]{0,120}\n\s*\d+[.)]\s*run_tests'
-      - '(?i)\bno rollback (?:is )?(?:needed|necessary|required)\b'
-
-- id: AU-02
-  category: Agentic Use Cases
-  difficulty: hard
-  prompt: |
-    A user reports: "the app crashes when I click Submit on the checkout page." You have production
-    logs, source code, the browser console, the network tab and database query logs.
-
-    Give your debugging plan as a numbered list. It must establish a reproduction before forming
-    hypotheses, use the request correlation id to tie the client error to the server-side trace, and
-    end with a way to confirm the fix.
-  evaluator: multi_step_solution
-  expected:
-    steps:
-      - step: "Establish a reproduction"
-        pattern: 'reproduc'
-        order: 1
-      - step: "Scope which users, environments or versions are affected"
-        pattern: '(?:which|scope|all users|subset|only (?:some|certain)|browser|version|region|percentage|affected)'
-        order: 2
-      - step: "Correlate client error to server trace via request/trace id"
-        pattern: '(?:correlation id|request id|trace id|x-request-id|span id)'
-        order: 3
-      - step: "Read the actual stack trace / status code"
-        pattern: '(?:stack trace|traceback|exception|error message|status code)'
-        order: 4
-      - step: "Form and test a falsifiable hypothesis / bisect"
-        pattern: '(?:hypothes|bisect|isolate|narrow|binary search|eliminat)'
-        order: 5
-      - step: "Confirm the fix with a regression test"
-        pattern: '(?:regression test|add a test|write a test|verify the fix|confirm(?:s|ing)? the fix)'
-        order: 6
-    must_not:
-      - '(?im)^\s*(?:1[.)]\s*)?(?:just )?(?:restart|redeploy) (?:the )?(?:server|service|app)\b'
-
-- id: AU-03
+- id: AU2-01
   category: Agentic Use Cases
   difficulty: expert
-  description: "Eight independent defects; the charge-after-debit ordering is the one models miss"
+  source: challenge-v2
+  description: Find a safe minimal rolling deployment under two resource constraints
   prompt: |
-    Review this code and list every security, correctness and design problem, with the risk and a fix
-    for each:
-
-    ```python
-    def process_order(user_id, items, payment_token):
-        user = db.query(f"SELECT * FROM users WHERE id = {user_id}")
-        if not user:
-            return {'error': 'User not found'}
-
-        total = sum(item['price'] * item['qty'] for item in items)
-
-        if user['credits'] >= total:
-            db.execute(f"UPDATE users SET credits = credits - {total} WHERE id = {user_id}")
-            for item in items:
-                db.execute(f"INSERT INTO orders (user_id, product, qty) VALUES ({user_id}, '{item['name']}', {item['qty']})")
-            payment.charge(payment_token, total)
-            return {'status': 'success', 'total': total}
-        else:
-            return {'error': 'Insufficient credits'}
-    ```
-  evaluator: security_analysis
-  pass_threshold: 1.0
+    A service starts with 4 old ready instances and 0 new. The target is 0 old
+    and exactly 4 new. Old instances consume 2 resource units each, new ones 3.
+    Every state must have at least 3 ready instances and use at most 12 resource
+    units. An action either adds 1 or 2 new instances, or removes 1 or 2 old
+    instances. Added instances become ready atomically; each action costs one step.
+    You cannot add old instances or remove new ones. Never exceed 4 new instances.
+    Find the shortest valid plan. Break ties lexicographically over the sequence
+    of [action,count] pairs, with add < remove and 1 < 2.
+    Return JSON {"steps": ..., "plan": [["add" or "remove", count], ...]}.
+  evaluator: json_match
   expected:
-    min_criteria: 7
-    criteria:
-      - 'sql injection'
-      - '(?:race condition|toctou|time.?of.?check|check-then-act|double[- ]spend|concurrent(?:ly)? (?:call|request))'
-      - '(?:transaction|atomic|rollback|commit|for update|isolation level)'
-      - '(?:idempoten|duplicate charge|retry[\s\S]{0,80}(?:double|twice|duplicate))'
-      - '(?:price[\s\S]{0,120}(?:client|caller|untrusted|user)[- ]?(?:supplied|controlled|provided)|trusting[\s\S]{0,60}price|server[- ]side price)'
-      - '(?:float|floating[- ]point|Decimal|integer cents|rounding)'
-      - '(?:authoriz|authenticat)[\s\S]{0,140}(?:missing|absent|no check|not verified|not enforced)|no (?:check|verification) that[\s\S]{0,80}user_id'
-      - '(?:charge)[\s\S]{0,220}(?:after|before|ordering|sequence|fails)[\s\S]{0,140}(?:credits?|debit|deduct)|(?:credits?|debit|deduct)[\s\S]{0,180}charge[\s\S]{0,100}fail'
-    must_not:
-      - '(?i)\bno (?:major |significant )?(?:issues|problems|vulnerabilities)\b'
-      - '(?i)\bthe code (?:looks|is) (?:fine|correct|secure)\b'
-
-- id: AU-04
+    value:
+      steps: 6
+      plan:
+      - - remove
+        - 1
+      - - add
+        - 2
+      - - remove
+        - 2
+      - - add
+        - 1
+      - - remove
+        - 1
+      - - add
+        - 1
+    mode: exact
+  max_tokens: 8192
+- id: AU2-02
   category: Agentic Use Cases
   difficulty: expert
-  description: "The uptime budget rules out dump-and-restore; must reach for CDC plus verification"
+  source: challenge-v2
+  description: Circuit-breaker replay with half-open probes and exact cooldown boundaries
   prompt: |
-    Design a migration of a 50 GB, 100M-row PostgreSQL database to MySQL. Constraints: a 99.9% uptime
-    SLA (at most 43 minutes of downtime per year, and this migration must fit inside that), strict data
-    consistency, and an application built on SQLAlchemy.
-
-    Cover: why a dump-and-restore cutover cannot meet the budget, the pre-migration steps, the
-    replication mechanism during the transition, how writes are handled at cutover, how you verify
-    consistency, and the rollback plan.
-  evaluator: multi_step_solution
+    A breaker starts closed with zero consecutive failures. In closed state, a
+    success resets that counter; three consecutive admitted failures open it for
+    5 seconds. Requests at times strictly before the open-until time are skipped
+    and have no effect. At or after that time the first request is a half-open
+    probe: success closes/reset; failure reopens for 5 seconds from probe time.
+    Requests and their outcomes IF admitted (time, S=success/F=failure):
+    (0,F),(1,F),(2,S),(3,F),(4,F),(5,F),(7,S),(10,F),(11,S),
+    (15,S),(16,F),(17,F),(18,S). Outcomes are instantaneous.
+    Return JSON with admitted and skipped (arrays of times), state after the last
+    request (closed/open), and consecutive_failures after the last request.
+  evaluator: json_match
   expected:
-    steps:
-      - step: "Rules out dump-and-restore against the downtime budget"
-        pattern: '(?:pg_dump|dump[- ]and[- ]restore|dump then restore|offline (?:copy|migration))[\s\S]{0,300}(?:hours|too long|exceed|cannot|won.?t fit|far more than|43)'
-        order: 1
-      - step: "Schema and type compatibility audit up front"
-        pattern: '(?:schema|type)[\s\S]{0,140}(?:mapping|conversion|incompatib|differences?)|(?:SERIAL|BOOLEAN|JSONB|ARRAY|citext|sequence)[\s\S]{0,80}(?:mysql|equivalent|maps? to)'
-        order: 2
-      - step: "Ongoing replication via CDC or logical replication"
-        pattern: '(?:\bcdc\b|change data capture|logical replication|debezium|wal2json|pglogical|binlog)'
-        order: 3
-      - step: "Initial backfill plus continuous catch-up"
-        pattern: '(?:backfill|initial (?:load|snapshot|copy))[\s\S]{0,220}(?:catch.?up|tail|stream|apply|delta)'
-        order: 4
-      - step: "Cutover: dual write or brief write freeze gated on replication lag"
-        pattern: '(?:dual[- ]?writ|write freeze|read.?only window|replication lag[\s\S]{0,80}(?:zero|near.?zero|caught up))'
-        order: 5
-      - step: "Row-level verification, not just row counts"
-        pattern: '(?:checksum|hash|row-?by-?row|pt-table-checksum|compare[\s\S]{0,60}(?:checksums?|hashes)|reconcil)'
-        order: 6
-      - step: "Reversible rollback with the source still authoritative"
-        pattern: '(?:roll\s?back|revert|fail\s?back|keep (?:postgres|the source) (?:as )?(?:authoritative|primary|writable)|reverse replication)'
-        order: 7
-    must_not:
-      - '(?i)\b(?:simply |just )?(?:take|schedule) (?:a |an )?(?:maintenance window|downtime)[\s\S]{0,60}(?:of )?(?:a few hours|overnight|the weekend)'
-      - '(?i)\brow counts? (?:alone )?(?:is|are) (?:sufficient|enough)'
-
-- id: AU-05
+    value:
+      admitted:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 10
+      - 15
+      - 16
+      - 17
+      - 18
+      skipped:
+      - 7
+      - 11
+      state: closed
+      consecutive_failures: 0
+    mode: exact
+  max_tokens: 8192
+- id: AU2-03
+  category: Agentic Use Cases
+  difficulty: expert
+  source: challenge-v2
+  description: CDC replay with snapshot boundary, aborts, duplicate delivery, and pending transactions
+  prompt: |
+    A target snapshot at LSN 100 has rows {a:10,b:20}. Replay this arrival-ordered
+    change stream; each tuple is (LSN,transaction,operation,key,value):
+    (99,x,set,a,9),(101,p,set,a,11),(102,q,delete,b,null),(103,p,set,c,30),
+    (104,q,abort,null,null),(105,p,commit,null,null),(105,p,commit,null,null),
+    (106,r,set,a,12),(107,s,set,b,25),(108,s,commit,null,null),(109,r,set,c,31).
+    Ignore LSN<=100 and duplicate LSNs. Buffer writes by transaction, applying
+    them in stream order only on commit; abort discards them. Uncommitted writes
+    remain invisible. This exercise permits cutover only when no transaction is pending.
+    Return JSON with rows (final visible object), committed (transaction IDs in
+    commit order), pending (sorted IDs), and safe_to_cut_over (boolean).
+  evaluator: json_match
+  expected:
+    value:
+      rows:
+        a: 11
+        b: 25
+        c: 30
+      committed:
+      - p
+      - s
+      pending:
+      - r
+      safe_to_cut_over: false
+    mode: exact
+  max_tokens: 8192
+- id: AU2-04
+  category: Agentic Use Cases
+  difficulty: expert
+  source: challenge-v2
+  description: Capacity optimization with CPU, RAM, inventory, and instance-count constraints
+  prompt: |
+    Choose integer counts of instance types A,B,C. Their (CPU,RAM,daily cost) are
+    A=(3,2,8), B=(5,4,13), C=(9,5,21). Availability: A<=8, B<=6, C<=4.
+    Need CPU>=32, RAM>=21, at most 8 total instances, and at least 2 instances of
+    types B or C combined. Minimize daily cost; break ties by fewest instances,
+    then lexicographically smallest [A,B,C] count vector.
+    Return JSON with cost, instances, allocation ([A,B,C]), cpu, and ram.
+  evaluator: json_match
+  expected:
+    value:
+      cost: 81
+      instances: 5
+      allocation:
+      - 0
+      - 3
+      - 2
+      cpu: 33
+      ram: 22
+    mode: exact
+  max_tokens: 8192
+- id: AU2-05
   category: Agentic Use Cases
   difficulty: hard
-  description: "Cost arithmetic the model must actually perform"
+  source: challenge-v2
+  description: Saga compensation from observed effects rather than attempted calls
   prompt: |
-    Current compute spend: 20 x m5.4xlarge on-demand at $1.536 per instance-hour, billed for 720 hours
-    per month.
-
-    You propose halving the instance size to m5.2xlarge at $0.768 per instance-hour, keeping the same
-    instance count, and then additionally committing to a 3-year Compute Savings Plan that reduces the
-    remaining rate by exactly 50%.
-
-    Compute all three figures and end your reply with a single line in exactly this format:
-    `ANSWERS: <current monthly cost>, <cost after resizing>, <cost after resizing and the savings plan>`
-    Give each figure rounded to the nearest dollar, with no currency symbol and no thousands separators.
-  evaluator: numeric_match
+    Order o-31 must now be cancelled. Completed evidence: reservation r-81 is active;
+    charge ch-19 for 7200 cents succeeded; the local charge call timed out, but a
+    later lookup confirmed success. Shipment creation failed with a documented
+    no-effect error and returned no shipment ID. No compensation has run.
+    Policy: cancel active reservations first; refund successful charges second;
+    mark the order cancelled last. Do not compensate operations that had no effect.
+    Tools and exact parameters:
+      cancel_reservation(reservation_id)
+      refund(charge_id, amount, key) -- key must be "refund:" followed by order ID
+      cancel_shipment(shipment_id)
+      charge(order_id, amount, key)
+      mark_order(order_id, state)
+    Assume all recovery calls succeed. Return JSON {"calls": [{"tool": name,
+    "args": object}, ...], "net_charged": final charged cents minus refunded cents}.
+  evaluator: json_match
   expected:
-    # The final figure on the ANSWERS: line is graded as the final number.
-    # Exact products are 22118.40 / 11059.20 / 5529.60, so both the rounded
-    # (5530) and truncated (5529) forms of the last figure are accepted. The
-    # explicit relative tolerance keeps validate_suite from flagging this item
-    # for relying on the default.
-    value: 5530
-    relative: 0.0001
-    accept: [22118, 11059, 5530, 5529]
-
-- id: AU-06
+    value:
+      calls:
+      - tool: cancel_reservation
+        args:
+          reservation_id: r-81
+      - tool: refund
+        args:
+          charge_id: ch-19
+          amount: 7200
+          key: refund:o-31
+      - tool: mark_order
+        args:
+          order_id: o-31
+          state: cancelled
+      net_charged: 0
+    mode: exact
+- id: AU2-06
+  category: Agentic Use Cases
+  difficulty: expert
+  source: challenge-v2
+  description: Retry scheduling with worker contention and dead-letter limits
+  prompt: |
+    A single worker runs one job at a time; each attempt takes exactly 1 second.
+    Initial jobs (ready_at,id): (0,A),(0,B),(2,C). Whenever idle, pick the pending
+    job with smallest (ready_at,id), waiting until ready_at if needed. After failed
+    attempt k, retry becomes ready at finish_time + 2^k. Maximum 3 attempts; a
+    failure on attempt 3 dead-letters the job immediately. A fails twice then succeeds;
+    B fails all attempts; C succeeds first time. Attempts begin at 1.
+    Return JSON {"starts": [[start_time,id,attempt], ...] in execution order,
+    "dead_letters": IDs in dead-letter order, "finished_at": final completion time}.
+  evaluator: json_match
+  expected:
+    value:
+      starts:
+      - - 0
+        - A
+        - 1
+      - - 1
+        - B
+        - 1
+      - - 2
+        - C
+        - 1
+      - - 3
+        - A
+        - 2
+      - - 4
+        - B
+        - 2
+      - - 8
+        - A
+        - 3
+      - - 9
+        - B
+        - 3
+      dead_letters:
+      - B
+      finished_at: 10
+    mode: exact
+  max_tokens: 8192
+- id: AU2-07
+  category: Agentic Use Cases
+  difficulty: expert
+  source: challenge-v2
+  description: Snapshot write skew versus a serial execution
+  prompt: |
+    State initially is {a:1,b:1,c:1}; at least one value must remain 1.
+    T1, T2, T3 all take this same initial snapshot. Each sums a,b,c; if the sum is
+    >=2, it writes 0 to its own key (T1->a, T2->b, T3->c), otherwise writes nothing.
+    They commit in T1,T2,T3 order. Under this exercise's snapshot isolation, a
+    transaction aborts only if a key it writes changed since its snapshot.
+    Separately, execute T1,T2,T3 serially, each reading the latest committed state.
+    Return JSON with snapshot_commits (IDs in order), snapshot_final, serial_final,
+    and violates_at_least_one (whether the snapshot execution breaks the invariant).
+  evaluator: json_match
+  expected:
+    value:
+      snapshot_commits:
+      - T1
+      - T2
+      - T3
+      snapshot_final:
+        a: 0
+        b: 0
+        c: 0
+      serial_final:
+        a: 0
+        b: 0
+        c: 1
+      violates_at_least_one: true
+    mode: exact
+  max_tokens: 8192
+- id: AU2-08
   category: Agentic Use Cases
   difficulty: hard
-  description: "No deploy and normal traffic rules out the usual suspects"
+  source: challenge-v2
+  description: Replica resolution with equal-version conflicts and tombstones
   prompt: |
-    An alert fires: P99 latency for payment-service exceeded 5 s and 15% of payment requests are timing
-    out. There have been no deployments in 48 hours and request volume is normal for the time of day.
-
-    Give your first 15 minutes as a numbered plan. Because nothing changed on your side, reason
-    explicitly about what else can degrade, and say what you would do to protect the rest of the system
-    while you investigate.
-  evaluator: multi_step_solution
+    Replicas contain key -> (version,value):
+    A: x=(4,red), y=(7,up). B: x=(5,blue), y=(6,down).
+    C: x=(5,green), y=(7,up). D: x=(3,red), y=(8,null).
+    Each read uses only its named responders, independently, with no repair.
+    Pick the highest version returned. If distinct values tie at that version,
+    return {status:"conflict",version:N} with NO value field. Otherwise return
+    {status:"ok",version:N,value:V}, or status:"deleted" for a null tombstone.
+    Resolve reads in order: x from A+B, x from B+C, y from A+C, y from B+D.
+    Return JSON {"reads": [four result objects]}.
+  evaluator: json_match
   expected:
-    steps:
-      - step: "Establish blast radius from metrics / error budget"
-        pattern: '(?:blast radius|how many|error budget|\bslo\b|affected (?:users|requests)|dashboard|golden signals)'
-        order: 1
-      - step: "Check downstream dependencies rather than own code"
-        pattern: '(?:downstream|upstream provider|third[- ]party|payment (?:gateway|provider)|external (?:api|service)|dependenc)'
-        order: 2
-      - step: "Check resource saturation: pool, DB latency, locks"
-        pattern: '(?:connection pool|saturat|db (?:latency|locks?)|slow quer|lock (?:contention|wait)|queue depth|thread pool)'
-        order: 3
-      - step: "Protect the system: timeouts, circuit breaker, load shedding"
-        pattern: '(?:circuit breaker|shed load|load shedding|bulkhead|reduce the timeout|back.?pressure|rate.?limit|degrade gracefully|feature flag)'
-        order: 4
-      - step: "Communicate: status page or incident channel"
-        pattern: '(?:status page|incident channel|declare an incident|stakeholder|comms\b|notify)'
-        order: 5
-      - step: "Preserve evidence for the post-mortem"
-        pattern: '(?:capture|snapshot|preserve|export)[\s\S]{0,80}(?:logs?|traces?|metrics?|heap|thread dump)|post-?mortem'
-        order: 6
-    must_not:
-      - '(?i)\b(?:roll\s?back|revert) the (?:last|recent|latest) deploy(?:ment)?\b'
-      - '(?i)\b(?:just )?(?:restart|bounce) the service (?:to fix|and it)\b'
-
-- id: AU-07
-  category: Agentic Use Cases
-  difficulty: hard
-  description: "Non-atomic funds transfer; the failure-mode analysis is the test"
-  prompt: |
-    Review this function and list every problem, with the concrete failure scenario and a fix for each:
-
-    ```python
-    def transfer_funds(from_account, to_account, amount):
-        balance = get_balance(from_account)
-        if balance >= amount:
-            deduct(from_account, amount)
-            credit(to_account, amount)
-            return True
-        return False
-    ```
-  evaluator: security_analysis
-  expected:
-    min_criteria: 6
-    criteria:
-      - '(?:race condition|toctou|time.?of.?check|check-then-act|concurrent)'
-      - '(?:atomic|single transaction|begin[\s\S]{0,40}commit|all-or-nothing)'
-      - '(?:if|when|should)[\s\S]{0,90}credit[\s\S]{0,90}fail[\s\S]{0,180}(?:money|funds|lost|vanish|deducted)|(?:money|funds)[\s\S]{0,60}(?:disappear|lost|vanish)'
-      - '(?:for update|row.?lock|pessimistic lock|optimistic lock|version column|serializable)'
-      - '(?:idempoten|transfer id|request id|duplicate (?:transfer|retry))'
-      - '(?:negative|non-?positive|amount\s*<=?\s*0|validate the amount|same account|from_account\s*==\s*to_account)'
-      - '(?:audit|ledger|double[- ]entry|journal)'
-    must_not:
-      - '(?i)\bno (?:issues|problems)\b'
-      - '(?i)\b(?:adding a )?try[/-]?except (?:around|is)[\s\S]{0,40}(?:sufficient|complete|correct)'
-
-- id: AU-08
-  category: Agentic Use Cases
-  difficulty: hard
-  description: "CPU at 40% while the pool is at 100% points at the pool, not capacity"
-  prompt: |
-    An API returns 500s on roughly 5% of requests, only between 2 PM and 6 PM. Logs show
-    `ConnectionError: cannot connect to database pool`. Metrics show the DB connection pool at 100%
-    utilisation during those hours while application CPU sits at 40% and database CPU at 30%.
-
-    State the most likely root cause and give three specific remediations in order of how quickly they
-    can be applied. Explain why adding application CPU or larger instances would not help.
-  evaluator: multi_step_solution
-  expected:
-    steps:
-      - step: "Root cause: pool size below peak concurrency, not compute capacity"
-        pattern: '(?:pool size|max(?:_|\s)?(?:pool|connections|overflow))[\s\S]{0,180}(?:too small|below|insufficient|exhaust|saturat)|(?:concurrency|in-?flight requests)[\s\S]{0,140}exceed'
-        order: 1
-      - step: "Raise pool size within the database's max_connections budget"
-        pattern: 'max_connections|pool_size|max_overflow'
-        order: 2
-      - step: "Add a pooler or shorten how long connections are held"
-        pattern: '(?:pgbouncer|proxysql|rds proxy|connection (?:proxy|pooler)|shorten[\s\S]{0,60}transaction|release (?:the )?connection|connection leak)'
-        order: 3
-      - step: "Queueing, timeouts or backpressure instead of hard failure"
-        pattern: '(?:pool_timeout|checkout timeout|queue|back.?pressure|circuit breaker|retry with jitter)'
-        order: 4
-      - step: "Explains why more CPU does not help"
-        pattern: '(?:cpu (?:is|at) (?:only )?40|cpu is not the bottleneck|not cpu[- ]bound|scaling (?:up|out)[\s\S]{0,140}(?:more connections|worsen|make it worse|not help|no help))'
-        order: 5
-    must_not:
-      - '(?i)\b(?:scale up|increase|add) (?:the )?(?:cpu|instance size)[\s\S]{0,60}(?:will|should) (?:fix|resolve|solve)'
-      - '(?i)\bset (?:pool_size|max_connections) to (?:unlimited|as high as possible|infinity)\b'
+    value:
+      reads:
+      - status: ok
+        version: 5
+        value: blue
+      - status: conflict
+        version: 5
+      - status: ok
+        version: 7
+        value: up
+      - status: deleted
+        version: 8
+        value: null
+    mode: exact

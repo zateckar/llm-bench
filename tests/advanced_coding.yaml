@@ -1,413 +1,496 @@
-# Advanced Coding Test Suite
-#
-# The class-based problems are graded by harnesses in evaluators.TEST_HELPERS.
-# Those harnesses were rewritten to assert the properties that actually define
-# the data structure - LRU recency on both get and overwrite, trie prefixes that
-# are not words, BST ancestor bounds rather than parent-only comparisons - and to
-# report which assertion failed instead of swallowing the exception.
+# Challenge suite v2. Answer-key derivations: challenge_oracles.py.
+# All parts must pass; no keyword-only credit. IDs intentionally differ from v1.
 
-- id: AC-01
-  category: Advanced Coding
-  difficulty: medium
-  prompt: |
-    Write a Python function `merge_intervals(intervals: list[list[int]]) -> list[list[int]]` that merges overlapping intervals. Each interval is a two-element list [start, end]. Input is not necessarily sorted. Touching intervals merge: [[1,2],[2,3]] -> [[1,3]]. Return each merged interval as a two-element list, sorted by start. Handle empty input. Time complexity must be O(n log n).
-    Reply with ONLY the Python code in a code block.
-  evaluator: code_exec
-  expected:
-    - function: merge_intervals
-      args: [[[1, 3], [2, 6], [8, 10], [15, 18]]]
-      expected: [[1, 6], [8, 10], [15, 18]]
-    - function: merge_intervals
-      args: [[]]
-      expected: []
-    - function: merge_intervals
-      args: [[[1, 4], [4, 5]]]
-      expected: [[1, 5]]
-    - function: merge_intervals
-      args: [[[5, 6], [1, 3], [2, 4]]]
-      expected: [[1, 4], [5, 6]]
-    - function: merge_intervals
-      args: [[[1, 10], [2, 3], [4, 5]]]
-      expected: [[1, 10]]
-    - function: merge_intervals
-      args: [[[1, 2]]]
-      expected: [[1, 2]]
-
-- id: AC-02
-  category: Advanced Coding
-  difficulty: hard
-  description: "Harness checks recency on get() and on overwriting an existing key"
-  prompt: |
-    Implement a class `LRUCache` with O(1) get and put:
-      - `__init__(self, capacity: int)`
-      - `get(self, key: int) -> int`  (returns -1 when the key is absent)
-      - `put(self, key: int, value: int) -> None`
-    Both reading a key and overwriting an existing key must count as a use of that key for eviction purposes.
-    Reply with ONLY the Python code in a code block.
-  evaluator: code_exec
-  expected:
-    - function: test_lru
-      args: []
-      expected: true
-
-- id: AC-03
-  category: Advanced Coding
-  difficulty: medium
-  description: "The even/odd branches are swapped; a correct fix must not mutate the caller's list"
-  prompt: |
-    This function is wrong. Identify the bug and reply with the corrected function.
-
-    ```python
-    def find_median(nums: list[int]) -> float:
-        nums.sort()
-        n = len(nums)
-        if n % 2 == 0:
-            return nums[n // 2]
-        else:
-            return (nums[n // 2 - 1] + nums[n // 2]) / 2
-    ```
-
-    The corrected function must also leave the caller's list unmodified.
-    Reply with ONLY the corrected Python code in a code block.
-  evaluator: code_exec
-  expected:
-    - function: find_median
-      args: [[1, 2, 3]]
-      expected: 2
-    - function: find_median
-      args: [[1, 2, 3, 4]]
-      expected: 2.5
-    - function: find_median
-      args: [[3, 1, 2]]
-      expected: 2
-    - function: find_median
-      args: [[5]]
-      expected: 5
-    - function: find_median
-      args: [[4, 1, 3, 2]]
-      expected: 2.5
-
-- id: AC-04
-  category: Advanced Coding
-  difficulty: hard
-  description: "Round-trip over skewed trees, negatives, zero, and duplicate values"
-  prompt: |
-    Write `serialize_tree(root) -> str` and `deserialize_tree(data: str)` for a binary tree, plus the TreeNode class:
-
-        class TreeNode:
-            def __init__(self, val=0, left=None, right=None):
-                self.val = val
-                self.left = left
-                self.right = right
-
-    `deserialize_tree(serialize_tree(t))` must reproduce a structurally identical tree for any tree, including the empty tree, left-skewed chains, negative values and duplicate values. `serialize_tree` must return a string.
-    Reply with ONLY the Python code in a code block.
-  evaluator: code_exec
-  expected:
-    - function: test_serialize
-      args: []
-      expected: true
-
-- id: AC-05
-  category: Advanced Coding
-  difficulty: medium
-  prompt: |
-    Rewrite this O(n^2) function to run in O(n), keeping the same signature and return type (a list of two indices, ascending, or [-1, -1] when no pair sums to the target).
-
-    ```python
-    def two_sum(nums: list[int], target: int) -> list[int]:
-        for i in range(len(nums)):
-            for j in range(i + 1, len(nums)):
-                if nums[i] + nums[j] == target:
-                    return [i, j]
-        return [-1, -1]
-    ```
-
-    Reply with ONLY the Python code in a code block.
-  evaluator: code_exec
-  expected:
-    - function: two_sum
-      args: [[2, 7, 11, 15], 9]
-      expected: [0, 1]
-    - function: two_sum
-      args: [[3, 2, 4], 6]
-      expected: [1, 2]
-    - function: two_sum
-      args: [[3, 3], 6]
-      expected: [0, 1]
-    - function: two_sum
-      args: [[1, 2, 3], 7]
-      expected: [-1, -1]
-    - function: two_sum
-      args: [[0, 4, 3, 0], 0]
-      expected: [0, 3]
-    - function: two_sum
-      args: [[-3, 4, 3, 90], 0]
-      expected: [0, 2]
-
-- id: AC-06
-  category: Advanced Coding
-  difficulty: hard
-  description: "Duplicate characters in t must be counted, not just present"
-  prompt: |
-    Write a Python function `min_window(s: str, t: str) -> str` returning the shortest substring of s containing every character of t including duplicates. Return the empty string when no such window exists. If several windows tie in length, return the leftmost.
-    Example: s='ADOBECODEBANC', t='ABC' -> 'BANC'
-    Reply with ONLY the Python code in a code block.
-  evaluator: code_exec
-  expected:
-    - function: min_window
-      args: ["ADOBECODEBANC", "ABC"]
-      expected: "BANC"
-    - function: min_window
-      args: ["a", "a"]
-      expected: "a"
-    - function: min_window
-      args: ["a", "aa"]
-      expected: ""
-    - function: min_window
-      args: ["aa", "aa"]
-      expected: "aa"
-    - function: min_window
-      args: ["", "a"]
-      expected: ""
-    - function: min_window
-      args: ["bba", "ab"]
-      expected: "ba"
-
-- id: AC-07
-  category: Advanced Coding
-  difficulty: hard
-  prompt: |
-    Write a Python function `dijkstra(graph, start, end)` returning the shortest total weight from start to end, or -1 when end is unreachable. `graph` is a dict mapping each node to a list of (neighbour, weight) pairs; all weights are non-negative. The distance from a node to itself is 0.
-    Reply with ONLY the Python code in a code block.
-  evaluator: code_exec
-  expected:
-    - function: dijkstra
-      args: [{"A": [["B", 1], ["C", 4]], "B": [["C", 2], ["D", 5]], "C": [["D", 1]], "D": []}, "A", "D"]
-      expected: 4
-    - function: dijkstra
-      args: [{"A": [["B", 1]], "B": []}, "A", "C"]
-      expected: -1
-    - function: dijkstra
-      args: [{"A": [["B", 1]], "B": []}, "A", "A"]
-      expected: 0
-    - function: dijkstra
-      args: [{"A": [["B", 10], ["C", 1]], "B": [], "C": [["B", 1]]}, "A", "B"]
-      expected: 2
-    - function: dijkstra
-      args: [{"A": [], "B": []}, "A", "B"]
-      expected: -1
-
-- id: AC-08
-  category: Advanced Coding
-  difficulty: hard
-  description: "Harness includes the ancestor-bound case that parent-only comparison gets wrong"
-  prompt: |
-    Write a Python function `is_valid_bst(root) -> bool` that returns True only if the binary tree is a valid binary search tree: every value in a node's left subtree is strictly less than the node, and every value in its right subtree is strictly greater. Duplicates make a tree invalid. The empty tree is valid. Assume the TreeNode class:
-
-        class TreeNode:
-            def __init__(self, val=0, left=None, right=None):
-                self.val = val
-                self.left = left
-                self.right = right
-
-    Reply with ONLY the Python code in a code block.
-  evaluator: code_exec
-  expected:
-    - function: test_bst
-      args: []
-      expected: true
-
-- id: AC-09
-  category: Advanced Coding
-  difficulty: hard
-  description: "Sliding-window rate limiter with per-key state and injected time"
-  prompt: |
-    Implement a class `RateLimiter` enforcing a sliding-window limit per key:
-      - `__init__(self, max_requests: int, window_seconds: int)`
-      - `allow(self, key: str, now: float) -> bool`
-    `allow` returns True and records the request if fewer than `max_requests` requests for that key fall within the window ending at `now` (a request at time t counts while now - t < window_seconds); otherwise it returns False and records nothing. Each key has an independent budget. Time is supplied by the caller, never read from the clock.
-    Reply with ONLY the Python code in a code block.
-  evaluator: code_exec
-  expected:
-    - function: test_rate_limiter
-      args: []
-      expected: true
-
-- id: AC-10
+- id: AC2-01
   category: Advanced Coding
   difficulty: expert
-  description: "Time-travel reads, including writes that arrive out of order"
+  source: challenge-v2
+  description: Earliest arrival in a time-window graph; waiting and departure boundaries
   prompt: |
-    Implement a class `VersionedStore` supporting point-in-time reads:
-      - `set(self, key: str, value, timestamp: int) -> None`
-      - `get(self, key: str, timestamp: int)` returns the value written at the greatest timestamp less than or equal to `timestamp`, or None if the key had no value at that time.
-    Writes may arrive with timestamps out of order and must still be read back in timestamp order. `get` should be O(log n) in the number of writes for a key.
-    Reply with ONLY the Python code in a code block.
+    Implement temporal_route(n, edges, start, end, departure). Nodes are integers
+        0..n-1. Each directed edge is [u,v,duration,open,close]. You may depart on it
+        at any time t with open <= t < close, and arrive at t+duration (arrival may be
+        after close). Waiting at nodes is allowed. All inputs are nonnegative integers,
+        durations are positive, and open < close. Parallel edges and cycles may occur.
+        Return earliest arrival time at end starting at start at departure, or None if
+        unreachable. If start=end return departure. Support n<=100 and <=500 edges.
+
+    Return only Python code defining the function. Standard library only.
   evaluator: code_exec
   expected:
-    - function: test_versioned_store
-      args: []
-      expected: true
-
-- id: AC-11
-  category: Advanced Coding
-  difficulty: hard
-  description: "Deterministic tie-breaking plus cycle detection"
-  prompt: |
-    Write a Python function `topological_sort(graph)` where `graph` maps each node to a list of nodes it must precede. Return a list of all nodes in a valid topological order, breaking ties by choosing the lexicographically smallest available node. Return an empty list if the graph contains a cycle.
-    Reply with ONLY the Python code in a code block.
-  evaluator: code_exec
-  expected:
-    - function: topological_sort
-      args: [{"a": ["b", "c"], "b": ["d"], "c": ["d"], "d": []}]
-      expected: ["a", "b", "c", "d"]
-    - function: topological_sort
-      args: [{"a": ["b"], "b": ["a"]}]
-      expected: []
-    - function: topological_sort
-      args: [{}]
-      expected: []
-    - function: topological_sort
-      args: [{"z": [], "a": [], "m": []}]
-      expected: ["a", "m", "z"]
-    - function: topological_sort
-      args: [{"b": ["a"], "a": []}]
-      expected: ["b", "a"]
-
-- id: AC-12
-  category: Advanced Coding
-  difficulty: hard
-  prompt: "Write a Python function `edit_distance(a, b)` returning the Levenshtein distance between two strings (minimum number of single-character insertions, deletions or substitutions). Reply with ONLY the Python code in a code block."
-  evaluator: code_exec
-  expected:
-    - function: edit_distance
-      args: ["kitten", "sitting"]
-      expected: 3
-    - function: edit_distance
-      args: ["", "abc"]
-      expected: 3
-    - function: edit_distance
-      args: ["abc", "abc"]
-      expected: 0
-    - function: edit_distance
-      args: ["intention", "execution"]
-      expected: 5
-    - function: edit_distance
-      args: ["", ""]
-      expected: 0
-    - function: edit_distance
-      args: ["flaw", "lawn"]
-      expected: 2
-
-- id: AC-13
-  category: Advanced Coding
-  difficulty: hard
-  prompt: "Write a Python function `lis_length(nums)` returning the length of the longest strictly increasing subsequence of a list of integers. It must run in O(n log n) time. Reply with ONLY the Python code in a code block."
-  evaluator: code_exec
-  expected:
-    - function: lis_length
-      args: [[10, 9, 2, 5, 3, 7, 101, 18]]
-      expected: 4
-    - function: lis_length
-      args: [[]]
-      expected: 0
-    - function: lis_length
-      args: [[7, 7, 7, 7]]
-      expected: 1
-    - function: lis_length
-      args: [[1, 3, 6, 7, 9, 4, 10, 5, 6]]
-      expected: 6
-    - function: lis_length
-      args: [[5, 4, 3, 2, 1]]
-      expected: 1
-
-- id: AC-14
-  category: Advanced Coding
-  difficulty: hard
-  prompt: |
-    Write a Python function `spiral_order(matrix)` returning all elements of a rectangular matrix in clockwise spiral order starting at the top-left. Handle empty input, single rows and single columns.
-    Reply with ONLY the Python code in a code block.
-  evaluator: code_exec
-  expected:
-    - function: spiral_order
-      args: [[[1, 2, 3], [4, 5, 6], [7, 8, 9]]]
-      expected: [1, 2, 3, 6, 9, 8, 7, 4, 5]
-    - function: spiral_order
-      args: [[[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]]]
-      expected: [1, 2, 3, 4, 8, 12, 11, 10, 9, 5, 6, 7]
-    - function: spiral_order
-      args: [[]]
-      expected: []
-    - function: spiral_order
-      args: [[[1], [2], [3]]]
-      expected: [1, 2, 3]
-    - function: spiral_order
-      args: [[[1, 2, 3]]]
-      expected: [1, 2, 3]
-
-- id: AC-15
+  - function: temporal_route
+    args: [4, [[0, 1, 3, 0, 4], [1, 3, 2, 6, 8], [0, 2, 1, 0, 5], [2, 3, 10, 0, 10]], 0, 3, 0]
+    expected: 8
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [2, [[0, 1, 8, 2, 3]], 0, 1, 2]
+    expected: 10
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [2, [[0, 1, 8, 2, 3]], 0, 1, 3]
+    expected: null
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [3, [[0, 1, 2, 0, 3], [1, 2, 1, 0, 2]], 0, 2, 0]
+    expected: null
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [1, [], 0, 0, 7]
+    expected: 7
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [3, [[0, 1, 5, 0, 10], [0, 1, 1, 3, 9], [1, 2, 2, 4, 5]], 0, 2, 0]
+    expected: 6
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [3, [[0, 1, 1, 0, 10], [1, 0, 1, 0, 10]], 0, 2, 0]
+    expected: null
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [5, [[0, 1, 1, 0, 10], [1, 2, 1, 0, 10], [2, 3, 1, 0, 10], [3, 4, 1, 0, 10]], 0, 4, 0]
+    expected: 4
+    relative: 0
+    tolerance: 0
+  max_tokens: 4096
+- id: AC2-02
   category: Advanced Coding
   difficulty: expert
-  description: "Topological sort over inferred character constraints; lexicographic tie-breaking is the hard part"
+  source: challenge-v2
+  description: Sweep-line interval multiplicity with half-open endpoints and coalescing
   prompt: |
-    Write a Python function `alien_order(words: list[str]) -> str` for the "alien dictionary" problem. Given a list of words from an alien language, sorted lexicographically according to that language's unknown character order, derive a valid character ordering.
+    Implement interval_overlay(intervals), where each interval is [start,end) with
+        integer endpoints and start<=end. Return sorted maximal segments [start,end,count]
+        with count>0 showing how many input intervals cover each point. Duplicates count
+        separately. Ignore empty intervals. Adjacent segments with equal counts MUST merge,
+        including across coincident starts and ends. Negative endpoints are allowed.
+        Support up to 2000 intervals; return [] for no covered points.
 
-    Rules:
-      - Return the characters of the alphabet in a valid order as a single string.
-      - Among all valid orders, returned the lexicographically SMALLEST one.
-      - If the ordering is inconsistent (the words could not have been produced by any single order), return the empty string.
-      - Lowercase English letters only.
-
-    Reply with ONLY the Python code in a code block.
+    Return only Python code defining the function. Standard library only.
   evaluator: code_exec
   expected:
-    - function: alien_order
-      args: [["wrt", "wrf", "er", "ett", "rftt"]]
-      expected: "wertf"
-    - function: alien_order
-      args: [["z", "x"]]
-      expected: "zx"
-    - function: alien_order
-      args: [["z", "x", "z"]]
-      expected: ""
-    - function: alien_order
-      args: [["a"]]
-      expected: "a"
-    - function: alien_order
-      args: [["abc", "ab"]]
-      expected: ""
-    - function: alien_order
-      args: [["baa", "abcd", "abca", "cab", "cad"]]
-      expected: "badc"
-
-- id: AC-16
+  - function: interval_overlay
+    args: [[]]
+    expected: []
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[1, 4], [2, 5], [4, 7]]]
+    expected: [[1, 2, 1], [2, 5, 2], [5, 7, 1]]
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[0, 2], [2, 4]]]
+    expected: [[0, 4, 1]]
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[1, 3], [1, 3], [2, 2]]]
+    expected: [[1, 3, 2]]
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[-5, -1], [-3, 2], [0, 0]]]
+    expected: [[-5, -3, 1], [-3, -1, 2], [-1, 2, 1]]
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[0, 10], [2, 4], [4, 6], [6, 8]]]
+    expected: [[0, 2, 1], [2, 8, 2], [8, 10, 1]]
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[0, 1], [3, 4]]]
+    expected: [[0, 1, 1], [3, 4, 1]]
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[1, 1], [2, 2]]]
+    expected: []
+    relative: 0
+    tolerance: 0
+  max_tokens: 4096
+- id: AC2-03
   category: Advanced Coding
   difficulty: expert
-  description: "Optimal-bST / word-break hybrid requires memoisation; brute force times out"
+  source: challenge-v2
+  description: Dependency levels with cycles and downstream blocked nodes
   prompt: |
-    Write a Python function `min_extra_char(s: str, dictionary: list[str]) -> int` returning the minimum number of characters of `s` left over after breaking off as many dictionary words as possible from left to right. Each position of `s` can be used at most once and a word may only be used at a position if it matches exactly. You may skip characters (each skip costs 1 leftover character).
+    Implement dependency_batches(nodes, edges). nodes is a list of distinct strings;
+        edges contains [prerequisite,dependent] pairs referring to those nodes. Duplicate
+        edges and self-loops are allowed. At each round remove ALL currently zero-incoming
+        nodes simultaneously, sorted lexicographically. Their removal takes effect only
+        for the next round. Return {"batches": list of rounds, "blocked": sorted nodes
+        remaining when no progress is possible}. Blocked includes downstream dependents
+        of cycles, not just cycle members. Empty input returns both arrays empty.
 
-    Example: s = "leetscode", dictionary = ["leet","code","leetcode"] -> 1 (break "leet" then "code", the 's' is left over).
-    Constraints: len(s) up to 50, dictionary up to 1000 words, each word up to 10 chars. Must run in well under a second.
-    Reply with ONLY the Python code in a code block.
+    Return only Python code defining the function. Standard library only.
   evaluator: code_exec
   expected:
-    - function: min_extra_char
-      args: ["leetscode", ["leet", "code", "leetcode"]]
-      expected: 1
-    - function: min_extra_char
-      args: ["sayhelloworld", ["hello", "world"]]
-      expected: 3
-    - function: min_extra_char
-      args: ["abcd", ["ab", "cd"]]
-      expected: 0
-    - function: min_extra_char
-      args: ["xyz", ["a", "b"]]
-      expected: 3
-    - function: min_extra_char
-      args: ["aaaaaaaa", ["aa", "aaa"]]
-      expected: 0
-    - function: min_extra_char
-      args: ["", ["a"]]
-      expected: 0
+  - function: dependency_batches
+    args: [[], []]
+    expected: {batches: [], blocked: []}
+    relative: 0
+    tolerance: 0
+  - function: dependency_batches
+    args: [[a, b, c, d], [[a, c], [b, c], [c, d]]]
+    expected: {batches: [[a, b], [c], [d]], blocked: []}
+    relative: 0
+    tolerance: 0
+  - function: dependency_batches
+    args: [[a, b, c, d, e], [[a, b], [b, a], [b, c], [d, e]]]
+    expected: {batches: [[d], [e]], blocked: [a, b, c]}
+    relative: 0
+    tolerance: 0
+  - function: dependency_batches
+    args: [[x, y], [[x, x], [x, y]]]
+    expected: {batches: [], blocked: [x, y]}
+    relative: 0
+    tolerance: 0
+  - function: dependency_batches
+    args: [[z, a, m], []]
+    expected: {batches: [[a, m, z]], blocked: []}
+    relative: 0
+    tolerance: 0
+  - function: dependency_batches
+    args: [[a, b], [[a, b], [a, b]]]
+    expected: {batches: [[a], [b]], blocked: []}
+    relative: 0
+    tolerance: 0
+  - function: dependency_batches
+    args: [[a], []]
+    expected: {batches: [[a]], blocked: []}
+    relative: 0
+    tolerance: 0
+  max_tokens: 4096
+- id: AC2-04
+  category: Advanced Coding
+  difficulty: expert
+  source: challenge-v2
+  description: Event-time reads with late data, tie resolution, and tombstones
+  prompt: |
+    Implement versioned_read(events, queries). Each event is [key,timestamp,value],
+        with a string key, integer timestamp, and JSON value. Events may arrive out of
+        timestamp order. A null value is a deletion tombstone. For each [key,time] query,
+        choose the event for that key with greatest timestamp <= time; when timestamps
+        tie, choose the LAST occurrence in the input events. Return its value, or None
+        if absent or tombstoned. A tombstone must not reveal an older value. Queries are
+        independent and output order matches query order. Support 2000 events/queries.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: versioned_read
+    args: [[], [[x, 0]]]
+    expected: [null]
+    relative: 0
+    tolerance: 0
+  - function: versioned_read
+    args: [[[k, 5, late], [k, 1, early], [k, 3, null]], [[k, 0], [k, 1], [k, 3], [k, 4], [k, 5]]]
+    expected: [null, early, null, null, late]
+    relative: 0
+    tolerance: 0
+  - function: versioned_read
+    args: [[[x, 2, a], [x, 2, null], [x, 1, old]], [[x, 2], [x, 1]]]
+    expected: [null, old]
+    relative: 0
+    tolerance: 0
+  - function: versioned_read
+    args: [[[a, -1, false], [b, 0, 0], [a, 2, &id001 []]], [[a, -1], [b, 0], [a, 2], [c, 99]]]
+    expected: [false, 0, *id001, null]
+    relative: 0
+    tolerance: 0
+  - function: versioned_read
+    args: [[[k, 3, a], [k, 3, b], [k, 3, c]], [[k, 3], [k, 2], [k, 9]]]
+    expected: [c, null, c]
+    relative: 0
+    tolerance: 0
+  - function: versioned_read
+    args: [[[a, 1, &id002 {x: [1, 2]}]], [[a, 1]]]
+    expected: [*id002]
+    relative: 0
+    tolerance: 0
+  - function: versioned_read
+    args: [[], []]
+    expected: []
+    relative: 0
+    tolerance: 0
+  max_tokens: 4096
+- id: AC2-05
+  category: Advanced Coding
+  difficulty: expert
+  source: challenge-v2
+  description: Shortest qualifying subarray with negative numbers and deterministic ties
+  prompt: |
+    Implement shortest_subarray(nums, target) returning [start,end] (zero-based,
+        end exclusive) of a NONEMPTY contiguous subarray with sum >= target.
+        Minimize length, then start index. Return [-1,-1] if impossible. nums may contain
+        negative numbers and zeros, and target may be negative or zero. Empty subarrays
+        are never candidates. Support arrays up to length 2000. Empty input is allowed.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: shortest_subarray
+    args: [[2, -1, 2], 3]
+    expected: [0, 3]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[1, -2, 3, 1, -1, 4], 4]
+    expected: [5, 6]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[0, 0], 0]
+    expected: [0, 1]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[], 0]
+    expected: [-1, -1]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[-5, -2, -3], -2]
+    expected: [1, 2]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[-5, -4], -3]
+    expected: [-1, -1]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[1, 2, 1, 2], 3]
+    expected: [0, 2]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[84, -37, 32, 40, 95], 167]
+    expected: [2, 5]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[-1, -1, 5, -2, 5], 8]
+    expected: [2, 5]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[2, -2, 2], 2]
+    expected: [0, 1]
+    relative: 0
+    tolerance: 0
+  max_tokens: 4096
+- id: AC2-06
+  category: Advanced Coding
+  difficulty: expert
+  source: challenge-v2
+  description: Weighted scheduling with reconstruction and lexicographic ties
+  prompt: |
+    Implement optimal_jobs(jobs). Each job is [id,start,end,profit], with a unique
+        string id, integer times start<end, and integer profit (possibly negative).
+        Select non-overlapping half-open jobs maximizing total profit. Touching jobs
+        are compatible. Selecting nothing is allowed. Break equal-profit ties by the
+        lexicographically smallest SORTED list of selected IDs (Python list comparison,
+        including the shorter-prefix rule). Return {"profit": integer, "ids": sorted list}.
+        Jobs arrive unsorted. Support up to 16 jobs; avoid assumptions about positive profits.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: optimal_jobs
+    args: [[]]
+    expected: {profit: 0, ids: []}
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[a, 0, 3, 5], [b, 0, 1, 3], [c, 1, 3, 3]]]
+    expected: {profit: 6, ids: [b, c]}
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[z, 0, 2, 5], [a, 0, 1, 2], [b, 1, 2, 3]]]
+    expected: {profit: 5, ids: [a, b]}
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[a, 0, 1, 0], [b, 1, 2, 2]]]
+    expected: {profit: 2, ids: [a, b]}
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[b, 0, 1, 2], [z, 1, 2, 0]]]
+    expected: {profit: 2, ids: [b]}
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[a, 0, 1, -1], [b, 1, 2, -2]]]
+    expected: {profit: 0, ids: []}
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[c, 3, 5, 6], [b, 1, 4, 9], [a, -1, 1, 3], [d, 1, 3, 4]]]
+    expected: {profit: 13, ids: [a, c, d]}
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[a, 0, 2, 0], [b, 2, 3, 0]]]
+    expected: {profit: 0, ids: []}
+    relative: 0
+    tolerance: 0
+  max_tokens: 4096
+- id: AC2-07
+  category: Advanced Coding
+  difficulty: expert
+  source: challenge-v2
+  description: Idempotent ledger replay including failed IDs and zero balances
+  prompt: |
+    Implement reconcile(events). Process [id,source,destination,amount] in input
+        order, starting with empty balances. IDs/accounts are strings; amount is an
+        integer. BANK has unlimited funds and is never included in balances. Other
+        accounts start at zero. Reject amount<=0, source==destination, or insufficient
+        source balance. Rejection changes no balances. Each ID is consumed on its FIRST
+        occurrence, even if rejected; silently ignore all later occurrences of it,
+        even if their payload differs. Return {"balances": object, "rejected": IDs in
+        rejection order}. Include only non-BANK accounts touched by successful events;
+        retain accounts whose balance becomes zero. Support 2000 events.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: reconcile
+    args: [[]]
+    expected: {balances: {}, rejected: []}
+    relative: 0
+    tolerance: 0
+  - function: reconcile
+    args: [[['1', BANK, a, 10], ['2', a, b, 7], ['3', b, BANK, 7]]]
+    expected: {balances: {a: 3, b: 0}, rejected: []}
+    relative: 0
+    tolerance: 0
+  - function: reconcile
+    args: [[[x, a, b, 5], [fund, BANK, a, 9], [x, a, b, 5]]]
+    expected: {balances: {a: 9}, rejected: [x]}
+    relative: 0
+    tolerance: 0
+  - function: reconcile
+    args: [[[a, BANK, x, 4], [a, BANK, x, 99], [b, x, y, 5]]]
+    expected: {balances: {x: 4}, rejected: [b]}
+    relative: 0
+    tolerance: 0
+  - function: reconcile
+    args: [[[a, BANK, BANK, 2], [b, BANK, x, 0], [c, BANK, x, -3]]]
+    expected: {balances: {}, rejected: [a, b, c]}
+    relative: 0
+    tolerance: 0
+  - function: reconcile
+    args: [[['1', BANK, a, 5], ['2', a, a, 2], ['3', a, BANK, 5]]]
+    expected: {balances: {a: 0}, rejected: ['2']}
+    relative: 0
+    tolerance: 0
+  - function: reconcile
+    args: [[['1', BANK, a, 1], ['2', a, b, 1], ['3', b, a, 1], ['4', a, c, 2]]]
+    expected: {balances: {a: 1, b: 0}, rejected: ['4']}
+    relative: 0
+    tolerance: 0
+  max_tokens: 4096
+- id: AC2-08
+  category: Advanced Coding
+  difficulty: expert
+  source: challenge-v2
+  description: Wildcard matching with escaped metacharacters and full-string semantics
+  prompt: |
+    Implement glob_match(pattern, text) -> bool for full-string, case-sensitive
+        matching. Unescaped ? matches exactly one character; unescaped * matches any
+        sequence including empty. Backslash escapes the very next character, whatever
+        it is (so \q matches q); a trailing unmatched backslash makes the pattern
+        invalid and returns False. An escaped * or ? is literal. A backslash can itself
+        be escaped. Wildcards can match newlines. Inputs have length <=100; do not use
+        filesystem globbing. Empty pattern matches only empty text.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: glob_match
+    args: ['', '']
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: ['', a]
+    expected: false
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: ['*', "a\nb"]
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: ['a?b', "a\nb"]
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [a*b, ab]
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [a\*b, a*b]
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [a\*b, axxb]
+    expected: false
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: ['\?*', '?abc']
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [abc\, abc]
+    expected: false
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [\\, \]
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [\q, q]
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: ['a**?b', acb]
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [a*b, abx]
+    expected: false
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: ['?', '']
+    expected: false
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: ['*?*?', a]
+    expected: false
+    relative: 0
+    tolerance: 0
+  max_tokens: 4096

@@ -56,7 +56,10 @@ from perf import (
     run_context_sweep,
     run_perf_suite,
 )
-from test_loader import SuiteError, compute_test_suite_hash, load_all_tests
+from test_loader import SuiteError, load_all_tests
+from quality_suite import QualityConfig, assemble_questions, parse_ints, suite_hash
+from quality_execution import execute_question, score_response
+from quality_report import make_report as make_quality_report, markdown as quality_markdown
 
 logging.basicConfig(
     level=logging.INFO,
@@ -179,6 +182,8 @@ def question_fingerprint(q: Question) -> str:
             "temperature": TEMPERATURE,
             "seed": SEED,
             "max_tokens": q.max_tokens or MAX_TOKENS,
+            "metadata": q.metadata,
+            "interaction": q.interaction,
         },
         sort_keys=True,
         default=str,
@@ -206,6 +211,8 @@ def evaluate(q: Question, response: str) -> tuple[float, str]:
 
 def run_one(q: Question, client: ChatClient, cache: dict, persist: bool = True) -> Result:
     """Run (or replay from cache) a single question."""
+    if q.interaction:
+        return execute_question(q, client)
     cache_key = f"{MODEL}:{q.id}:{question_fingerprint(q)}"
     with _cache_lock:
         cached = cache.get(cache_key)
@@ -223,39 +230,18 @@ def run_one(q: Question, client: ChatClient, cache: dict, persist: bool = True) 
             completion_tokens=cached.get("completion_tokens", 0),
             prompt_tokens=cached.get("prompt_tokens", 0),
             ok=cached.get("ok", True),
+            finish_reason=cached.get("finish_reason"),
+            prompt_tokens_estimated=cached.get("prompt_tokens_estimated", True),
         )
         # Re-score from the cached response: evaluator fixes take effect without
         # re-spending tokens, and the fingerprint already covers fixture edits.
-        score, detail = evaluate(q, cached["response"])
-        return Result(
-            question=q,
-            response=cached["response"],
-            score=score,
-            detail=detail,
-            tokens=TokenUsage(metrics.prompt_tokens, metrics.completion_tokens),
-            metrics=metrics,
-            cached=True,
-        )
+        return score_response(q,cached["response"],
+            TokenUsage(metrics.prompt_tokens,metrics.completion_tokens,
+                       prompt_tokens_estimated=metrics.prompt_tokens_estimated),metrics,cached=True)
 
-    response, tokens, metrics = client.complete(
-        q.prompt, q.system_prompt, max_tokens=q.max_tokens
-    )
-
-    if metrics.ok:
-        score, detail = evaluate(q, response)
-    else:
-        # A transport failure is not a wrong answer; keep it out of the quality
-        # numbers and surface it separately.
-        score, detail = 0.0, f"Request failed: {metrics.error}"
-
-    result = Result(
-        question=q,
-        response=response,
-        score=score,
-        detail=detail,
-        tokens=tokens,
-        metrics=metrics,
-    )
+    result = execute_question(q,client)
+    response,tokens,metrics = result.response,result.tokens,result.metrics
+    score,detail = result.score,result.detail
 
     if metrics.ok:
         # Persist after each real API call so a mid-run crash keeps prior work.
@@ -271,6 +257,8 @@ def run_one(q: Question, client: ChatClient, cache: dict, persist: bool = True) 
                     "latency_ms": metrics.latency_ms,
                     "ttft_ms": metrics.ttft_ms,
                     "ok": True,
+                    "finish_reason": metrics.finish_reason,
+                    "prompt_tokens_estimated": metrics.prompt_tokens_estimated,
                 }
                 # Reload+merge entries written by other concurrent benchmark
                 # processes since this run loaded the cache, so a plain
@@ -494,9 +482,8 @@ def generate_report(
     ]
     if total_errors:
         lines += [
-            f"> **{total_errors} request(s) failed at the transport layer** and are "
-            "excluded from the percentages above. They are listed under "
-            "*Infrastructure Errors*.",
+            f"> **{total_errors} item(s) were not scored** because of endpoint errors, "
+            "unsupported context, cancellation, or evaluator errors. See the quality diagnostics.",
             "",
         ]
 
@@ -632,6 +619,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--category", help="only run questions in this category")
     parser.add_argument("--difficulty", help="only run questions of this difficulty tier")
     parser.add_argument("--limit", type=int, help="run at most N questions")
+    parser.add_argument("--suite-seeds", default="1729", help="comma-separated reproducible question seeds")
+    parser.add_argument("--suite-split", choices=["development","evaluation"], default="development")
+    parser.add_argument("--variants", type=int, default=1, help="variants per generated family and seed, 1..10")
+    parser.add_argument("--static-only", action="store_true", help="disable generated reasoning, interactive tasks, and extra code tests")
+    parser.add_argument("--quality-context-sizes", default="", help="accuracy at reference token sizes, e.g. 8192,32768,131072")
+    parser.add_argument("--input-price", type=float, help="USD per million input tokens for cost estimates")
+    parser.add_argument("--output-price", type=float, help="USD per million output tokens for cost estimates")
     parser.add_argument(
         "--workers", type=int, default=1,
         help="run this many questions concurrently (default 1)",
@@ -743,6 +737,13 @@ def _parse_context_sizes(raw: str) -> tuple[int, ...]:
 
 def main() -> None:
     args = parse_args()
+    try:
+        quality_config = QualityConfig(generated=not args.static_only, interactive=not args.static_only,
+            strengthen_code=not args.static_only,seeds=parse_ints(args.suite_seeds),split=args.suite_split,
+            variants=args.variants,context_sizes=parse_ints(args.quality_context_sizes),
+            input_price=args.input_price,output_price=args.output_price)
+    except (ValueError,TypeError) as exc:
+        raise SystemExit(f"ERROR: invalid quality configuration: {exc}") from exc
 
     if not BASE_URL or not API_KEY:
         print("ERROR: OPENAI_BASE_URL and OPENAI_KEY must be set in .env")
@@ -760,7 +761,7 @@ def main() -> None:
 
     if not args.perf_only:
         try:
-            questions = load_all_tests(TESTS_DIR)
+            questions = assemble_questions(load_all_tests(TESTS_DIR),quality_config)
         except SuiteError as e:
             print("ERROR: the test suite is invalid:\n" + str(e))
             sys.exit(2)
@@ -782,7 +783,7 @@ def main() -> None:
         if args.limit:
             questions = questions[: args.limit]
 
-        test_suite_hash = compute_test_suite_hash(TESTS_DIR)
+        test_suite_hash = suite_hash(questions)
         print(f"Test Suite Version: {test_suite_hash}")
         print(
             f"Running {len(questions)} questions across "
@@ -847,9 +848,16 @@ def main() -> None:
         workers=workers, context_points=context_points,
     )
     report_path = Path(args.report)
+    quality_data = None
+    if categories:
+        quality_data = make_quality_report([r for c in categories for r in c.results],
+                                          quality_config,client_config,test_suite_hash)
+        report += "\n\n"+quality_markdown(quality_data)
     if not report_path.is_absolute():
         report_path = ROOT / report_path
     report_path.write_text(report, encoding="utf-8")
+    if quality_data:
+        report_path.with_suffix(".quality.json").write_text(json.dumps(quality_data,indent=2),encoding="utf-8")
 
     print(f"\n{'=' * 60}")
     print(f"Completed in {elapsed:.1f}s")
@@ -872,7 +880,7 @@ def main() -> None:
         passed = sum(1 for r in scored if r.passed)
         errors = sum(c.errors for c in categories)
         print(f"\nOverall: {passed}/{len(scored)} questions passed"
-              + (f"  ({errors} transport error(s) excluded)" if errors else ""))
+              + (f"  ({errors} item(s) excluded; see diagnostics)" if errors else ""))
         for c in sorted(categories, key=lambda x: x.name):
             t = c.tokens
             print(

@@ -1,0 +1,27 @@
+{% if quality is defined and quality and quality.schema_version == 1 %}
+{% set qs = quality.summary %}
+<section class="card p-5 space-y-4">
+    <div class="flex justify-between items-center">
+        <h2 class="text-lg font-semibold text-white">Quality diagnostics</h2>
+        <a class="text-blue-400 text-sm" href="/runs/{{ run.id }}/quality.json">Download quality report</a>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div><p class="text-xs text-slate-400">Category/family-balanced capability</p>
+            <p class="text-lg text-white">{{ '%.1f%%'|format(qs.category_balanced * 100) if qs.category_balanced is not none else 'n/a' }}</p>
+            {% if qs.category_balanced_ci95 %}<p class="text-xs text-slate-400">95% interval {{ '%.1f'|format(qs.category_balanced_ci95[0]*100) }}–{{ '%.1f'|format(qs.category_balanced_ci95[1]*100) }}%</p>{% endif %}
+        </div>
+        <div><p class="text-xs text-slate-400">Raw capability mean</p><p class="text-lg text-white">{{ '%.1f%%'|format(qs.raw_capability_mean*100) if qs.raw_capability_mean is not none else 'n/a' }}</p></div>
+        <div><p class="text-xs text-slate-400">Creative-writing compliance</p><p class="text-lg text-white">{{ '%.1f%%'|format(qs.compliance_score*100) if qs.compliance_score is not none else 'n/a' }}</p><p class="text-xs text-slate-500">Artistic quality is not measured</p></div>
+        <div><p class="text-xs text-slate-400">Quality-call cost estimate</p><p class="text-lg text-white">{{ '$%.6f'|format(qs.estimated_cost_usd) if qs.estimated_cost_usd is not none else 'Not configured' }}</p></div>
+    </div>
+    <p class="text-xs text-slate-400">Seeds {{ quality.quality_config.seeds|join(', ') }} · {{ quality.quality_config.split }} · {{ quality.quality_config.variants }} variant(s) per family</p>
+    <div class="flex flex-wrap gap-3 text-sm text-slate-300">{% for name, count in qs.outcomes.items() %}<span>{{ name|replace('_',' ') }}: {{ count }}</span>{% endfor %}</div>
+    <p class="text-xs text-slate-500">{{ qs.confidence_method }} {{ qs.cost_note }}</p>
+    {% if qs.interactive.tasks %}<p class="text-sm text-slate-300">Interactive tasks: {{ qs.interactive.successes }}/{{ qs.interactive.tasks }} succeeded; {{ qs.interactive.calls }} calls, {{ qs.interactive.unnecessary_calls }} excess calls, {{ qs.interactive.violations }} authorization violations.</p>{% endif %}
+    {% if qs.context_quality %}
+    <table class="w-full text-sm"><thead><tr><th>Reference tokens</th><th>Answered</th><th>Accuracy</th><th>Unsupported</th><th>Mean server tokens</th></tr></thead><tbody>
+    {% for point in qs.context_quality %}<tr><td>{{ point.reference_tokens }}</td><td>{{ point.scored }}/{{ point.count }}</td><td>{{ '%.1f%%'|format(point.accuracy*100) if point.accuracy is not none else 'n/a' }}</td><td>{{ point.unsupported }}</td><td>{{ '%.0f'|format(point.server_prompt_tokens_mean) if point.server_prompt_tokens_mean is not none else 'Unreported' }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% endif %}
+</section>
+{% endif %}

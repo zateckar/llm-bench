@@ -12,6 +12,10 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 # schema.sql does not alter an existing table, so every added column needs an
 # idempotent ALTER here as well. Listed as (table, column, definition).
 MIGRATIONS: list[tuple[str, str, str]] = [
+    ("test_runs", "quality_config_json", "TEXT"),
+    ("test_runs", "quality_json", "TEXT"),
+    ("test_results", "quality_metadata_json", "TEXT"),
+    ("test_results", "quality_scored", "INTEGER"),
     ("test_runs", "test_suite_hash", "TEXT"),
     ("test_runs", "total_prompt_tokens", "INTEGER DEFAULT 0"),
     ("test_runs", "total_completion_tokens", "INTEGER DEFAULT 0"),
