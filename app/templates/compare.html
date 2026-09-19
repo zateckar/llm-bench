@@ -9,30 +9,16 @@
     </div>
 
     <!-- Run selector -->
-    <div class="card p-5" x-data="{
-        query: '',
-        picked: new Set([{% for id in selected_ids %}'{{ id }}'{% if not loop.last %}, {% endif %}{% endfor %}]),
-        get count() { return this.picked.size; },
-        matches(run) {
-            const q = this.query.trim().toLowerCase();
-            if (!q) return true;
-            return (run.text).includes(q);
-        },
-        toggle(id) { this.picked.has(id) ? this.picked.delete(id) : this.picked.add(id); },
-        presetLatestPerModel() {
-            const seen = new Set();
-            this.picked.clear();
-            for (const r of this.runsMeta) {
-                if (!seen.has(r.model)) { seen.add(r.model); this.picked.add(String(r.id)); }
-            }
-        },
-        runsMeta: [
-            {% for run in completed_runs %}
-            { id: {{ run.id }}, model: {{ (run.model_name)|tojson }},
-              text: {{ ('#' ~ run.id ~ ' ' ~ run.model_name ~ ' ' ~ run.model_id ~ ' ' ~ (run.avg_score * 100)|round(1) ~ '% ' ~ (run.test_suite_hash or ''))|tojson|lower }} },
-            {% endfor %}
+    <script type="application/json" id="runs-meta">
+        [
+        {% for run in completed_runs %}
+        { "id": {{ run.id }},
+          "model": {{ run.model_name|tojson }},
+          "text": {{ ('#' ~ run.id ~ ' ' ~ run.model_name ~ ' ' ~ run.model_id ~ ' ' ~ (run.avg_score * 100)|round(1) ~ '% ' ~ (run.test_suite_hash or ''))|tojson|lower }} }{% if not loop.last %},{% endif %}
+        {% endfor %}
         ]
-     }">
+    </script>
+    <div class="card p-5" x-data="compareSelector()" x-init="init()">
         <form method="GET" action="/compare" class="space-y-3" id="compareForm">
             <div class="flex items-center justify-between gap-3 flex-wrap">
                 <label class="text-sm font-medium text-slate-300">Select runs to compare</label>
@@ -48,11 +34,11 @@
             <div class="max-h-64 overflow-y-auto rounded-lg border border-slate-700 divide-y divide-slate-800">
                 {% for run in completed_runs %}
                 <label class="flex items-center gap-3 px-3 py-2 hover:bg-slate-800/60 cursor-pointer transition-colors"
-                       x-show="matches(runsMeta[{{ loop.index0 }}])"
-                       :class="picked.has('{{ run.id }}') ? 'bg-slate-800/80' : ''">
+                       x-show="matches({{ run.id }})"
+                       :class="picked.has({{ run.id }}) ? 'bg-slate-800/80' : ''">
                     <input type="checkbox" name="runs" value="{{ run.id }}"
-                           :checked="picked.has('{{ run.id }}')"
-                           @change="toggle('{{ run.id }}')"
+                           :checked="picked.has({{ run.id }})"
+                           @change="toggle({{ run.id }})"
                            class="rounded bg-slate-700 border-slate-600 text-blue-500">
                     <span class="font-mono text-xs text-slate-500 w-10">#{{ run.id }}</span>
                     <div class="flex-1 min-w-0">
@@ -70,6 +56,38 @@
             <button type="submit" class="btn-primary" :disabled="count < 2">Compare Selected</button>
         </form>
     </div>
+    <script>
+        // A factory keeps the multi-method Alpine state out of the x-data
+        // attribute, where the embedded object literal broke the parser.
+        function compareSelector() {
+            return {
+                query: '',
+                picked: new Set(),
+                runsMeta: [],
+                get count() { return this.picked.size; },
+                init() {
+                    try {
+                        this.runsMeta = JSON.parse(document.getElementById('runs-meta').textContent);
+                    } catch (e) { this.runsMeta = []; }
+                    this.picked = new Set({{ selected_ids | tojson }});
+                },
+                metaFor(id) { return this.runsMeta.find(r => r.id === id) || { text: '' }; },
+                matches(id) {
+                    const q = this.query.trim().toLowerCase();
+                    if (!q) return true;
+                    return (this.metaFor(id).text || '').includes(q);
+                },
+                toggle(id) { this.picked.has(id) ? this.picked.delete(id) : this.picked.add(id); },
+                presetLatestPerModel() {
+                    const seen = new Set();
+                    this.picked.clear();
+                    for (const r of this.runsMeta) {
+                        if (!seen.has(r.model)) { seen.add(r.model); this.picked.add(r.id); }
+                    }
+                }
+            };
+        }
+    </script>
 
     {% if selected_runs|length >= 2 %}
     <div class="flex justify-end">
