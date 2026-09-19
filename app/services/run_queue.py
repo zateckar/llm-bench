@@ -282,6 +282,45 @@ def cancel_plan(plan_id: int) -> int:
         db.close()
 
 
+def delete_plan(plan_id: int) -> None:
+    """Delete a plan row, detaching and stopping its runs.
+
+    Pending/running member runs are failed first — a run must never start or
+    continue for a plan that no longer exists — and every member run's
+    plan_id is cleared so finished runs keep their results without a dangling
+    FK into run_plans.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    db = _connect()
+    try:
+        member_ids = [
+            r[0]
+            for r in db.execute(
+                "SELECT id FROM test_runs WHERE plan_id = ?", (plan_id,)
+            ).fetchall()
+        ]
+        db.execute(
+            """UPDATE test_runs
+                  SET status = 'failed', completed_at = ?,
+                      error_message = 'Plan deleted.'
+                WHERE plan_id = ? AND status IN ('pending', 'running')""",
+            (now, plan_id),
+        )
+        db.execute(
+            "UPDATE test_runs SET plan_id = NULL WHERE plan_id = ?", (plan_id,)
+        )
+        if member_ids:
+            placeholders = ", ".join("?" for _ in member_ids)
+            db.execute(
+                f"DELETE FROM benchmark_progress WHERE run_id IN ({placeholders})",
+                tuple(member_ids),
+            )
+        db.execute("DELETE FROM run_plans WHERE id = ?", (plan_id,))
+        db.commit()
+    finally:
+        db.close()
+
+
 def _tick_loop() -> None:
     while True:
         time.sleep(_TICK_SECONDS)

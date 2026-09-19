@@ -53,6 +53,11 @@
                             <button type="submit" class="btn-ghost text-xs px-2 py-1 text-red-400 hover:text-red-300">Cancel</button>
                         </form>
                         {% endif %}
+                        <form method="POST" action="/admin/plans/{{ plan.id }}/delete" class="inline"
+                              x-data
+                              x-on:submit.prevent="if(confirm('Delete this plan? Queued or running member runs are failed; finished runs keep their results but lose the plan link.')) $el.submit()">
+                            <button type="submit" class="btn-ghost text-xs px-2 py-1 text-red-400 hover:text-red-300">Delete</button>
+                        </form>
                     </td>
                 </tr>
                 {% endfor %}

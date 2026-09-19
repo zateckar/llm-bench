@@ -235,3 +235,20 @@ async def plan_cancel(request: Request, plan_id: int):
         cancelled = run_queue.cancel_plan(plan_id)
         logger.info("Cancelled plan %d (%d queued runs failed)", plan_id, cancelled)
     return RedirectResponse(url="/admin/plans", status_code=302)
+
+
+@router.post("/admin/plans/{plan_id}/delete")
+async def plan_delete(request: Request, plan_id: int):
+    """Delete a plan: stop and detach its runs, keep their results."""
+    try:
+        await require_admin(request)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=302)
+
+    plan = await fetch_one("SELECT id FROM run_plans WHERE id = ?", (plan_id,))
+    if plan:
+        from app.services import run_queue
+
+        run_queue.delete_plan(plan_id)
+        logger.info("Deleted plan %d", plan_id)
+    return RedirectResponse(url="/admin/plans", status_code=302)
