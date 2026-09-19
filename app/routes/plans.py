@@ -2,6 +2,7 @@
 
 import json
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, Form
 from fastapi.responses import RedirectResponse
@@ -106,8 +107,6 @@ def _local_display(utc_iso: str | None) -> str:
     """Render a stored UTC timestamp in the server's local timezone."""
     if not utc_iso:
         return ""
-    from datetime import datetime, timezone
-
     try:
         dt = datetime.fromisoformat(utc_iso)
         if dt.tzinfo is None:
@@ -115,6 +114,67 @@ def _local_display(utc_iso: str | None) -> str:
         return dt.astimezone().strftime("%Y-%m-%d %H:%M")
     except ValueError:
         return utc_iso[:16]
+
+
+def _run_row_to_spec(run: dict) -> dict:
+    """Rehydrate one plan-run DB row into the builder's run-spec shape for
+    pre-filling the edit/clone form."""
+    opts = json.loads(run.get("run_options_json") or "{}")
+    qconf = json.loads(run.get("quality_config_json") or "{}")
+    def s(v):  # comma-join list/tuple, str-or-empty otherwise
+        return ",".join(str(x) for x in v) if isinstance(v, (list, tuple)) else ("" if v is None else str(v))
+    spec = _plan_spec_defaults()
+    spec.update({
+        "model_id": run["model_id"],
+        "category": opts.get("category") or "",
+        "difficulty": opts.get("difficulty") or "",
+        "limit": opts.get("limit") or 0,
+        "workers": opts.get("workers") or 1,
+        "run_perf": bool(opts.get("run_perf")),
+        "concurrency": s(opts.get("concurrency_levels")) or "1,2,4,8",
+        "run_context": bool(opts.get("run_context")),
+        "context_sizes": s(opts.get("context_sizes")),
+        "context_concurrency": s(opts.get("context_concurrency")) or "4",
+        "workload_mix": opts.get("workload_mix") or "uniform",
+        "shared_prefix": bool(opts.get("shared_prefix")),
+        "slo_ttft_ms": s(opts.get("slo_ttft_ms")),
+        "slo_tps": s(opts.get("slo_tps")),
+        "slo_errors": s(opts.get("slo_errors")),
+        "req_per_user_h": s(opts.get("req_per_user_h")),
+        "suite_seeds": s(qconf.get("seeds")) or "1729",
+        "suite_split": qconf.get("split") or "development",
+        "variants": qconf.get("variants") or 1,
+        "static_only": not (qconf.get("generated", True)
+                            or qconf.get("interactive", True)
+                            or qconf.get("strengthen_code", True)),
+        "quality_context_sizes": s(qconf.get("context_sizes")),
+        "input_price": s(qconf.get("input_price")),
+        "output_price": s(qconf.get("output_price")),
+    })
+    return spec
+
+
+async def _validated_specs(runs_json: str) -> list[tuple[int, dict, dict]]:
+    """Parse + model-check + build configs for every spec; 422s, no DB writes."""
+    from app.routes.admin import make_quality_config, make_run_options
+
+    specs = _parse_plan_runs(runs_json)
+    models = {m["id"] for m in await fetch_all("SELECT id FROM models")}
+    for spec in specs:
+        if spec["model_id"] not in models:
+            raise HTTPException(status_code=422, detail="Unknown model in plan")
+    prepared: list[tuple[int, dict, dict]] = []
+    for spec in specs:
+        prepared.append((
+            spec["model_id"],
+            make_quality_config(**_spec_to_kwargs(spec, _QUALITY_FIELDS)),
+            make_run_options(**_spec_to_kwargs(spec, _OPTION_FIELDS)),
+        ))
+    return prepared
+
+
+def _browser_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 @router.get("/admin/plans")
@@ -133,7 +193,9 @@ async def plans_list(request: Request):
     )
     for plan in plans:
         plan["scheduled_local"] = _local_display(plan.get("scheduled_at"))
-    return templates.TemplateResponse(request, "admin/plans.html", {"plans": plans})
+    return templates.TemplateResponse(request, "admin/plans.html", {
+        "plans": plans, "server_now_local": _local_display(_browser_now_iso()),
+    })
 
 
 @router.get("/admin/plans/new")
@@ -144,7 +206,47 @@ async def plan_new_page(request: Request):
     models = await fetch_all("SELECT * FROM models ORDER BY name")
     return templates.TemplateResponse(
         request, "admin/plan_new.html",
-        {"models": models, "spec_defaults_json": json.dumps(_plan_spec_defaults())},
+        {
+            "models": models,
+            "spec_defaults_json": json.dumps(_plan_spec_defaults()),
+            "prefill_json": "null", "plan_name": "", "plan_scheduled_input": "",
+            "action": "/admin/plans", "heading": "New Run Plan",
+            "browser_now_iso": _browser_now_iso(),
+        },
+    )
+
+
+@router.get("/admin/plans/{plan_id}/edit")
+async def plan_edit_page(request: Request, plan_id: int):
+    user = _admin_or_redirect(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    plan = await fetch_one("SELECT * FROM run_plans WHERE id = ?", (plan_id,))
+    if not plan:
+        return RedirectResponse(url="/admin/plans", status_code=302)
+    from app.routes.admin import utc_to_local_input
+
+    runs = await fetch_all(
+        "SELECT model_id, run_options_json, quality_config_json FROM test_runs WHERE plan_id = ? ORDER BY id",
+        (plan_id,),
+    )
+    # Editing a plan edits its template; runs that already executed are history
+    # and only the shape is re-usable, so every stored run becomes an editable
+    # spec regardless of status.
+    specs = [_run_row_to_spec(r) for r in runs] or [_plan_spec_defaults()]
+    models = await fetch_all("SELECT * FROM models ORDER BY name")
+    return templates.TemplateResponse(
+        request, "admin/plan_new.html",
+        {
+            "models": models,
+            "spec_defaults_json": json.dumps(_plan_spec_defaults()),
+            "prefill_json": json.dumps(specs),
+            "plan_name": plan.get("name") or "",
+            "plan_scheduled_input": utc_to_local_input(plan.get("scheduled_at")),
+            "action": f"/admin/plans/{plan_id}/edit",
+            "heading": f"Edit Plan #{plan_id}",
+            "browser_now_iso": _browser_now_iso(),
+        },
     )
 
 
@@ -153,35 +255,135 @@ async def plan_create(
     request: Request,
     name: str = Form(""),
     scheduled_at: str = Form(""),
+    tz_offset: str = Form(""),
     runs_json: str = Form(""),
 ):
     user = _admin_or_redirect(request)
     if isinstance(user, RedirectResponse):
         return user
 
-    from app.routes.admin import (
-        _parse_scheduled_at, make_quality_config, make_run_options,
-    )
+    from app.routes.admin import parse_browser_local
 
-    specs = _parse_plan_runs(runs_json)
-    models = {m["id"] for m in await fetch_all("SELECT id FROM models")}
-    for spec in specs:
-        if spec["model_id"] not in models:
-            raise HTTPException(status_code=422, detail="Unknown model in plan")
-
-    scheduled = _parse_scheduled_at(scheduled_at)
-
-    # Validate every spec before inserting anything: a plan row with a partial
-    # set of runs (from a mid-loop failure) is worse than no plan at all.
-    prepared: list[tuple[int, dict, dict]] = []
-    for spec in specs:
-        quality_config = make_quality_config(**_spec_to_kwargs(spec, _QUALITY_FIELDS))
-        run_options = make_run_options(**_spec_to_kwargs(spec, _OPTION_FIELDS))
-        prepared.append((spec["model_id"], quality_config, run_options))
+    prepared = await _validated_specs(runs_json)
+    scheduled = parse_browser_local(scheduled_at, tz_offset)
 
     await _insert_plan_with_runs(
         (name or "").strip() or None, user["id"], scheduled, prepared,
     )
+
+    from app.services import run_queue
+
+    run_queue.dispatch_next()
+    return RedirectResponse(url="/admin/plans", status_code=302)
+
+
+@router.post("/admin/plans/{plan_id}/edit")
+async def plan_update(
+    request: Request,
+    plan_id: int,
+    name: str = Form(""),
+    scheduled_at: str = Form(""),
+    tz_offset: str = Form(""),
+    runs_json: str = Form(""),
+):
+    """Replace a plan's schedule and its still-queued runs.
+
+    Runs that already started or finished are history and keep their results;
+    they are only detached from the plan. Pending runs are replaced by the
+    edited spec atomically.
+    """
+    user = _admin_or_redirect(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    plan = await fetch_one("SELECT status FROM run_plans WHERE id = ?", (plan_id,))
+    if not plan:
+        return RedirectResponse(url="/admin/plans", status_code=302)
+
+    from app.routes.admin import parse_browser_local
+    from app.database import get_db
+
+    prepared = await _validated_specs(runs_json)
+    scheduled = parse_browser_local(scheduled_at, tz_offset)
+
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE run_plans SET name = ?, scheduled_at = ?, status = 'active' WHERE id = ?",
+            ((name or "").strip() or None, scheduled, plan_id),
+        )
+        # Detach runs already underway/finished; replace the queued ones.
+        await db.execute(
+            "UPDATE test_runs SET plan_id = NULL WHERE plan_id = ? AND status != 'pending'",
+            (plan_id,),
+        )
+        await db.execute(
+            """DELETE FROM test_runs WHERE plan_id = ? AND status = 'pending'""",
+            (plan_id,),
+        )
+        for model_id, quality_config, run_options in prepared:
+            await db.execute(
+                """INSERT INTO test_runs
+                       (model_id, status, created_by, workers, quality_config_json, run_options_json, plan_id)
+                   VALUES (?, 'pending', ?, ?, ?, ?, ?)""",
+                (model_id, user["id"], run_options["workers"],
+                 json.dumps(quality_config), json.dumps(run_options), plan_id),
+            )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()
+
+    from app.services import run_queue
+
+    run_queue.dispatch_next()
+    return RedirectResponse(url="/admin/plans", status_code=302)
+
+
+@router.post("/admin/plans/{plan_id}/clone")
+async def plan_clone(request: Request, plan_id: int):
+    """Clone a plan as a fresh pending plan with the same run specs."""
+    user = _admin_or_redirect(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    plan = await fetch_one("SELECT name, scheduled_at FROM run_plans WHERE id = ?", (plan_id,))
+    if not plan:
+        return RedirectResponse(url="/admin/plans", status_code=302)
+    runs = await fetch_all(
+        "SELECT model_id, run_options_json, quality_config_json FROM test_runs WHERE plan_id = ? ORDER BY id",
+        (plan_id,),
+    )
+    if not runs:
+        return RedirectResponse(url="/admin/plans", status_code=302)
+
+    from app.database import get_db
+
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "INSERT INTO run_plans (name, created_by, scheduled_at) VALUES (?, ?, ?)",
+            (f"{plan['name']} (copy)" if plan["name"] else None, user["id"],
+             plan["scheduled_at"]),
+        )
+        new_plan_id = cursor.lastrowid
+        for r in runs:
+            opts = json.loads(r["run_options_json"] or "{}")
+            await db.execute(
+                """INSERT INTO test_runs
+                       (model_id, status, created_by, workers, quality_config_json, run_options_json, plan_id)
+                   VALUES (?, 'pending', ?, ?, ?, ?, ?)""",
+                (r["model_id"], user["id"], opts.get("workers") or 1,
+                 r["quality_config_json"], r["run_options_json"], new_plan_id),
+            )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()
 
     from app.services import run_queue
 

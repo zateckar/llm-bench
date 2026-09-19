@@ -210,12 +210,57 @@ def make_quality_config(
     return asdict(config)
 
 
-def _parse_scheduled_at(raw: str) -> str | None:
-    """Parse the datetime-local schedule field into a UTC ISO string.
+def parse_browser_local(raw: str, tz_offset_min: str) -> str | None:
+    """Convert the browser's `datetime-local` wall time to a UTC ISO string.
 
-    The form submits server-local wall time; a time already in the past simply
-    makes the plan due immediately. Malformed input is a 422, never a silent
-    "start now".
+    ``tz_offset_min`` is the browser's ``getTimezoneOffset()`` (minutes behind
+    UTC, so browser-local + offset = UTC). Falls back to server-local when the
+    offset is missing/invalid (older forms), never silently accepting garbage.
+    A past time is due immediately.
+    """
+    from datetime import timedelta
+
+    from fastapi import HTTPException
+
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        naive = datetime.strptime(raw, "%Y-%m-%dT%H:%M")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid schedule time: {raw!r}") from exc
+    try:
+        offset = int(tz_offset_min)
+    except (TypeError, ValueError):
+        offset = None
+    if offset is None:
+        return naive.astimezone().astimezone(timezone.utc).isoformat()
+    utc = naive + timedelta(minutes=offset)  # local + getTimezoneOffset = UTC
+    return utc.replace(tzinfo=timezone.utc).isoformat()
+
+
+def utc_to_local_input(utc_iso: str | None) -> str:
+    """Render a stored UTC ISO for a datetime-local input, in server-local time.
+
+    The builder also ships the browser a 'now' for the offset correction, so
+    the input is pre-filled consistently with how the browser will read it.
+    """
+    if not utc_iso:
+        return ""
+    try:
+        dt = datetime.fromisoformat(utc_iso)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone().strftime("%Y-%m-%dT%H:%M")
+    except ValueError:
+        return ""
+
+
+def _parse_scheduled_at(raw: str) -> str | None:
+    """Parse a datetime-local value into UTC ISO, treating it as server-local.
+
+    Used by the single-run /admin/run form, which has no tz-offset field; plan
+    forms use parse_browser_local instead. Malformed input is a 422.
     """
     raw = (raw or "").strip()
     if not raw:
@@ -227,7 +272,6 @@ def _parse_scheduled_at(raw: str) -> str | None:
 
         raise HTTPException(status_code=422, detail=f"Invalid schedule time: {raw!r}") from exc
     return local.astimezone().astimezone(timezone.utc).isoformat()
-
 
 @router.post("/admin/run")
 async def admin_start_run(
