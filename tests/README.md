@@ -50,7 +50,7 @@ silently scoring wrong.
 
 ## Challenge revision
 
-The suite contains 269 questions. Six categories use 56 `challenge-v2` items:
+The suite contains 315 static questions. Six categories use 56 `challenge-v2` items:
 
 | Category | IDs | Count | Main demands |
 |----------|-----|-------|--------------|
@@ -62,7 +62,7 @@ The suite contains 269 questions. Six categories use 56 `challenge-v2` items:
 | Reading Comprehension | `RC2-*` | 8 | Reconcile revisions, exceptions, overlapping intervals, and accounting rules |
 
 These replace the 106 previous questions in those categories, rather than adding
-more questions on top of easy ones. Other categories remain as baseline coverage.
+more questions on top of easy ones. Reliability-v4 adds two checkable tasks to every static category and reports legacy prose-pattern coverage separately from capability. See [QUALITY_AUDIT.md](../QUALITY_AUDIT.md).
 The new IDs deliberately do not reuse retired IDs. The suite hash and prompt-based
 cache fingerprint change automatically; historical results remain historical.
 
@@ -70,7 +70,7 @@ Prompts define all assumptions, ordering rules, output schemas, and rounding.
 Structured answers use exact JSON comparison with no ignored fields; code items
 require every fixture to pass. Difficulty comes from solving interacting constraints,
 not obscure trivia, arbitrary prose wording, or unexplained precision requirements.
-Expert reasoning items have an 8,192-token cap to allow working space.
+Expert reasoning items have an 16,384-token default cap to allow working space.
 
 Check answers and grading offline after edits:
 
@@ -96,7 +96,7 @@ and token budgets before claiming a particular performance gap.
 
 `quality_suite.py` assembles the executable suite around these YAML anchors.
 The default adds four reasoning instances and three interactive tasks, producing
-276 questions, and extends the eight advanced-coding items with 197 extra cases.
+322 questions, and extends the eight advanced-coding items with 197 extra cases.
 `--static-only` preserves the static suite. Long-context accuracy sizes are an
 independent, explicit option; the default adds none.
 
@@ -115,7 +115,7 @@ metamorphic properties. Model prompts do not include the extra test inputs.
 
 `interactive_tasks.py` has no external side effects. A model sends one JSON action
 and observes the result on each turn, including conflicts and uncertain outcomes.
-Tasks stop at 16 model turns or 8,192 total output tokens. A failed tool operation
+Tasks stop at 16 model turns or 32,768 total output tokens. A failed tool operation
 is part of the task; an endpoint failure is a separate excluded result. The full
 trajectory, final state, authorization violations, and excess calls are recorded.
 
@@ -126,3 +126,9 @@ size, question seed, and outcome so each tested instance can be reproduced.
 
 Run `uv run python selftest_quality.py` after changing these components. This is
 also a CI gate. All network model calls are replaced by fake clients in the tests.
+
+## Reliability-v4 authoring
+
+`reliability_cases.py` generates `reliability.yaml`: 46 tasks across all 23 categories, including eight code tasks with 179 fixtures. Run `python reliability_cases.py` after editing the authoring file, then `python selftest_reliability.py`. New structured tasks require a single JSON document (an optional single code fence is accepted), reject duplicate keys and extra claims, and compare numbers exactly. Long ledgers use many records but do not claim a fixed tokenizer length; the separate generated context tests provide that measurement.
+
+Question difficulty is provisional. Compare fresh runs using the same quality-v4 protocol, suite hash, seeds, split, and output budget. Do not combine old and new headline scores: the set of capability items changed.

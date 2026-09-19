@@ -28,7 +28,7 @@ def _admin_or_redirect(request: Request):
 # _QUALITY_FIELDS keys map straight onto make_quality_config(**kwargs).
 _QUALITY_FIELDS = (
     "suite_seeds", "suite_split", "variants", "static_only",
-    "quality_context_sizes", "input_price", "output_price",
+    "quality_context_sizes", "input_price", "output_price", "quality_max_tokens",
 )
 _OPTION_FIELDS = (
     "category", "difficulty", "limit", "workers", "run_perf", "concurrency",
@@ -46,9 +46,9 @@ def _spec_to_kwargs(spec: dict, fields: tuple[str, ...]) -> dict:
         value = spec.get(key)
         if key in _BOOL_SPEC_FIELDS:
             kwargs[key] = "1" if value else ""
-        elif key in ("limit", "workers", "variants"):
+        elif key in ("limit", "workers", "variants", "quality_max_tokens"):
             try:
-                default = 0 if key == "limit" else 1
+                default = 16384 if key == "quality_max_tokens" else 0 if key == "limit" else 1
                 kwargs[key] = int(value) if value not in (None, "") else default
             except (TypeError, ValueError) as exc:
                 raise HTTPException(status_code=422, detail=f"Invalid {key} in plan run") from exc
@@ -67,6 +67,7 @@ def _plan_spec_defaults() -> dict:
         "workload_mix": "uniform", "shared_prefix": False,
         "slo_ttft_ms": "", "slo_tps": "", "slo_errors": "", "req_per_user_h": "",
         "suite_seeds": "1729", "suite_split": "development", "variants": 1,
+        "quality_max_tokens": 16384,
         "static_only": False, "quality_context_sizes": "",
         "input_price": "", "output_price": "",
     }
@@ -148,6 +149,7 @@ def _run_row_to_spec(run: dict) -> dict:
                             or qconf.get("interactive", True)
                             or qconf.get("strengthen_code", True)),
         "quality_context_sizes": s(qconf.get("context_sizes")),
+        "quality_max_tokens": qconf.get("max_output_tokens", 16384),
         "input_price": s(qconf.get("input_price")),
         "output_price": s(qconf.get("output_price")),
     })

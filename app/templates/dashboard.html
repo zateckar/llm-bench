@@ -101,7 +101,7 @@
                     <div class="text-right">
                         {% if run.status == 'completed' %}
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-pass">
-                            {{ run.passed_questions }}/{{ run.scored_questions or run.total_questions }} ({{ "%.0f"|format(run.avg_score * 100) }}%)
+                            {{ run.passed_questions }}/{{ run.scored_questions or run.total_questions }} passed · {{ "%.0f"|format(run.avg_score * 100) }}% average
                         </span>
                         <p class="text-xs text-slate-500 mt-1">
                             {%- if run.weighted_score %}{{ "%.0f"|format(run.weighted_score * 100) }}% weighted{% endif %}

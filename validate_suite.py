@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import math
 import sys
 from collections import Counter
 from pathlib import Path
@@ -332,6 +333,12 @@ def check_json_match(report: Report, where: str, expected: object) -> None:
         return
     if "value" not in expected:
         report.error(where, "json_match needs a `value`")
+    if "strict_json" in expected and type(expected["strict_json"]) is not bool:
+        report.error(where, "json_match strict_json must be a boolean")
+    for key in ("relative", "tolerance"):
+        value = expected.get(key, 0)
+        if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+            report.error(where, f"json_match {key} must be finite and nonnegative")
     mode = expected.get("mode", "exact")
     if mode not in ("exact", "subset"):
         report.error(where, f"json_match mode must be 'exact' or 'subset', got {mode!r}")

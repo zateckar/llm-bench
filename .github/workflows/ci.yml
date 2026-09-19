@@ -46,6 +46,9 @@ jobs:
       - name: Verify challenge answers and reject near misses
         run: uv run python selftest_challenges.py
 
+      - name: Verify reliability tasks and database regression cases
+        run: uv run python selftest_reliability.py
+
       - name: Verify generated, interactive, and long-context evaluation
         run: uv run python selftest_quality.py
 

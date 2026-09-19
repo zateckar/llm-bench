@@ -55,35 +55,39 @@
 - id: TR-03
   category: Translation
   difficulty: hard
-  description: "German requires the genitive construction and correct compound nouns"
-  prompt: |
-    Translate this English text into German:
+  description: German requires the genitive construction and correct compound nouns
+  prompt: 'Translate this English text into German:
 
-    'Machine learning models require large datasets for training. The quality of the training data
-    directly affects model performance.'
+
+    ''Machine learning models require large datasets for training. The quality of the training data
+
+    directly affects model performance.''
+
 
     Reply with only the German translation.
+
+    '
   evaluator: format_check
   expected:
     checks:
-      - type: regex
-        value: '(?i)maschinelle[nms]?\s+lernen|maschinellen\s+lernens'
-        description: "machine learning"
-      - type: regex
-        value: '(?i)(?:datens[äa]tze|datenmengen|trainingsdaten)'
-        description: "datasets as a compound noun"
-      - type: regex
-        value: '(?i)modell'
-        description: "model"
-      - type: regex
-        value: '(?i)(?:qualit[äa]t)'
-        description: "quality"
-      - type: regex
-        value: '(?i)(?:beeinflusst|wirkt sich|auswirkung|beeinträchtigt|bestimmt)'
-        description: "affects, correctly conjugated"
-      - type: not_regex
-        value: '(?i)\b(?:machine learning|datasets|quality|performance)\b'
-        description: "no untranslated English left in"
+    - type: regex
+      value: (?i)maschinell\w*\s+lern\w*
+      description: machine learning
+    - type: regex
+      value: (?i)(?:datens[äa]tze|datenmengen|trainingsdaten)
+      description: datasets as a compound noun
+    - type: regex
+      value: (?i)modell
+      description: model
+    - type: regex
+      value: (?i)(?:qualit[äa]t)
+      description: quality
+    - type: regex
+      value: (?i)(?:beeinflusst|wirkt sich|auswirkung|beeinträchtigt|bestimmt)
+      description: affects, correctly conjugated
+    - type: not_regex
+      value: (?i)\b(?:machine learning|datasets|quality|performance)\b
+      description: no untranslated English left in
 
 - id: TR-04
   category: Translation

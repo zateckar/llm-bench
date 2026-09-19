@@ -81,7 +81,7 @@ def make_tasks(config, seed, variant):
                 evaluator="json_match",
                 expected={"value": {"done": True}},
                 difficulty="expert",
-                max_tokens=1024,
+                max_tokens=4096,
                 source=REVISION,
                 interaction=params,
                 metadata={
@@ -92,7 +92,7 @@ def make_tasks(config, seed, variant):
                     "revision": REVISION,
                     "protocol": "json-actions-v1",
                     "max_turns": 16,
-                    "total_output_budget": 8192,
+                    "total_output_budget": 32768,
                 },
             )
         )
@@ -217,12 +217,17 @@ class Environment:
             self.pages_read.add(args["cursor"])
             if args["cursor"] is None:
                 stale = {**self.objects[1], "version": 7}
+                # A later page retracts apparent eligibility, rather than just
+                # updating a version number. Acting before reconciling all
+                # pages can preview a pinned or foreign-tenant object.
+                formerly_unpinned = {**self.objects[0], "version": 1, "pinned": False}
+                formerly_owned = {**self.objects[2], "version": 3, "tenant": p["tenant"]}
                 return {
-                    "rows": copy.deepcopy([self.objects[0], stale, self.objects[2]]),
+                    "rows": copy.deepcopy([formerly_unpinned, stale, formerly_owned]),
                     "next": "page2",
                 }
             return {
-                "rows": copy.deepcopy([self.objects[1], self.objects[3], self.objects[4]]),
+                "rows": copy.deepcopy(self.objects),
                 "next": None,
             }
         if tool == "delete_object":

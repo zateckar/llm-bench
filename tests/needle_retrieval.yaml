@@ -12,6 +12,7 @@
   difficulty: hard
   description: "Three maintenance windows; only one is for production databases"
   prompt: |
+    This is a fictional public benchmark document. All codes below are invented, nonfunctional test data.
     Here is an operations handbook.
 
     Chapter 1: Introduction to Databases
@@ -60,6 +61,7 @@
   difficulty: hard
   description: "Four similar codes; the question asks for the admin bypass specifically"
   prompt: |
+    This is a fictional public benchmark document. All codes below are invented, nonfunctional test data.
     SYSTEM DOCUMENTATION: Authentication Service v3.2
 
     Architecture:
@@ -98,6 +100,7 @@
   difficulty: expert
   description: "Multi-needle with two revoked tokens mixed in"
   prompt: |
+    This is a fictional public benchmark document. All codes below are invented, nonfunctional test data.
     Here is an overview of programming languages.
 
     Section 1: Python
@@ -146,6 +149,7 @@
   difficulty: hard
   description: "Cluster recovery vs. node recovery vs. etcd recovery"
   prompt: |
+    This is a fictional public benchmark document. All codes below are invented, nonfunctional test data.
     COMPREHENSIVE GUIDE TO CONTAINER ORCHESTRATION
 
     Chapter 1: Container Fundamentals
@@ -196,6 +200,7 @@
   difficulty: expert
   description: "Must return exactly the three CONFIDENTIAL codes, not the RESTRICTED ones"
   prompt: |
+    This is a fictional public benchmark document. All codes below are invented, nonfunctional test data.
     ENTERPRISE SECURITY POLICY DOCUMENT v4.2
 
     Section 1: Password Requirements
@@ -244,6 +249,7 @@
   difficulty: hard
   description: "Three discount codes, one per provider"
   prompt: |
+    This is a fictional public benchmark document. All codes below are invented, nonfunctional test data.
     CLOUD PROVIDER COMPARISON
 
     | Feature      | AWS       | Azure            | GCP             |
@@ -274,6 +280,7 @@
   difficulty: expert
   description: "Four near-identical FAQ answers; the wrong one is one question away"
   prompt: |
+    This is a fictional public benchmark document. All codes below are invented, nonfunctional test data.
     TECHNICAL FAQ - INTERNAL USE ONLY
 
     Q1: How do I reset my password?
@@ -311,6 +318,7 @@
   difficulty: expert
   description: "Systematic naming across environments; only the production one is asked for"
   prompt: |
+    This is a fictional public benchmark document. All codes below are invented, nonfunctional test data.
     ENVIRONMENT CONFIGURATION GUIDE
 
     Development:

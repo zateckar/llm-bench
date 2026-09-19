@@ -40,7 +40,7 @@
             {% if run.status == 'completed' %}
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-pass"
                   title="A question passes only when it reaches its own pass threshold, so partial credit never counts as a pass.">
-                {{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }} passed ({{ "%.1f"|format(run.avg_score * 100) }}%)
+                {{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }} passed · {{ "%.1f"|format(run.avg_score * 100) }}% all-item average
             </span>
             {% if run.weighted_score %}
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-slate-800 text-slate-300"

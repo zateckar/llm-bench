@@ -104,32 +104,40 @@
 - id: SU-04
   category: Summarization
   difficulty: hard
-  description: "Register change: jargon must be eliminated, not merely surrounded by plain words"
-  prompt: |
-    Rewrite this for a reader with no technical background, in at most 55 words and at least 25. You must
+  description: 'Register change: jargon must be eliminated, not merely surrounded by plain words'
+  prompt: 'Rewrite this for a reader with no technical background, in at most 55 words and at least 25.
+    You must
+
     not use any of these words: Kubernetes, container, declarative, YAML, manifest, orchestrate,
+
     reconcile, cluster.
 
+
     Kubernetes orchestrates containerised applications across clusters of machines. It uses a declarative
+
     configuration model in which the desired state is specified in YAML manifests. The control plane
+
     continuously reconciles actual state with desired state, automatically handling scaling, self-healing
+
     and rolling updates.
+
+    '
   evaluator: format_check
   expected:
     checks:
-      - type: min_words
-        value: 25
-      - type: max_words
-        value: 55
-      - type: not_regex
-        value: '(?i)\b(kubernetes|k8s|container\w*|declarativ\w*|yaml|manifests?|orchestrat\w*|reconcil\w*|clusters?)\b'
-        description: "forbidden jargon absent"
-      - type: regex
-        value: '(?i)(automatic|itself|on its own|without (?:you|someone)|by itself)'
-        description: "conveys the automation"
-      - type: regex
-        value: '(?i)(server|machine|computer|app|application|software|program|website|service)'
-        description: "uses plain equivalents"
+    - type: min_words
+      value: 25
+    - type: max_words
+      value: 55
+    - type: not_regex
+      value: (?i)\b(kubernetes|k8s|container\w*|declarativ\w*|yaml|manifests?|orchestrat\w*|reconcil\w*|clusters?)\b
+      description: forbidden jargon absent
+    - type: regex
+      value: (?i)(automat\w*|keeps? (?:checking|running)|on its own|by itself|without (?:manual|human))
+      description: conveys the automation
+    - type: regex
+      value: (?i)(server|machine|computer|app|application|software|program|website|service)
+      description: uses plain equivalents
 
 - id: SU-05
   category: Summarization

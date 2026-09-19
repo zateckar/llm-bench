@@ -134,31 +134,35 @@
   category: Terminal System Admin
   difficulty: hard
   source: terminal-bench/hdfs-deployment
-  description: "Requires the actual property names, not just the file names"
-  prompt: |
-    Deploy a 3-node Hadoop HDFS cluster (1 NameNode, 2 DataNodes). Give the prerequisites, the exact
+  description: Requires the actual property names, not just the file names
+  prompt: 'Deploy a 3-node Hadoop HDFS cluster (1 NameNode, 2 DataNodes). Give the prerequisites, the
+    exact
+
     property names and values you would put in core-site.xml and hdfs-site.xml, the command to format
+
     the NameNode, how to start the cluster, and how to verify both DataNodes have registered.
+
+    '
   evaluator: multi_step_solution
   expected:
     steps:
-      - step: "Prerequisites: JDK and passwordless SSH"
-        pattern: '(?:jdk|java)[\s\S]{0,200}(?:ssh-keygen|passwordless|authorized_keys|password-?less)'
-        order: 1
-      - step: "core-site.xml fs.defaultFS"
-        pattern: 'fs\.defaultFS'
-        order: 2
-      - step: "hdfs-site.xml replication and data dirs"
-        pattern: 'dfs\.replication[\s\S]{0,400}dfs\.(?:datanode\.data\.dir|namenode\.name\.dir)'
-        order: 3
-      - step: "Format the NameNode"
-        pattern: 'hdfs\s+namenode\s+-format'
-        order: 4
-      - step: "Verify DataNode registration"
-        pattern: 'dfsadmin\s+-report|hdfs\s+dfsadmin|:9870|:50070'
-        order: 5
+    - step: 'Prerequisites: JDK and passwordless SSH'
+      pattern: (?=.*(?:JDK|JAVA_HOME|Java))(?=.*(?:passwordless|password.less|authorized_keys))
+      order: 1
+    - step: core-site.xml fs.defaultFS
+      pattern: fs\.defaultFS
+      order: 2
+    - step: hdfs-site.xml replication and data dirs
+      pattern: dfs\.replication[\s\S]{0,400}dfs\.(?:datanode\.data\.dir|namenode\.name\.dir)
+      order: 3
+    - step: Format the NameNode
+      pattern: hdfs\s+namenode\s+-format
+      order: 4
+    - step: Verify DataNode registration
+      pattern: dfsadmin\s+-report|hdfs\s+dfsadmin|:9870|:50070
+      order: 5
     must_not:
-      - '(?i)hdfs\s+namenode\s+-format[\s\S]{0,120}(?:every|each) (?:time|restart|boot)'
+    - (?i)hdfs\s+namenode\s+-format[\s\S]{0,120}(?:every|each) (?:time|restart|boot)
 
 - id: TS-06
   category: Terminal System Admin

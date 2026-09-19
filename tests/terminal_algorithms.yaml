@@ -363,29 +363,63 @@
 - id: TA-13
   category: Terminal Algorithms
   difficulty: expert
-  description: "BFS with single-character mutations; the transform count includes both endpoints"
-  prompt: |
-    Write a Python function `ladder_length(begin_word: str, end_word: str, word_list: list[str]) -> int`
+  description: BFS with single-character mutations; the transform count includes both endpoints
+  prompt: 'Write a Python function `ladder_length(begin_word: str, end_word: str, word_list: list[str])
+    -> int`
+
     returning the length of the shortest transformation sequence from begin_word to end_word such
+
     that every consecutive pair differs by exactly one character and every intermediate word is in
+
     word_list. Both endpoints count toward the length, so a one-word transform ale->ale is 1 and
-    hit->hot->cog is 3. Return 0 if no such sequence exists (note: end_word must be in word_list;
+
+    hit->hot->dot is 3. Return 0 if no such sequence exists (note: end_word must be in word_list;
+
     begin_word need not be).
+
     Reply with ONLY the Python code in a code block.
+
+    '
   evaluator: code_exec
   expected:
-    - function: ladder_length
-      args: ["hit", "cog", ["hot", "dot", "dog", "lot", "log", "cog"]]
-      expected: 5
-    - function: ladder_length
-      args: ["hit", "cog", ["hot", "dot", "dog", "lot", "log"]]
-      expected: 0
-    - function: ladder_length
-      args: ["a", "c", ["a", "b", "c"]]
-      expected: 2
-    - function: ladder_length
-      args: ["hot", "hot", ["hot"]]
-      expected: 1
-    - function: ladder_length
-      args: ["hit", "hot", ["hot"]]
-      expected: 0
+  - function: ladder_length
+    args:
+    - hit
+    - cog
+    - - hot
+      - dot
+      - dog
+      - lot
+      - log
+      - cog
+    expected: 5
+  - function: ladder_length
+    args:
+    - hit
+    - cog
+    - - hot
+      - dot
+      - dog
+      - lot
+      - log
+    expected: 0
+  - function: ladder_length
+    args:
+    - a
+    - c
+    - - a
+      - b
+      - c
+    expected: 2
+  - function: ladder_length
+    args:
+    - hot
+    - hot
+    - - hot
+    expected: 1
+  - function: ladder_length
+    args:
+    - hit
+    - hot
+    - - hot
+    expected: 2

@@ -221,38 +221,64 @@
 - id: CL-07
   category: Classification
   difficulty: expert
-  prompt: |
-    Classify each operation by its tight asymptotic complexity class in terms of n. Give exactly one
-    class per item using big-O notation.
-
-    1. 'Finding the closest pair of points in a 2D plane by divide and conquer.'
-    2. "Strassen's algorithm for multiplying two n x n matrices."
-    3. 'Inserting n elements one by one into an initially empty dynamic array, counting all resizes -
-       total cost for all n insertions.'
-    4. 'Building a binary heap from an unsorted array of n elements using the bottom-up heapify method.'
-    5. 'Finding the median of an unsorted array using the median-of-medians selection algorithm, worst
-       case.'
-    6. 'Answering n union and find operations on n elements with union by rank and path compression -
-       total cost.'
-
-    Reply with ONLY six lines in the form `N. O(...)`.
+  prompt: "Classify each operation by its tight asymptotic complexity class in terms of n. Give exactly\
+    \ one\nclass per item using big-O notation.\n\n1. 'Finding the closest pair of points in a 2D plane\
+    \ by divide and conquer.'\n2. \"Strassen's algorithm for multiplying two n x n matrices.\"\n3. 'Inserting\
+    \ n elements one by one into an initially empty dynamic array, counting all resizes -\n   total cost\
+    \ for all n insertions.'\n4. 'Building a binary heap from an unsorted array of n elements using the\
+    \ bottom-up heapify method.'\n5. 'Finding the median of an unsorted array using the median-of-medians\
+    \ selection algorithm, worst\n   case.'\n6. 'Answering n union and find operations on n elements with\
+    \ union by rank and path compression -\n   total cost.'\n\nReply with ONLY six lines in the form `N.\
+    \ O(...)`.\n"
   evaluator: ordered_labels
   expected:
-    - index: 1
-      accept: ['o\s*\(\s*n\s*log\s*n\s*\)', 'n\s*log\s*n', 'linearithmic']
-      reject: ['o\s*\(\s*n\s*\^?\s*2', 'o\s*\(\s*n\s*\)\s*$']
-    - index: 2
-      accept: ['n\s*\^?\s*2\.8', 'n\s*\^?\s*\{?\s*log\s*_?\s*2\s*7', 'log\s*2\s*\(?\s*7']
-      reject: ['o\s*\(\s*n\s*\^?\s*3\s*\)', 'o\s*\(\s*n\s*log\s*n\s*\)']
-    - index: 3
-      accept: ['o\s*\(\s*n\s*\)', '\blinear\b', 'amorti[sz]ed\s+o\s*\(\s*1\s*\)']
-      reject: ['o\s*\(\s*n\s*\^?\s*2', 'o\s*\(\s*n\s*log\s*n\s*\)']
-    - index: 4
-      accept: ['o\s*\(\s*n\s*\)', '\blinear\b']
-      reject: ['o\s*\(\s*n\s*log\s*n\s*\)', 'o\s*\(\s*log\s*n\s*\)']
-    - index: 5
-      accept: ['o\s*\(\s*n\s*\)', '\blinear\b']
-      reject: ['o\s*\(\s*n\s*log\s*n\s*\)', 'o\s*\(\s*n\s*\^?\s*2']
-    - index: 6
-      accept: ['inverse\s+ackermann', 'alpha\s*\(\s*n\s*\)', 'α\s*\(\s*n\s*\)', 'n\s*\*?\s*(?:inverse\s+)?ackermann', 'near(?:ly)?[- ]linear', 'amorti[sz]ed\s+(?:almost|nearly)\s+constant']
-      reject: ['o\s*\(\s*n\s*log\s*n\s*\)', 'o\s*\(\s*n\s*\^?\s*2']
+  - index: 1
+    accept:
+    - o\s*\(\s*n\s*log\s*n\s*\)
+    - n\s*log\s*n
+    - linearithmic
+    reject:
+    - o\s*\(\s*n\s*\^?\s*2
+    - o\s*\(\s*n\s*\)\s*$
+  - index: 2
+    accept:
+    - n\s*\^?\s*2\.8
+    - n\s*\^?\s*\{?\s*log\s*_?\s*2\s*7
+    - log\s*2\s*\(?\s*7
+    - n\s*\^\s*\(\s*log_?2\s*7\s*\)
+    reject:
+    - o\s*\(\s*n\s*\^?\s*3\s*\)
+    - o\s*\(\s*n\s*log\s*n\s*\)
+  - index: 3
+    accept:
+    - o\s*\(\s*n\s*\)
+    - \blinear\b
+    - amorti[sz]ed\s+o\s*\(\s*1\s*\)
+    reject:
+    - o\s*\(\s*n\s*\^?\s*2
+    - o\s*\(\s*n\s*log\s*n\s*\)
+  - index: 4
+    accept:
+    - o\s*\(\s*n\s*\)
+    - \blinear\b
+    reject:
+    - o\s*\(\s*n\s*log\s*n\s*\)
+    - o\s*\(\s*log\s*n\s*\)
+  - index: 5
+    accept:
+    - o\s*\(\s*n\s*\)
+    - \blinear\b
+    reject:
+    - o\s*\(\s*n\s*log\s*n\s*\)
+    - o\s*\(\s*n\s*\^?\s*2
+  - index: 6
+    accept:
+    - inverse\s+ackermann
+    - alpha\s*\(\s*n\s*\)
+    - α\s*\(\s*n\s*\)
+    - n\s*\*?\s*(?:inverse\s+)?ackermann
+    - near(?:ly)?[- ]linear
+    - amorti[sz]ed\s+(?:almost|nearly)\s+constant
+    reject:
+    - o\s*\(\s*n\s*log\s*n\s*\)
+    - o\s*\(\s*n\s*\^?\s*2

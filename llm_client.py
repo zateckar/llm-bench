@@ -293,7 +293,8 @@ class ChatClient:
 
         text = "".join(chunks).strip()
         if not text:
-            text = "".join(reasoning_chunks).strip()
+            reasoning = "".join(reasoning_chunks).strip()
+            text = f"<think>{reasoning}</think>" if reasoning else ""
         if not usage.completion_tokens:
             # Most servers emit one token per delta; fall back to that, then to
             # a character-based estimate. Marked as an estimate by the caller.
@@ -359,8 +360,9 @@ def _extract_message_text(choices: list[dict]) -> str:
     message = choices[0].get("message") or {}
     content = message.get("content")
     if content is None:
-        # Reasoning models sometimes return only a reasoning field.
-        content = message.get("reasoning") or message.get("reasoning_content") or ""
+        # Preserve diagnostics without promoting private reasoning to an answer.
+        reasoning = message.get("reasoning") or message.get("reasoning_content") or ""
+        content = f"<think>{reasoning}</think>" if reasoning else ""
     if isinstance(content, list):
         # Some gateways return content as a list of parts.
         content = "".join(

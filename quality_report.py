@@ -7,7 +7,7 @@ import random
 import statistics
 
 from models import percentile
-from quality_suite import REVISION, fingerprint, suite_hash
+from quality_suite import REVISION, fingerprint, suite_hash, question_scope
 
 EXCLUDED = {"endpoint_error", "unsupported_context", "evaluator_error", "cancelled"}
 
@@ -20,7 +20,7 @@ def result_record(result):
         "category": q.category,
         "family": q.metadata.get("family", q.id),
         "scope": q.metadata.get(
-            "scope", "compliance" if q.category == "Creative Writing" else "capability"
+            "scope", question_scope(q)
         ),
         "metadata": q.metadata,
         "score": result.score,
@@ -77,6 +77,7 @@ def summarize(rows, input_price=None, output_price=None):
     usable = [r for r in rows if r["scored"]]
     capability = [r for r in usable if r["scope"] == "capability"]
     compliance = [r for r in usable if r["scope"] == "compliance"]
+    heuristic = [r for r in usable if r["scope"] == "heuristic"]
     groups = clusters(capability)
     cost_rows = [r for r in rows if not r.get("cached")]
     prompt = sum(r["tokens"]["prompt_tokens"] for r in cost_rows)
@@ -88,11 +89,13 @@ def summarize(rows, input_price=None, output_price=None):
     )
     category_rows = {}
     for category in sorted({r["category"] for r in rows}):
-        items = [r for r in usable if r["category"] == category]
+        all_items = [r for r in usable if r["category"] == category]
+        items = [r for r in all_items if r["scope"] != "heuristic"]
         category_rows[category] = {
             "count": len(items),
             "score": statistics.mean(r["score"] for r in items) if items else None,
             "scope": "compliance" if category == "Creative Writing" else "capability",
+            "heuristic_count": sum(r["scope"] == "heuristic" for r in all_items),
         }
     context_rows = []
     for size in sorted(
@@ -127,10 +130,17 @@ def summarize(rows, input_price=None, output_price=None):
         else None,
         "category_balanced": balanced(groups),
         "category_balanced_ci95": bootstrap(groups),
+        "category_balanced_pass_rate": balanced(clusters(capability, "passed")),
+        "truncation_rate": sum(r["outcome"] == "truncation" for r in usable) / len(usable)
+        if usable else None,
+        "budget_note": "Output-limit failures remain in scores. High truncation rates measure "
+        "budget-constrained completion as well as capability; compare identical output budgets.",
         "confidence_method": "Percentile bootstrap, 1000 draws; families clustered within fixed categories. "
         "An interval requires at least two families in every included category. "
         "Measures sampled-item uncertainty, not model run-to-run variability.",
         "compliance_score": statistics.mean(r["score"] for r in compliance) if compliance else None,
+        "heuristic_count": len(heuristic),
+        "heuristic_mean": statistics.mean(r["score"] for r in heuristic) if heuristic else None,
         "outcomes": dict(Counter(r["outcome"] for r in rows)),
         "categories": category_rows,
         "estimated_cost_usd": cost,
@@ -173,6 +183,7 @@ def make_report(results, config, client_config, selected_hash=None):
             "temperature": client_config.temperature,
             "model_seed": client_config.seed,
             "default_max_tokens": client_config.max_tokens,
+            "quality_max_output_tokens": config.max_output_tokens,
         },
         "summary": summarize(rows, config.input_price, config.output_price),
         "results": rows,
@@ -232,6 +243,9 @@ def markdown(report):
             else " (insufficient families for an interval)"
         ),
         f"- Raw capability mean: {pct(s['raw_capability_mean'])}",
+        f"- Category/family-balanced full-pass rate: {pct(s.get('category_balanced_pass_rate'))}",
+        f"- Legacy prose-pattern diagnostics: {s.get('heuristic_count', 0)} items, excluded from capability.",
+        f"- Output-limit failure rate: {pct(s.get('truncation_rate'))}; these remain scored failures.",
         f"- Creative-writing constraint compliance: {pct(s['compliance_score'])}; artistic quality is not measured.",
         "- Outcomes: " + ", ".join(f"{k}: {v}" for k, v in sorted(s["outcomes"].items())),
         "- Quality-call cost estimate: "

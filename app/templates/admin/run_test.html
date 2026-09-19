@@ -122,6 +122,9 @@
                 <label class="text-sm text-slate-300">Long-context accuracy sizes
                     <input name="quality_context_sizes" placeholder="8192,32768,131072" class="w-full bg-slate-800 rounded px-2 py-1">
                 </label>
+                <label class="text-sm text-slate-300">Quality output token limit (including reasoning)
+                    <input name="quality_max_tokens" type="number" min="1024" max="65536" value="16384" class="w-full bg-slate-800 rounded px-2 py-1">
+                </label>
                 <label class="text-sm text-slate-300">Input $ / million tokens
                     <input name="input_price" type="number" min="0" step="any" placeholder="Optional" class="w-full bg-slate-800 rounded px-2 py-1">
                 </label>

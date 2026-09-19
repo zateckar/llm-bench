@@ -10,7 +10,26 @@ import random
 
 from models import Question
 
-REVISION = "quality-v3.1"
+REVISION = "quality-v4"
+
+# Prose pattern coverage is useful diagnostic information, but cannot establish
+# correctness: negating a keyword, omitting an untested claim or using a synonym
+# can all change the verdict. Keep these tasks out of the capability headline.
+HEURISTIC_EVALUATORS = {
+    "contains_keywords", "regex_all", "refusal_calibration", "admits_uncertainty",
+    "security_analysis", "command_correctness", "multi_step_solution",
+    "file_content_match", "ordered_labels", "set_match", "numeric_set",
+}
+
+
+def question_scope(q):
+    if q.category == "Creative Writing":
+        return "compliance"
+    if q.evaluator in HEURISTIC_EVALUATORS or (
+        q.evaluator == "format_check" and q.category != "Instruction Following"
+    ):
+        return "heuristic"
+    return "capability"
 
 
 @dataclass(frozen=True)
@@ -24,8 +43,11 @@ class QualityConfig:
     context_sizes: tuple[int, ...] = ()
     input_price: float | None = None
     output_price: float | None = None
+    max_output_tokens: int = 16384
 
     def __post_init__(self):
+        if type(self.max_output_tokens) is not int or not 1024 <= self.max_output_tokens <= 65536:
+            raise ValueError("max_output_tokens must be an integer in 1024..65536")
         if any(
             type(v) is not bool for v in (self.generated, self.interactive, self.strengthen_code)
         ):
@@ -300,7 +322,7 @@ def assemble_questions(base, config):
             metadata={
                 **q.metadata,
                 "family": q.id,
-                "scope": "compliance" if q.category == "Creative Writing" else "capability",
+                "scope": question_scope(q),
             },
         )
         for q in base
@@ -332,4 +354,7 @@ def assemble_questions(base, config):
                 questions.extend(make_tasks(config, seed, variant))
             for size in config.context_sizes:
                 questions.append(long_context_question(config, seed, variant, size))
-    return questions
+    # Every model receives the same declared cap, including baseline anchors.
+    # Keep truncations as failures; a larger budget cannot recover past answers.
+    return [replace(q, max_tokens=config.max_output_tokens) if not q.interaction else q
+            for q in questions]

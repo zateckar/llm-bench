@@ -624,6 +624,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--variants", type=int, default=1, help="variants per generated family and seed, 1..10")
     parser.add_argument("--static-only", action="store_true", help="disable generated reasoning, interactive tasks, and extra code tests")
     parser.add_argument("--quality-context-sizes", default="", help="accuracy at reference token sizes, e.g. 8192,32768,131072")
+    parser.add_argument("--quality-max-tokens", type=int, default=16384,
+                        help="uniform noninteractive quality output cap, including reasoning (default 16384)")
     parser.add_argument("--input-price", type=float, help="USD per million input tokens for cost estimates")
     parser.add_argument("--output-price", type=float, help="USD per million output tokens for cost estimates")
     parser.add_argument(
@@ -741,7 +743,8 @@ def main() -> None:
         quality_config = QualityConfig(generated=not args.static_only, interactive=not args.static_only,
             strengthen_code=not args.static_only,seeds=parse_ints(args.suite_seeds),split=args.suite_split,
             variants=args.variants,context_sizes=parse_ints(args.quality_context_sizes),
-            input_price=args.input_price,output_price=args.output_price)
+            input_price=args.input_price,output_price=args.output_price,
+            max_output_tokens=args.quality_max_tokens)
     except (ValueError,TypeError) as exc:
         raise SystemExit(f"ERROR: invalid quality configuration: {exc}") from exc
 

@@ -10,7 +10,9 @@ Built with **Python 3.13**, **FastAPI**, **HTMX**, **Tailwind CSS** and **SQLite
 
 ### Quality
 
-269 static questions across 23 categories, plus seeded reasoning and interactive tasks (276 questions by default). Every question declares its own **pass threshold** (1.0 by default), so partial credit never counts as a pass:
+The **reliability-v4** revision adds 46 verified tasks across all 23 static categories, corrects database-discovered grading defects, and separates 124 legacy prose-pattern diagnostics from capability scores. Quality output budgets default to 16,384 tokens uniformly across models. See [the database audit](QUALITY_AUDIT.md) for evidence, limitations, and migration details. Historical grades remain unchanged; the revised suite requires fresh matched runs.
+
+315 static questions across 23 categories, plus seeded reasoning and interactive tasks (322 questions by default). Every question declares its own **pass threshold** (1.0 by default), so partial credit never counts as a pass:
 
 | Area | Categories |
 |------|-----------|
@@ -24,9 +26,9 @@ Built with **Python 3.13**, **FastAPI**, **HTMX**, **Tailwind CSS** and **SQLite
 
 Each question carries a **difficulty** tier (`easy` / `medium` / `hard` / `expert`) that feeds a difficulty-weighted score alongside the raw average, so a model that only clears the easy items cannot hide behind a flat percentage.
 
-54 items execute the model's code in a sandboxed subprocess and compare returned values structurally, rather than pattern-matching prose about the code.
+62 items execute the model's code in a sandboxed subprocess and compare returned values structurally, rather than pattern-matching prose about the code.
 
-The **challenge-v2** revision replaces 106 familiar puzzles, routine calculations, and generic planning questions with 56 harder questions across logical reasoning, mathematics, advanced coding, agentic use cases, tool use, and reading comprehension. Tasks include constrained optimization, exact conditional probabilities, transaction replay, concurrent-update recovery, and code with boundary and tie-breaking requirements. All requested JSON fields must match; code must pass every fixture. Expert reasoning questions allow up to 8,192 output tokens.
+The **challenge-v2** revision replaces 106 familiar puzzles, routine calculations, and generic planning questions with 56 harder questions across logical reasoning, mathematics, advanced coding, agentic use cases, tool use, and reading comprehension. Tasks include constrained optimization, exact conditional probabilities, transaction replay, concurrent-update recovery, and code with boundary and tie-breaking requirements. All requested JSON fields must match; code must pass every fixture. Reliability-v4 applies a uniform 16,384-token quality cap by default.
 
 Difficulty tiers are author estimates, not measured model rankings. Compare models on the same suite hash and decoding settings; scores from before this revision are not directly comparable. Establishing how well the new questions separate particular models requires fresh runs of those models.
 
@@ -114,6 +116,7 @@ Useful options:
 | `--suite-split evaluation` | use the evaluation generator stream (default `development`) |
 | `--variants 3` | variants per generated family and seed (1–10) |
 | `--static-only` | disable generated reasoning, interactive tasks, and extra code fixtures |
+| `--quality-max-tokens 16384` | uniform quality output cap including reasoning; 1,024–65,536 |
 | `--quality-context-sizes 8192,32768,131072` | add answer-accuracy tests at these reference context sizes |
 | `--input-price 2 --output-price 8` | estimate USD cost using supplied per-million-token rates |
 
@@ -173,6 +176,7 @@ uv run python validate_suite.py --strict
 
 ```bash
 uv run python selftest_evaluators.py
+uv run python selftest_reliability.py
 ```
 
 - **No false passes.** Every evaluator has at least one adversarial case — a plausible-looking wrong answer — that must score below the pass bar. Each corresponds to a real scoring defect: a number that appears only as an intermediate step, half the required keywords, required steps in the wrong order, a correct label under the wrong item number, a response that hedges and then fabricates specifics, a review that finds most issues and then declares the code secure.
@@ -204,7 +208,7 @@ uv run python selftest_reports.py
 
 Scoring is entirely rule-based — there is no second LLM acting as a judge. That makes grades reproducible and free of judge bias, but it also means grading is syntactic, not semantic. The known limits, kept deliberately because tightening them would risk more unfair *failures* than unfair passes:
 
-- **Negation blindness.** `contains_keywords`, `none:` lists, and `not_contains` checks match substrings/words, not meaning: "the capital is **not** Paris" still counts as mentioning Paris. This is symmetric — it penalises "X is not Y" and "Y is not X" equally — so no model gains a systematic edge.
+- **Negation blindness.** `contains_keywords`, `none:` lists, and `not_contains` checks match substrings/words, not meaning: "the capital is **not** Paris" still counts as mentioning Paris. Such errors can affect models differently. In reliability-v4 these prose-pattern tasks are diagnostic only and excluded from the capability headline.
 - **`numeric_set` matches anywhere.** Required values are searched in the whole response, so a value appearing as an intermediate step counts. `numeric_match` is the strict variant and grades only the asserted final answer.
 - **Heuristic final-answer extraction.** `numeric_match` uses ordered cues ("answer/result/total …", last line, last number). A response that asserts the wrong number last is graded as wrong even if the right one appeared earlier — by design: the final assertion is what a reader would take away.
 - **MCQ strictness.** Hedging across options scores 0; a prose answer with no recognisable option letter scores 0. Fallback letter-scanning only activates when an answer cue is present, so prose articles ("a", "I") are not mistaken for option letters.
@@ -313,7 +317,7 @@ takes to update the questions — repeat the two commands above.
 
 ## Interpreting a run
 
-- **Category/family-balanced capability** gives each capability category equal weight and each question family equal weight within its category. Generated variants are averaged within their family. Creative-writing constraint compliance is reported separately and does not claim to measure artistic quality. The legacy all-item average and difficulty-weighted scores remain available.
+- **Category/family-balanced capability** excludes heuristic prose-pattern diagnostics and gives each capability category equal weight and each question family equal weight within its category. Generated variants are averaged within their family. Creative-writing constraint compliance is reported separately and does not claim to measure artistic quality. The legacy all-item average and difficulty-weighted scores remain available.
 - **95% intervals** use a deterministic 1,000-draw bootstrap of families within fixed categories. Variants stay clustered; intervals require at least two families in every included category. These describe sampled-item uncertainty, not model run-to-run variability or guaranteed generalization. Paired comparisons use only identical question fingerprints answered by both models, reject mismatched decoding protocols, and disclose unmatched and excluded items.
 - **Failure diagnostics** distinguish incorrect task results, formatting failures, creative-writing compliance failures, output truncation, endpoint errors, unsupported context, evaluator errors, and cancellation. Formatting and truncation remain scored failures. Endpoint/unsupported/evaluator/cancelled items are excluded, with coverage shown; a missing answer never becomes a pass.
 - **Cost estimates** require both user-supplied rates and include fresh quality-call usage only. They exclude unknown billing, unreported failed-request usage, performance-suite usage, and provider cache discounts. Interactive task latency is the sum of its model-call latencies; call counts and excess calls are separate metrics.

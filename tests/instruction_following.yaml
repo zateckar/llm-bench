@@ -231,20 +231,20 @@
 - id: IF-09
   category: Instruction Following
   difficulty: expert
-  prompt: "Write a paragraph that starts with the word 'Yesterday' and ends with the word 'tomorrow'. Do not use the letters 'a' or 'i' anywhere in the paragraph. It must be at least 25 words long. Reply with the paragraph only."
+  prompt: Write a paragraph that starts with the word 'Yesterday' and ends with the word 'tomorrow'. Do
+    not use the letters 'a' or 'i' anywhere after the required opening word 'Yesterday' (that word is
+    exempt). It must be at least 25 words long. Reply with the paragraph only.
   evaluator: format_check
   expected:
     checks:
-      - type: starts_with
-        value: Yesterday
-      - type: ends_with
-        value: tomorrow
-      - type: not_contains
-        value: a
-      - type: not_contains
-        value: i
-      - type: min_words
-        value: 25
+    - type: starts_with
+      value: Yesterday
+    - type: ends_with
+      value: tomorrow
+    - type: regex
+      value: \AYesterday\b[^aiAI]*\Z
+    - type: min_words
+      value: 25
 
 - id: IF-10
   category: Instruction Following

@@ -1,6 +1,6 @@
 """Shared quality execution and failure attribution for CLI and web."""
 
-from evaluators import EVALUATORS, extract_json
+from evaluators import EVALUATORS, extract_json, strip_think_blocks
 from models import Result
 
 
@@ -31,6 +31,9 @@ def score_response(q, response, tokens, metrics, cached=False):
             "Output limit reached; incomplete answers are not passes",
         )
         return result
+    if not strip_think_blocks(response).strip():
+        result.outcome, result.detail = "missing_answer", "No final answer; reasoning alone is not an answer"
+        return result
     try:
         result.score, result.detail = EVALUATORS[q.evaluator](response, q.expected)
         result.score = max(0.0, min(1.0, float(result.score)))
@@ -42,7 +45,11 @@ def score_response(q, response, tokens, metrics, cached=False):
         result.detail = "Evaluator error: " + result.detail
     elif result.passed:
         result.outcome = "pass"
-    elif q.evaluator == "json_match" and extract_json(response)[1]:
+    elif q.metadata.get("scope") == "heuristic":
+        result.outcome = "heuristic_mismatch"
+    elif q.evaluator == "json_match" and extract_json(
+        response, strict=isinstance(q.expected, dict) and q.expected.get("strict_json", False)
+    )[1]:
         result.outcome = "formatting"
     elif q.category == "Creative Writing":
         result.outcome = "compliance_failure"

@@ -144,7 +144,14 @@ def values_equal(
         return isinstance(got, bool) and isinstance(want, bool) and got == want
     if got is None or want is None:
         return got is None and want is None
+    if isinstance(got, int) and isinstance(want, int):
+        # Counts and identifiers are exact, including integers above 2**53.
+        return got == want
     if isinstance(got, (int, float)) and isinstance(want, (int, float)):
+        if rel == 0 and abs_tol == 0:
+            # Python compares mixed int/float values without rounding the int
+            # through binary64 first; preserve that behavior for exact fixtures.
+            return got == want
         return _numbers_equal(float(got), float(want), rel, abs_tol)
     if isinstance(got, str) and isinstance(want, str):
         return got == want
@@ -316,6 +323,8 @@ def precision_tolerance(target: float) -> float:
 def _clean_numeric_text(text: str) -> str:
     """Normalize notation so a single regex pass can find real numbers."""
     text = text.replace("\u2212", "-").replace("\u2013", "-")  # unicode minus/en-dash
+    superscripts = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻", "0123456789+-")
+    text = re.sub(r"10([⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻]+)", lambda m: "10^" + m[1].translate(superscripts), text)
     text = re.sub(r"\\(?:boxed|text|mathrm|mbox)\s*\{([^{}]*)\}", r"\1", text)
     text = re.sub(r"\\d?frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}", r"(\1)/(\2)", text)
     text = re.sub(r"\\[,!;: ]", "", text)
@@ -431,12 +440,36 @@ def extract_final_number(text: str) -> tuple[float | None, str]:
 # ---------------------------------------------------------------------------
 
 
-def extract_json(response: str) -> tuple[Any, str | None]:
+def _load_json(text):
+    def pairs(items):
+        obj = {}
+        for key, value in items:
+            if key in obj:
+                raise ValueError(f"duplicate JSON key: {key}")
+            obj[key] = value
+        return obj
+
+    def invalid(value):
+        raise ValueError(f"non-finite JSON number: {value}")
+
+    return json.loads(text, object_pairs_hook=pairs, parse_constant=invalid)
+
+
+def extract_json(response: str, *, strict: bool = False) -> tuple[Any, str | None]:
     """Pull the first plausible JSON document out of a response.
 
     Returns ``(value, None)`` or ``(None, reason)``.
     """
     text = strip_think_blocks(response).strip()
+
+    if strict:
+        # One complete document, optionally in a single Markdown fence. Do not
+        # cherry-pick a correct object from contradictory prose or alternatives.
+        fence = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n?```", text, re.DOTALL | re.IGNORECASE)
+        try:
+            return _load_json(fence[1] if fence else text), None
+        except ValueError as exc:
+            return None, str(exc)
 
     fenced = re.findall(r"```(?:json|jsonc|json5)?\s*\n(.*?)```", text, re.DOTALL | re.IGNORECASE)
     candidates = [f.strip() for f in fenced]
@@ -446,8 +479,8 @@ def extract_json(response: str) -> tuple[Any, str | None]:
         if not candidate:
             continue
         try:
-            return json.loads(candidate), None
-        except json.JSONDecodeError:
+            return _load_json(candidate), None
+        except ValueError:
             pass
         # Fall back to the widest balanced {...} / [...] span.
         for opener, closer in (("{", "}"), ("[", "]")):
@@ -455,8 +488,8 @@ def extract_json(response: str) -> tuple[Any, str | None]:
             end = candidate.rfind(closer)
             if start != -1 and end > start:
                 try:
-                    return json.loads(candidate[start:end + 1]), None
-                except json.JSONDecodeError:
+                    return _load_json(candidate[start:end + 1]), None
+                except ValueError:
                     continue
     return None, "no valid JSON found"
 
@@ -484,6 +517,10 @@ def json_at_path(doc: Any, path: str) -> tuple[Any, bool]:
 # ---------------------------------------------------------------------------
 
 TEST_HELPERS = {
+    "test_parse_tar_size": """
+def test_parse_tar_size(data):
+    return parse_tar_size(bytes(data))
+""",
     "test_lru": """
 def test_lru():
     cache = LRUCache(2)
@@ -916,7 +953,7 @@ def eval_numeric_match(response: str, expected: Any, **_) -> tuple[float, str]:
         # Answers are authored to the precision the prompt asks for, so the
         # window absorbs rounding of the final digit only.
         abs_tol = precision_tolerance(target)
-        rel_tol = DEFAULT_REL_TOLERANCE
+        rel_tol = 0.0 if target.is_integer() else DEFAULT_REL_TOLERANCE
         accept = []
         strict = False
 
@@ -938,7 +975,7 @@ def eval_numeric_match(response: str, expected: Any, **_) -> tuple[float, str]:
             if abs(value - candidate) <= window + 1e-9 and round(value) == candidate:
                 return 1.0, f"Correct ({how}): {value:g} rounds to {candidate:g}"
 
-    return 0.0, f"Got {value:g} ({how}), expected {target:g}"
+    return 0.0, f"Got {value:.17g} ({how}), expected {target:.17g}"
 
 
 def eval_numeric_set(response: str, expected: Any, **_) -> tuple[float, str]:
@@ -1309,13 +1346,13 @@ def eval_refusal_calibration(response: str, expected: Any = None, **_) -> tuple[
     fabricated = [p for p in forbidden if safe_re_search(p, body, re.IGNORECASE)]
 
     if not admitted:
-        return 0.0, "Did not admit uncertainty (likely fabricated an answer)"
+        return 0.0, "No recognized uncertainty/correction phrasing (heuristic only)"
     if fabricated:
         return 0.0, (
-            "Hedged but still asserted invented specifics matching: "
+            "Uncertainty phrasing and forbidden specificity patterns both matched: "
             + ", ".join(f[:40] for f in fabricated[:3])
         )
-    return 1.0, "Correctly declined without fabricating details"
+    return 1.0, "Uncertainty and forbidden-pattern checks passed (heuristic only)"
 
 
 # Back-compat alias: existing DB rows and older suites reference this name.
@@ -1546,7 +1583,7 @@ def eval_json_match(response: str, expected: Any, **_) -> tuple[float, str]:
     mode = str(spec.get("mode", "exact"))
     ignore_keys = {str(k) for k in (spec.get("ignore_keys") or [])}
 
-    doc, err = extract_json(response)
+    doc, err = extract_json(response, strict=spec.get("strict_json", False))
     if err:
         return 0.0, f"No parseable JSON in response ({err})"
 
@@ -1575,7 +1612,7 @@ def eval_json_match(response: str, expected: Any, **_) -> tuple[float, str]:
             for i, sub in enumerate(target):
                 problems += compare(got[i], sub, f"{path}[{i}]")
             return problems
-        if not values_equal(got, target):
+        if not values_equal(got, target, rel=spec.get("relative", 0), abs_tol=spec.get("tolerance", 0)):
             problems.append(f"{path or 'root'}: got {describe(got, 50)}, want {describe(target, 50)}")
         return problems
 

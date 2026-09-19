@@ -247,64 +247,148 @@
   category: Terminal File Operations
   difficulty: medium
   source: terminal-bench/create-bucket
-  description: "Region handling and public-access blocking are the parts models omit"
-  prompt: |
-    Write a Python function using boto3 that creates an S3 bucket and configures it for private,
-    versioned storage with a lifecycle rule. It must:
-      - accept a bucket name and region, and handle us-east-1 correctly (it must NOT be passed as a
-        LocationConstraint),
-      - block all public access,
-      - enable versioning,
-      - enable default server-side encryption,
-      - add a lifecycle rule that expires noncurrent versions after 30 days.
-    Show the complete function.
+  description: Region handling and public-access blocking are the parts models omit
+  prompt: "Write a Python function using boto3 that creates an S3 bucket and configures it for private,\n\
+    versioned storage with a lifecycle rule. It must:\n  - accept a bucket name and region, and handle\
+    \ us-east-1 correctly (it must NOT be passed as a\n    LocationConstraint),\n  - block all public\
+    \ access,\n  - enable versioning,\n  - enable default server-side encryption,\n  - add a lifecycle\
+    \ rule that expires noncurrent versions after 30 days.\nShow the complete function.\n"
   evaluator: multi_step_solution
   expected:
     steps:
-      - step: "Create the bucket with region handling"
-        pattern: 'create_bucket\s*\('
-        order: 1
-      - step: "us-east-1 special case for LocationConstraint"
-        pattern: 'us-east-1'
-        order: 2
-      - step: "Block public access"
-        pattern: 'put_public_access_block|BlockPublicAcls|PublicAccessBlockConfiguration'
-        order: 3
-      - step: "Enable versioning"
-        pattern: 'put_bucket_versioning[\s\S]{0,200}Enabled'
-        order: 4
-      - step: "Default encryption"
-        pattern: 'put_bucket_encryption|ServerSideEncryptionConfiguration|SSEAlgorithm'
-        order: 5
-      - step: "Lifecycle rule for noncurrent versions"
-        pattern: 'NoncurrentVersionExpiration|NoncurrentDays'
-        order: 6
+    - step: Create the bucket with region handling
+      pattern: create_bucket\s*\(
+      order: 1
+    - step: us-east-1 special case for LocationConstraint
+      pattern: us-east-1
+      order: 2
+    - step: Block public access
+      pattern: put_public_access_block|BlockPublicAcls|PublicAccessBlockConfiguration
+      order: 3
+    - step: Enable versioning
+      pattern: put_bucket_versioning[\s\S]{0,200}Enabled
+      order: 4
+    - step: Default encryption
+      pattern: put_bucket_encryption|ServerSideEncryptionConfiguration|SSEAlgorithm
+      order: 5
+    - step: Lifecycle rule for noncurrent versions
+      pattern: NoncurrentVersionExpiration|NoncurrentDays
+      order: 6
     must_not:
-      - '(?i)\bACL\s*=\s*[''"]public-read'
+    - (?i)\bACL\s*=\s*['"]public-read
+    ordered: false
 
 - id: TF-09
   category: Terminal File Operations
   difficulty: expert
-  description: "tar size field: octal-ASCII plus the obscure GNU base-256 extension"
-  prompt: |
-    A tar header stores the file size at offset 124 as an 11-byte field. POSIX stores it as an
-    octal ASCII string padded with NUL or space characters. GNU tar switches to a base-256
-    encoding when the first byte has its high bit set: the remaining bytes are the file size as
-    a big-endian binary integer (used for sizes that overflow the octal field).
-    Write `parse_tar_size(field: bytes) -> int` that decodes BOTH encodings. `field` is always
-    exactly 11 bytes.
-    Reply with ONLY the Python code in a code block.
+  description: 'tar size field: octal-ASCII plus the obscure GNU base-256 extension'
+  prompt: 'A tar size field is 12 bytes at header offset 124. Decode nonnegative sizes only. ASCII octal
+    fields are padded with NUL or spaces; all-padding means zero. For the GNU base-256 form used here,
+    the first byte is exactly 0x80 and the remaining 11 bytes encode an unsigned big-endian size. Implement
+    parse_tar_size(field: bytes) -> int. The harness passes actual bytes, exactly 12 long. Return Python
+    code only.'
   evaluator: code_exec
   expected:
-    - function: parse_tar_size
-      args: [[48, 48, 48, 48, 48, 48, 48, 49, 49, 51, 48]]
-      expected: 600
-    - function: parse_tar_size
-      args: [[48, 48, 48, 48, 48, 48, 49, 49, 51, 48, 32]]
-      expected: 600
-    - function: parse_tar_size
-      args: [[48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48]]
-      expected: 0
-    - function: parse_tar_size
-      args: [[128, 0, 0, 0, 0, 0, 0, 0, 0, 2, 88]]
-      expected: 600
+  - function: test_parse_tar_size
+    args:
+    - - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 49
+      - 49
+      - 51
+      - 48
+      - 0
+    expected: 600
+    relative: 0
+    tolerance: 0
+  - function: test_parse_tar_size
+    args:
+    - - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 49
+      - 49
+      - 51
+      - 48
+      - 32
+    expected: 600
+    relative: 0
+    tolerance: 0
+  - function: test_parse_tar_size
+    args:
+    - - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 48
+      - 0
+    expected: 0
+    relative: 0
+    tolerance: 0
+  - function: test_parse_tar_size
+    args:
+    - - 128
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 2
+      - 88
+    expected: 600
+    relative: 0
+    tolerance: 0
+  - function: test_parse_tar_size
+    args:
+    - - 128
+      - 0
+      - 0
+      - 1
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 17
+    expected: 18446744073709551633
+    relative: 0
+    tolerance: 0
+  - function: test_parse_tar_size
+    args:
+    - - 32
+      - 32
+      - 32
+      - 32
+      - 32
+      - 32
+      - 32
+      - 32
+      - 32
+      - 32
+      - 32
+      - 32
+    expected: 0
+    relative: 0
+    tolerance: 0
+  source: https://www.gnu.org/software/tar/manual/html_node/Standard.html

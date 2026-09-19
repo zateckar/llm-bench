@@ -248,16 +248,26 @@
   difficulty: hard
   source: challenge-v2
   description: Replica resolution with equal-version conflicts and tombstones
-  prompt: |
-    Replicas contain key -> (version,value):
+  prompt: 'Replicas contain key -> (version,value):
+
     A: x=(4,red), y=(7,up). B: x=(5,blue), y=(6,down).
+
     C: x=(5,green), y=(7,up). D: x=(3,red), y=(8,null).
+
     Each read uses only its named responders, independently, with no repair.
+
     Pick the highest version returned. If distinct values tie at that version,
+
     return {status:"conflict",version:N} with NO value field. Otherwise return
-    {status:"ok",version:N,value:V}, or status:"deleted" for a null tombstone.
+
+    {status:"ok",version:N,value:V}, or {status:"deleted",version:N,value:null} for a null tombstone.
+    The null value field is required.
+
     Resolve reads in order: x from A+B, x from B+C, y from A+C, y from B+D.
+
     Return JSON {"reads": [four result objects]}.
+
+    '
   evaluator: json_match
   expected:
     value:

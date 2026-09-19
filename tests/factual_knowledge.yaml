@@ -18,17 +18,25 @@
 - id: FK-02
   category: Factual Knowledge
   difficulty: hard
-  description: "Multi-hop arithmetic over four separate facts"
-  prompt: "Multiply the number of protons in a gold nucleus by the oxidation state of chromium in potassium dichromate, then subtract the mass number of the most abundant carbon isotope. What is the result? Reply with just the number."
+  description: Multi-hop arithmetic over four separate facts
+  prompt: Multiply the number of protons in a gold nucleus by the oxidation state of chromium in potassium
+    dichromate, then subtract the mass number of the most abundant carbon isotope. What is the result?
+    Reply with just the number.
   evaluator: numeric_match
-  expected: 462.0
+  expected:
+    value: 462.0
+    relative: 0
+    tolerance: 0
 
 - id: FK-03
   category: Factual Knowledge
   difficulty: hard
-  prompt: "What is the smallest Sophie Germain prime greater than 100? Reply with just the number."
+  prompt: What is the smallest Sophie Germain prime greater than 100? Reply with just the number.
   evaluator: numeric_match
-  expected: 113.0
+  expected:
+    value: 113.0
+    relative: 0
+    tolerance: 0
 
 - id: FK-04
   category: Factual Knowledge
@@ -50,10 +58,15 @@
 - id: FK-06
   category: Factual Knowledge
   difficulty: hard
-  prompt: "Name the deepest oceanic trench in the Atlantic Ocean and the name of its deepest point."
-  evaluator: contains_keywords
+  prompt: Name the oceanic trench containing the deepest measured seafloor in the Atlantic. Return JSON
+    {"trench":name}, using the full English name ending in Trench. Do not name a historically disputed
+    subdivision.
+  evaluator: json_match
   expected:
-    all: ["puerto rico", "milwaukee"]
+    value:
+      trench: Puerto Rico Trench
+    mode: exact
+    strict_json: true
 
 - id: FK-07
   category: Factual Knowledge
@@ -136,10 +149,13 @@
 - id: FK-16
   category: Factual Knowledge
   difficulty: hard
-  description: "Requires the number, not just the mechanism"
-  prompt: "How many code points does the Unicode codespace contain in total? Reply with just the number."
+  description: Requires the number, not just the mechanism
+  prompt: How many code points does the Unicode codespace contain in total? Reply with just the number.
   evaluator: numeric_match
-  expected: 1114112.0
+  expected:
+    value: 1114112.0
+    relative: 0
+    tolerance: 0
 
 - id: FK-17
   category: Factual Knowledge
@@ -153,9 +169,13 @@
 - id: FK-18
   category: Factual Knowledge
   difficulty: hard
-  prompt: "What is the maximum value the TCP receive-window field can hold without the window-scale option, in bytes? Reply with just the number."
+  prompt: What is the maximum value the TCP receive-window field can hold without the window-scale option,
+    in bytes? Reply with just the number.
   evaluator: numeric_match
-  expected: 65535.0
+  expected:
+    value: 65535.0
+    relative: 0
+    tolerance: 0
 
 - id: FK-19
   category: Factual Knowledge
@@ -174,12 +194,21 @@
 - id: FK-21
   category: Factual Knowledge
   difficulty: hard
-  prompt: "Name the metal with the highest melting point of any metallic element, and give that melting point in degrees Celsius rounded to the nearest 10."
+  prompt: Name the metal with the highest melting point of any metallic element, and give that melting
+    point in degrees Celsius rounded to the nearest 10.
   evaluator: contains_keywords
   expected:
-    all: ["tungsten"]
+    all:
+    - tungsten
     groups:
-      - ["3420", "3422", "3410", "3430"]
+    - - '3420'
+      - '3422'
+      - '3410'
+      - '3430'
+      - 3,420
+      - 3,422
+      - 3,410
+      - 3,430
 
 - id: FK-22
   category: Factual Knowledge
@@ -200,10 +229,11 @@
 - id: FK-23
   category: Factual Knowledge
   difficulty: expert
+  source: https://physics.nist.gov/Pubs/AtSpec/node01.html
   description: "Named, obscure physical constant; models often guess Planck or Avogadro"
   prompt: "What is the numerical value of the Rydberg constant (R-infinity), in inverse metres, rounded to the nearest whole number? Reply with just the number."
   evaluator: numeric_match
-  expected: 10973731.0
+  expected: 10973732.0
 
 - id: FK-24
   category: Factual Knowledge
@@ -229,17 +259,22 @@
 - id: FK-26
   category: Factual Knowledge
   difficulty: expert
-  description: "Multi-hop table fact; exact one-decimal value required"
-  prompt: |
-    Answer both parts, then end your reply with a single line in exactly this format:
+  description: Multi-hop table fact; exact one-decimal value required
+  prompt: 'Answer both parts, then end your reply with a single line in exactly this format:
+
     `ANSWERS: <a>, <b>`
 
-    (a) What is the standard enthalpy of formation of gaseous water at 298 K, in kJ/mol, to one decimal place (state it as a negative number)?
+
+    (a) What is the standard enthalpy of formation of gaseous water at 298 K, in kJ/mol, to one decimal
+    place (state it as a negative number)?
+
     (b) What is the first ionisation energy of the helium atom, in electron volts, to one decimal place?
+
+    '
   evaluator: regex_all
   expected:
     patterns:
-      - '(?im)-?\s*241\.8\s*,\s*24\.6'
+    - (?im)^\s*ANSWERS:\s*-241\.8\s*,\s*24\.6\s*\.?\s*$
 
 - id: FK-27
   category: Factual Knowledge

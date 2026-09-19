@@ -16,6 +16,9 @@
     </div>
     <p class="text-xs text-slate-400">Seeds {{ quality.quality_config.seeds|join(', ') }} · {{ quality.quality_config.split }} · {{ quality.quality_config.variants }} variant(s) per family</p>
     <div class="flex flex-wrap gap-3 text-sm text-slate-300">{% for name, count in qs.outcomes.items() %}<span>{{ name|replace('_',' ') }}: {{ count }}</span>{% endfor %}</div>
+    {% if qs.get('category_balanced_pass_rate') is not none %}<p class="text-sm text-slate-300">Category/family-balanced full passes: {{ '%.1f%%'|format(qs.category_balanced_pass_rate*100) }}. Partial credit is included in the capability mean above.</p>{% endif %}
+    {% if qs.get('heuristic_count', 0) %}<p class="text-sm text-slate-400">{{ qs.heuristic_count }} legacy prose-pattern checks are diagnostic only ({{ '%.1f%%'|format(qs.heuristic_mean*100) }} coverage). They are excluded from capability scores because keyword coverage cannot establish factual correctness.</p>{% endif %}
+    {% if qs.outcomes.get('truncation', 0) %}<p class="text-sm text-amber-300">{{ qs.outcomes.truncation }} answers hit the output limit and remain scored failures. This ranking reflects the available output budget as well as capability. Compare models with identical budgets.</p>{% endif %}
     <p class="text-xs text-slate-500">{{ qs.confidence_method }} {{ qs.cost_note }}</p>
     {% if qs.interactive.tasks %}<p class="text-sm text-slate-300">Interactive tasks: {{ qs.interactive.successes }}/{{ qs.interactive.tasks }} succeeded; {{ qs.interactive.calls }} calls, {{ qs.interactive.unnecessary_calls }} excess calls, {{ qs.interactive.violations }} authorization violations.</p>{% endif %}
     {% if qs.context_quality %}
