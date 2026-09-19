@@ -10,6 +10,10 @@ from app.database import fetch_one
 
 serializer = URLSafeTimedSerializer(SECRET_KEY)
 
+# One week: both the signed token's max_age and the browser cookie must agree,
+# so a single constant keeps them from drifting apart.
+SESSION_MAX_AGE = 86400 * 7
+
 
 # bcrypt 5.x raises ValueError instead of truncating past this limit.
 MAX_PASSWORD_BYTES = 72
@@ -41,7 +45,7 @@ def decode_full_session_token(token: str) -> dict | None:
     Tokens issued before token_version existed lack the key; treat them as 0.
     """
     try:
-        data = serializer.loads(token, max_age=86400 * 7)  # 7 days
+        data = serializer.loads(token, max_age=SESSION_MAX_AGE)
     except (BadSignature, SignatureExpired):
         return None
     if not data.get("user_id"):
@@ -100,7 +104,7 @@ def set_session_cookie(response: RedirectResponse, user_id: int, token_version: 
     response.set_cookie(
         "session",
         token,
-        max_age=86400 * 7,
+        max_age=SESSION_MAX_AGE,
         httponly=True,
         samesite="strict",
         secure=COOKIE_SECURE,
