@@ -287,10 +287,10 @@ async def admin_start_run(
 
     run_id = await execute(
         """INSERT INTO test_runs
-               (model_id, status, created_by, workers, quality_config_json, run_options_json, plan_id)
+               (model_id, status, created_by, workers, run_options_json, plan_id, quality_config_json)
            VALUES (?, 'pending', ?, ?, ?, ?, ?)""",
         (model_id, user["id"], run_options["workers"],
-         json.dumps(quality_config), json.dumps(run_options), plan_id),
+         json.dumps(run_options), plan_id, json.dumps(quality_config)),
     )
 
     # Always go through the queue dispatcher: at most one run executes at a

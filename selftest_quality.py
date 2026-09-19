@@ -662,7 +662,7 @@ class ReportingTests(unittest.TestCase):
             patch.object(admin, "_admin_required", return_value={"id": 1}),
             patch.object(admin, "fetch_one", new=AsyncMock(return_value={"id": 1})),
             patch.object(admin, "execute", new=save),
-            patch("app.services.benchmark_runner.start_benchmark") as start,
+            patch("app.services.run_queue.enqueue_run", return_value=True) as enqueue,
         ):
             client = TestClient(app)
             response = client.post(
@@ -682,7 +682,7 @@ class ReportingTests(unittest.TestCase):
             self.assertEqual(config["seeds"], [19, 23])
             self.assertEqual(config["context_sizes"], [8192, 32768])
             self.assertEqual(config["split"], "evaluation")
-            self.assertTrue(start.called)
+            self.assertTrue(enqueue.called)
             save.reset_mock()
             invalid = client.post(
                 "/admin/run", data={"model_id": 1, "suite_seeds": "19", "variants": 999}
