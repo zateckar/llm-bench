@@ -49,7 +49,11 @@
                         {% elif run.status == 'failed' %}
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-fail">Failed</span>
                         {% else %}
-                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-pending">Pending</span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-pending">Queued</span>
+                        {% endif %}
+                        {% if run.plan_id %}
+                        <a href="/admin/plans" class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs text-violet-300 bg-violet-900/40"
+                           title="Part of plan #{{ run.plan_id }}">P{{ run.plan_id }}</a>
                         {% endif %}
                     </td>
                     <td>

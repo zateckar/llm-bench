@@ -339,15 +339,18 @@ async def rerun_failed(request: Request, run_id: int):
 
     error_test_ids = [r["test_id"] for r in error_results]
 
-    # Create new run
+    # Create new run; its parameters are persisted with it so the queue
+    # dispatcher can start it whenever the single-run slot is free.
     new_run_id = await execute(
-        "INSERT INTO test_runs (model_id, status, created_by, quality_config_json) VALUES (?, 'pending', ?, ?)",
-        (original_run["model_id"], user["id"], original_run.get("quality_config_json")),
+        """INSERT INTO test_runs
+               (model_id, status, created_by, quality_config_json, run_options_json)
+           VALUES (?, 'pending', ?, ?, ?)""",
+        (original_run["model_id"], user["id"], original_run.get("quality_config_json"),
+         json.dumps({"test_ids": error_test_ids})),
     )
 
-    # Start benchmark with only errored questions
-    model = await fetch_one("SELECT * FROM models WHERE id = ?", (original_run["model_id"],))
-    from app.services.benchmark_runner import start_benchmark
-    start_benchmark(new_run_id, model, test_ids=error_test_ids)
+    from app.services import run_queue
+
+    run_queue.enqueue_run(new_run_id)
 
     return RedirectResponse(url=f"/admin/run/{new_run_id}/progress", status_code=302)

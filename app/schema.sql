@@ -53,7 +53,21 @@ CREATE TABLE IF NOT EXISTS test_runs (
     perf_json TEXT,                     -- serialised PerfReport, when the perf suite ran
     quality_config_json TEXT,
     quality_json TEXT,
+    run_options_json TEXT,                -- full start parameters, so the queue can re-dispatch a pending run
+    plan_id INTEGER,                      -- set when the run belongs to a run_plans group
     FOREIGN KEY (model_id) REFERENCES models(id),
+    FOREIGN KEY (created_by) REFERENCES users(id),
+    FOREIGN KEY (plan_id) REFERENCES run_plans(id)
+);
+
+-- Run plans: a named group of runs scheduled together (now or later)
+CREATE TABLE IF NOT EXISTS run_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    created_by INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    scheduled_at TEXT,                    -- UTC ISO; NULL = as soon as the queue is free
+    status TEXT DEFAULT 'active',         -- 'active' | 'cancelled'
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 

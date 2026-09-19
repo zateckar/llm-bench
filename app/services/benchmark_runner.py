@@ -18,6 +18,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 # Add the project root to sys.path so the shared benchmark modules import cleanly
 # whether the app is started from the repo root or from inside a container.
@@ -59,15 +60,20 @@ def start_benchmark(
     slo_tps: float | None = None,
     slo_errors: float | None = None,
     req_per_user_h: float | None = None,
+    on_finish: Callable[[int], None] | None = None,
 ) -> None:
-    """Start a benchmark run in a background thread."""
+    """Start a benchmark run in a background thread.
+
+    ``on_finish`` is called with the run id exactly once, from a finally in
+    the runner thread, so the queue dispatcher can start the next pending run.
+    """
     thread = threading.Thread(
         target=_run_benchmark,
         args=(run_id, model, category, limit, test_ids, difficulty, workers,
               run_perf, concurrency_levels, run_context, context_sizes,
               context_concurrency,
               workload_mix, shared_prefix, slo_ttft_ms, slo_tps,
-              slo_errors, req_per_user_h),
+              slo_errors, req_per_user_h, on_finish),
         daemon=True,
     )
     thread.start()
@@ -306,12 +312,15 @@ def _run_benchmark(
     slo_tps: float | None,
     slo_errors: float | None,
     req_per_user_h: float | None,
+    on_finish: Callable[[int], None] | None,
 ) -> None:
     """Run a benchmark and make every unexpected failure terminal.
 
     Keep this wrapper outside the implementation so failures during imports,
     endpoint validation, suite hashing, or database setup cannot strand a run
     in ``running`` before the implementation's more detailed guards begin.
+    ``on_finish`` fires exactly once no matter how the run ends, so the queue
+    dispatcher always gets its slot back.
     """
     try:
         _run_benchmark_impl(
@@ -323,6 +332,12 @@ def _run_benchmark(
     except Exception as e:  # noqa: BLE001
         logger.exception("Benchmark run %d failed outside the normal lifecycle", run_id)
         _safe_mark_run_failed(run_id, str(e), workers)
+    finally:
+        if on_finish is not None:
+            try:
+                on_finish(run_id)
+            except Exception:  # noqa: BLE001
+                logger.exception("on_finish callback failed for run %d", run_id)
 
 
 def _run_benchmark_impl(

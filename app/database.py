@@ -42,6 +42,8 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("test_results", "request_ok", "INTEGER DEFAULT 1"),
     ("benchmark_progress", "phase", "TEXT DEFAULT 'quality'"),
     ("users", "token_version", "INTEGER NOT NULL DEFAULT 0"),
+    ("test_runs", "run_options_json", "TEXT"),
+    ("test_runs", "plan_id", "INTEGER"),
 ]
 
 
@@ -94,12 +96,14 @@ async def init_db():
 
         await _apply_migrations(db)
 
-        # Daemon benchmark threads do not survive an application restart. Any
-        # run that was still active at startup is therefore an interrupted run,
-        # not a run that can continue writing to the database. Mark it terminal
-        # so it no longer blocks cleanup or keeps the dashboard occupied.
+        # Daemon benchmark threads do not survive an application restart, so a
+        # run that was still *running* at startup is dead and is marked failed.
+        # A run still *pending*, however, is a queue entry whose parameters are
+        # persisted in run_options_json: the dispatcher picks it up again after
+        # startup (immediately when due, later for scheduled plans), so pending
+        # rows are deliberately kept.
         cursor = await db.execute(
-            "SELECT id FROM test_runs WHERE status IN ('pending', 'running')"
+            "SELECT id FROM test_runs WHERE status = 'running'"
         )
         interrupted_ids = [row[0] for row in await cursor.fetchall()]
         if interrupted_ids:
@@ -112,7 +116,7 @@ async def init_db():
                               THEN 'Benchmark interrupted when the application stopped.'
                               ELSE error_message
                           END
-                    WHERE status IN ('pending', 'running')""",
+                    WHERE status = 'running'""",
                 (interrupted_at,),
             )
             placeholders = ", ".join("?" for _ in interrupted_ids)

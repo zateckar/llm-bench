@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 import json
 import asyncio
 import sqlite3
+from datetime import datetime, timezone
 
 from app.auth import hash_password, set_session_cookie
 from app.database import fetch_all, fetch_one, execute
@@ -155,6 +156,79 @@ def _slo_float(raw: str, scale: float = 1.0) -> float | None:
     return value * scale
 
 
+def make_run_options(
+    *,
+    category: str, difficulty: str, limit: int, workers: int,
+    run_perf: str, concurrency: str, run_context: str,
+    context_sizes: str, context_concurrency: str, workload_mix: str,
+    shared_prefix: str, slo_ttft_ms: str, slo_tps: str,
+    slo_errors: str, req_per_user_h: str,
+) -> dict:
+    """Translate one run-form field set into start_benchmark() kwargs.
+
+    Serialisable as JSON so a pending run can be re-dispatched after a
+    restart exactly as submitted.
+    """
+    return {
+        "category": category or None,
+        "limit": limit or None,
+        "difficulty": difficulty or None,
+        "workers": max(1, min(MAX_WORKERS, int(workers or 1))),
+        "run_perf": bool(run_perf),
+        "concurrency_levels": list(_parse_concurrency(concurrency)),
+        "run_context": bool(run_context),
+        "context_sizes": list(_parse_context_sizes(context_sizes)),
+        "context_concurrency": list(_parse_context_concurrency(context_concurrency)),
+        "workload_mix": workload_mix if workload_mix in ("uniform", "mixed") else "uniform",
+        "shared_prefix": bool(shared_prefix),
+        "slo_ttft_ms": _slo_float(slo_ttft_ms),
+        "slo_tps": _slo_float(slo_tps),
+        "slo_errors": _slo_float(slo_errors, scale=0.01),
+        "req_per_user_h": _slo_float(req_per_user_h),
+    }
+
+
+def make_quality_config(
+    *,
+    static_only: str, suite_seeds: str, suite_split: str, variants: int,
+    quality_context_sizes: str, input_price: str, output_price: str,
+) -> dict:
+    """Build the QualityConfig for one run form, raising HTTP 422 on bad input."""
+    from dataclasses import asdict
+
+    from fastapi import HTTPException
+    from quality_suite import QualityConfig, parse_ints
+
+    try:
+        config = QualityConfig(generated=not bool(static_only), interactive=not bool(static_only),
+            strengthen_code=not bool(static_only), seeds=parse_ints(suite_seeds), split=suite_split, variants=variants,
+            context_sizes=parse_ints(quality_context_sizes),
+            input_price=float(input_price) if input_price.strip() else None,
+            output_price=float(output_price) if output_price.strip() else None)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return asdict(config)
+
+
+def _parse_scheduled_at(raw: str) -> str | None:
+    """Parse the datetime-local schedule field into a UTC ISO string.
+
+    The form submits server-local wall time; a time already in the past simply
+    makes the plan due immediately. Malformed input is a 422, never a silent
+    "start now".
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        local = datetime.strptime(raw, "%Y-%m-%dT%H:%M")
+    except ValueError as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=422, detail=f"Invalid schedule time: {raw!r}") from exc
+    return local.astimezone().astimezone(timezone.utc).isoformat()
+
+
 @router.post("/admin/run")
 async def admin_start_run(
     request: Request,
@@ -181,6 +255,7 @@ async def admin_start_run(
     quality_context_sizes: str = Form(""),
     input_price: str = Form(""),
     output_price: str = Form(""),
+    scheduled_at: str = Form(""),
 ):
     user = _admin_required(request)
     if isinstance(user, RedirectResponse):
@@ -190,47 +265,44 @@ async def admin_start_run(
     if not model:
         return RedirectResponse(url="/admin/run", status_code=302)
 
-    workers = max(1, min(MAX_WORKERS, workers))
-    from quality_suite import QualityConfig, parse_ints
-    from dataclasses import asdict
-    from fastapi import HTTPException
-    try:
-        quality_config = QualityConfig(generated=not bool(static_only),interactive=not bool(static_only),
-            strengthen_code=not bool(static_only),seeds=parse_ints(suite_seeds),split=suite_split,variants=variants,
-            context_sizes=parse_ints(quality_context_sizes),
-            input_price=float(input_price) if input_price.strip() else None,
-            output_price=float(output_price) if output_price.strip() else None)
-    except (ValueError,TypeError) as exc:
-        raise HTTPException(status_code=422,detail=str(exc)) from exc
+    quality_config = make_quality_config(
+        static_only=static_only, suite_seeds=suite_seeds, suite_split=suite_split,
+        variants=variants, quality_context_sizes=quality_context_sizes,
+        input_price=input_price, output_price=output_price)
+    run_options = make_run_options(
+        category=category, difficulty=difficulty, limit=limit, workers=workers,
+        run_perf=run_perf, concurrency=concurrency, run_context=run_context,
+        context_sizes=context_sizes, context_concurrency=context_concurrency,
+        workload_mix=workload_mix, shared_prefix=shared_prefix,
+        slo_ttft_ms=slo_ttft_ms, slo_tps=slo_tps, slo_errors=slo_errors,
+        req_per_user_h=req_per_user_h)
+
+    scheduled = _parse_scheduled_at(scheduled_at)
+    plan_id = None
+    if scheduled:
+        plan_id = await execute(
+            "INSERT INTO run_plans (name, created_by, scheduled_at) VALUES (NULL, ?, ?)",
+            (user["id"], scheduled),
+        )
 
     run_id = await execute(
-        "INSERT INTO test_runs (model_id, status, created_by, workers, quality_config_json) VALUES (?, 'pending', ?, ?, ?)",
-        (model_id, user["id"], workers, json.dumps(asdict(quality_config))),
+        """INSERT INTO test_runs
+               (model_id, status, created_by, workers, quality_config_json, run_options_json, plan_id)
+           VALUES (?, 'pending', ?, ?, ?, ?, ?)""",
+        (model_id, user["id"], run_options["workers"],
+         json.dumps(quality_config), json.dumps(run_options), plan_id),
     )
 
-    from app.services.benchmark_runner import start_benchmark
+    # Always go through the queue dispatcher: at most one run executes at a
+    # time, so a submission made while another run is active waits its turn.
+    from app.services import run_queue
 
-    start_benchmark(
-        run_id,
-        model,
-        category=category or None,
-        limit=limit or None,
-        difficulty=difficulty or None,
-        workers=workers,
-        run_perf=bool(run_perf),
-        concurrency_levels=_parse_concurrency(concurrency),
-        run_context=bool(run_context),
-        context_sizes=_parse_context_sizes(context_sizes),
-        context_concurrency=_parse_context_concurrency(context_concurrency),
-        workload_mix=workload_mix if workload_mix in ("uniform", "mixed") else "uniform",
-        shared_prefix=bool(shared_prefix),
-        slo_ttft_ms=_slo_float(slo_ttft_ms),
-        slo_tps=_slo_float(slo_tps),
-        slo_errors=_slo_float(slo_errors, scale=0.01),
-        req_per_user_h=_slo_float(req_per_user_h),
-    )
-
-    return RedirectResponse(url=f"/admin/run/{run_id}/progress", status_code=302)
+    started = run_queue.enqueue_run(run_id)
+    if started:
+        return RedirectResponse(url=f"/admin/run/{run_id}/progress", status_code=302)
+    if scheduled:
+        return RedirectResponse(url="/admin/plans", status_code=302)
+    return RedirectResponse(url="/runs", status_code=302)
 
 
 @router.get("/admin/run/{run_id}/progress")

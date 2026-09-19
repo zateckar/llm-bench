@@ -265,7 +265,22 @@
             </div>
         </div>
 
+        <div class="border-t border-slate-700 pt-5">
+            <label class="block text-sm font-medium text-slate-300 mb-1">Schedule for later (optional)</label>
+            <input type="datetime-local" name="scheduled_at"
+                   class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+            <p class="text-xs text-slate-500 mt-1">
+                Leave empty to start as soon as the queue is free. Scheduled runs execute one at a time,
+                in order &mdash; the time is the server's local time.
+            </p>
+        </div>
+
         <button type="submit" class="btn-primary w-full" {% if suite_error %}disabled{% endif %}>Start Benchmark</button>
+        <p class="text-xs text-slate-500 text-center">
+            If another benchmark is running, this run is queued and starts automatically when it finishes.
+            Group several runs with a schedule on the
+            <a href="/admin/plans/new" class="text-blue-400 hover:text-blue-300">plan builder</a>.
+        </p>
     </form>
     {% endif %}
 </div>
