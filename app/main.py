@@ -63,6 +63,12 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # HTML pages ship no Cache-Control today, so browsers/proxies heuristic-
+    # cache them and a just-deployed UI fix (e.g. the plan builder) keeps
+    # serving the stale page. Tell caches to revalidate HTML every load while
+    # still allowing a cheap 304 when nothing changed.
+    if "text/html" in response.headers.get("content-type", ""):
+        response.headers.setdefault("Cache-Control", "no-cache")
     return response
 
 
