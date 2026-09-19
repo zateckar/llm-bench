@@ -47,11 +47,22 @@ if IS_PRODUCTION:
         )
         raise SystemExit(1)
 else:
-    # Development convenience: generate an ephemeral secret if none is provided,
-    # and fall back to the well-known dev password. Sessions won't survive a
-    # restart, which is fine for local dev and avoids shipping a fixed secret.
+    # Development convenience: fall back to the well-known dev password. If no
+    # SECRET_KEY is provided, persist a generated one under data/ so restart
+    # (or the reload watcher) does not silently invalidate every session by
+    # re-signing with a fresh key.
     if not SECRET_KEY:
-        SECRET_KEY = secrets.token_urlsafe(32)
+        key_file = DATA_DIR / ".dev_secret_key"
+        try:
+            if key_file.exists():
+                SECRET_KEY = key_file.read_text(encoding="utf-8").strip()
+            else:
+                SECRET_KEY = secrets.token_urlsafe(32)
+                key_file.write_text(SECRET_KEY, encoding="utf-8")
+        except OSError:
+            # Read-only data dir: fall back to an ephemeral secret (sessions
+            # won't survive a restart) rather than refuse to boot.
+            SECRET_KEY = secrets.token_urlsafe(32)
     if not ADMIN_PASSWORD:
         ADMIN_PASSWORD = _DEFAULT_ADMIN_PASSWORD
 
