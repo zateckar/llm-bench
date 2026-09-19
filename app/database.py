@@ -44,6 +44,7 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("users", "token_version", "INTEGER NOT NULL DEFAULT 0"),
     ("test_runs", "run_options_json", "TEXT"),
     ("test_runs", "plan_id", "INTEGER"),
+    ("test_runs", "created_at", "TIMESTAMP"),
 ]
 
 
@@ -75,6 +76,14 @@ async def _apply_migrations(db: aiosqlite.Connection) -> None:
                   SET passed = CASE WHEN score >= 0.5 THEN 1 ELSE 0 END,
                       pass_threshold = 0.5"""
         )
+
+    # test_runs gained created_at later; existing rows are NULL. Backfill from
+    # whatever timestamp the run has so the list shows a plausible date.
+    await db.execute(
+        """UPDATE test_runs
+              SET created_at = COALESCE(started_at, completed_at)
+            WHERE created_at IS NULL"""
+    )
 
 
 async def get_db() -> aiosqlite.Connection:

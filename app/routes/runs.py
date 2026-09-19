@@ -2,6 +2,7 @@
 
 import json
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
@@ -343,10 +344,10 @@ async def rerun_failed(request: Request, run_id: int):
     # dispatcher can start it whenever the single-run slot is free.
     new_run_id = await execute(
         """INSERT INTO test_runs
-               (model_id, status, created_by, quality_config_json, run_options_json)
-           VALUES (?, 'pending', ?, ?, ?)""",
+               (model_id, status, created_by, quality_config_json, run_options_json, created_at)
+           VALUES (?, 'pending', ?, ?, ?, ?)""",
         (original_run["model_id"], user["id"], original_run.get("quality_config_json"),
-         json.dumps({"test_ids": error_test_ids})),
+         json.dumps({"test_ids": error_test_ids}), datetime.now(timezone.utc).isoformat()),
     )
 
     from app.services import run_queue

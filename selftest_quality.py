@@ -678,7 +678,15 @@ class ReportingTests(unittest.TestCase):
                 follow_redirects=False,
             )
             self.assertEqual(response.status_code, 302)
-            config = json.loads(save.call_args.args[1][-1])
+            # Find the JSON-encoded quality config among the INSERT params by
+            # shape rather than position: the column list has grown over time.
+            _, params = save.call_args.args
+            config = None
+            for p in params:
+                if isinstance(p, str) and '"seeds"' in p:
+                    config = json.loads(p)
+                    break
+            self.assertIsNotNone(config, "quality config JSON not found in INSERT params")
             self.assertEqual(config["seeds"], [19, 23])
             self.assertEqual(config["context_sizes"], [8192, 32768])
             self.assertEqual(config["split"], "evaluation")

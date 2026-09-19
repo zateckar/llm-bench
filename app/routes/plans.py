@@ -326,10 +326,10 @@ async def plan_update(
         for model_id, quality_config, run_options in prepared:
             await db.execute(
                 """INSERT INTO test_runs
-                       (model_id, status, created_by, workers, quality_config_json, run_options_json, plan_id)
-                   VALUES (?, 'pending', ?, ?, ?, ?, ?)""",
+                       (model_id, status, created_by, workers, quality_config_json, run_options_json, plan_id, created_at)
+                   VALUES (?, 'pending', ?, ?, ?, ?, ?, ?)""",
                 (model_id, user["id"], run_options["workers"],
-                 json.dumps(quality_config), json.dumps(run_options), plan_id),
+                 json.dumps(quality_config), json.dumps(run_options), plan_id, datetime.now(timezone.utc).isoformat()),
             )
         await db.commit()
     except Exception:
@@ -375,10 +375,10 @@ async def plan_clone(request: Request, plan_id: int):
             opts = json.loads(r["run_options_json"] or "{}")
             await db.execute(
                 """INSERT INTO test_runs
-                       (model_id, status, created_by, workers, quality_config_json, run_options_json, plan_id)
-                   VALUES (?, 'pending', ?, ?, ?, ?, ?)""",
+                       (model_id, status, created_by, workers, quality_config_json, run_options_json, plan_id, created_at)
+                   VALUES (?, 'pending', ?, ?, ?, ?, ?, ?)""",
                 (r["model_id"], user["id"], opts.get("workers") or 1,
-                 r["quality_config_json"], r["run_options_json"], new_plan_id),
+                 r["quality_config_json"], r["run_options_json"], new_plan_id, datetime.now(timezone.utc).isoformat()),
             )
         await db.commit()
     except Exception:
@@ -411,10 +411,10 @@ async def _insert_plan_with_runs(
         for model_id, quality_config, run_options in prepared:
             await db.execute(
                 """INSERT INTO test_runs
-                       (model_id, status, created_by, workers, quality_config_json, run_options_json, plan_id)
-                   VALUES (?, 'pending', ?, ?, ?, ?, ?)""",
+                       (model_id, status, created_by, workers, quality_config_json, run_options_json, plan_id, created_at)
+                   VALUES (?, 'pending', ?, ?, ?, ?, ?, ?)""",
                 (model_id, user_id, run_options["workers"],
-                 json.dumps(quality_config), json.dumps(run_options), plan_id),
+                 json.dumps(quality_config), json.dumps(run_options), plan_id, datetime.now(timezone.utc).isoformat()),
             )
         await db.commit()
         return plan_id

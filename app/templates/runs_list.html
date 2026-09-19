@@ -94,8 +94,8 @@
                         {% else %}-{% endif %}
                     </td>
                     <td class="text-xs font-mono text-slate-500" title="{{ run.test_suite_hash or 'N/A' }}">{{ run.test_suite_hash or '-' }}</td>
-                    <td class="text-sm text-slate-500">{{ run.created_at[:16] if run.created_at else '-' }}</td>
-                    <td class="text-right">
+                    <td class="text-sm text-slate-500">{{ run.created_at[:16].replace('T', ' ') if run.created_at else '-' }}</td>
+                    <td class="text-right whitespace-nowrap">
                         <div class="flex items-center justify-end gap-1">
                             {% if run.status in ('running', 'pending') %}
                             <a href="/admin/run/{{ run.id }}/progress" class="btn-ghost text-xs px-2 py-1">View Progress</a>
