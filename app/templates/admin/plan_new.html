@@ -28,6 +28,9 @@
         },
         addRun() { this.runs.push(this._newRun(this.specTemplate)); },
         removeRun(i) { if (this.runs.length > 1) this.runs.splice(i, 1); },
+        missingModelIndexes() {
+            return this.runs.map((r, i) => (r.model_id == null ? i + 1 : null)).filter(v => v !== null);
+        },
         payload() { return JSON.stringify(this.runs.map(({_key, ...rest}) => rest)); }
      }">
     <div>
@@ -155,9 +158,14 @@
 
         <button type="button" @click="addRun()" class="btn-ghost w-full text-sm">+ Add another run</button>
 
+        <p x-show="missingModelIndexes().length" class="text-sm text-amber-400 text-center">
+            Run <span x-text="missingModelIndexes().join(', ')"></span>
+            <span x-text="missingModelIndexes().length > 1 ? 'need' : 'needs'"></span> a model selected before the plan can be created.
+        </p>
+
         <input type="hidden" name="runs_json" :value="payload()">
 
-        <button type="submit" class="btn-primary w-full">Create Plan</button>
+        <button type="submit" class="btn-primary w-full" :disabled="missingModelIndexes().length > 0">Create Plan</button>
         <p class="text-xs text-slate-500 text-center">
             All runs join the same single-run queue: at most one benchmark executes at a time.
         </p>
