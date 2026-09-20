@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app import database
+from app import config as app_config
 from app.routes import compare, runs
 from app.services import html_reports as reports
 from llm_client import ClientConfig
@@ -205,7 +205,7 @@ class ReportTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.path = Path(self.directory.name) / "reports.db"
         fixture_database(self.path)
-        self.db_patch = patch.object(database, "DATABASE_PATH", self.path)
+        self.db_patch = patch.object(app_config, "DATABASE_PATH", self.path)
         self.db_patch.start()
         app = FastAPI()
         app.include_router(runs.router)
@@ -371,7 +371,7 @@ if __name__ == "__main__":
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "fixture.db"
             fixture_database(path)
-            with patch.object(database, "DATABASE_PATH", path):
+            with patch.object(app_config, "DATABASE_PATH", path):
                 selected = [asyncio.run(reports.load_run(i)) for i in (1, 2)]
                 (directory / "comparison.html").write_text(
                     reports.render_report(selected), encoding="utf-8"

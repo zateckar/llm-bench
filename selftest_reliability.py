@@ -10,7 +10,9 @@ from evaluators import EVALUATORS, eval_json_match, eval_numeric_match, values_e
 from llm_client import ChatClient, ClientConfig, _extract_message_text
 from models import RequestMetrics, TokenUsage
 from quality_execution import score_response
-from quality_suite import QualityConfig, assemble_questions
+from quality_suite import (
+    DEFAULT_MAX_OUTPUT_TOKENS, MAX_MAX_OUTPUT_TOKENS, QualityConfig, assemble_questions,
+)
 from reliability_cases import CODE, CREATIVE_IDEALS, build_cases
 from test_loader import load_all_tests, _parse_question
 
@@ -221,14 +223,23 @@ class ReliabilityTests(unittest.TestCase):
     def test_uniform_budget_and_provenance(self):
         base = list(self.questions.values())
         default = assemble_questions(base, QualityConfig())
-        self.assertTrue(all(q.max_tokens == 16384 for q in default if not q.interaction))
+        # Interactive tasks included: one JSON action still costs a full round
+        # of reasoning, so their per-turn cap follows the run's setting too.
+        self.assertTrue(all(q.max_tokens == DEFAULT_MAX_OUTPUT_TOKENS for q in default))
         custom = assemble_questions(base, QualityConfig(max_output_tokens=32768))
-        self.assertTrue(all(q.max_tokens == 32768 for q in custom if not q.interaction))
+        self.assertTrue(all(q.max_tokens == 32768 for q in custom))
+        self.assertTrue(any(q.interaction for q in default))
         from quality_suite import suite_hash
 
-        self.assertNotEqual(suite_hash(default), suite_hash(custom))
+        # The cap is a run knob, not part of the question: changing it must not
+        # fork the suite hash, or every cap change would strand past runs in
+        # their own incomparable cohort.
+        self.assertEqual(suite_hash(default), suite_hash(custom))
         with self.assertRaises(ValueError):
             QualityConfig(max_output_tokens=True)
+        with self.assertRaises(ValueError):
+            QualityConfig(max_output_tokens=MAX_MAX_OUTPUT_TOKENS + 1)
+        QualityConfig(max_output_tokens=MAX_MAX_OUTPUT_TOKENS)
 
     def test_heuristic_passes_do_not_raise_capability(self):
         from quality_report import result_record, summarize

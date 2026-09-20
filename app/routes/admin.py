@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from app.auth import hash_password, set_session_cookie
 from app.database import fetch_all, fetch_one, execute
 from app.templates_config import templates
+from quality_suite import DEFAULT_MAX_OUTPUT_TOKENS, MAX_MAX_OUTPUT_TOKENS
 
 router = APIRouter()
 
@@ -26,6 +27,12 @@ def _admin_required(request: Request):
 
 MAX_WORKERS = 16
 DEFAULT_CONCURRENCY_LEVELS = (1, 2, 4, 8)
+
+# Reasoning models spend most of their budget inside <think>, so the cap has to
+# sit far above that or the benchmark measures the cap. One source of truth with
+# the CLI and the plan builder.
+DEFAULT_MAX_TOKENS = DEFAULT_MAX_OUTPUT_TOKENS
+MAX_MAX_TOKENS = MAX_MAX_OUTPUT_TOKENS
 
 # The GET /admin/run page re-loads the whole YAML suite on every view to list
 # exactly the categories present. The suite only changes via file edits, so a
@@ -149,6 +156,8 @@ async def admin_run_page(request: Request):
                 "1,16,64,256",
             ],
             "default_context_sizes": ",".join(str(s) for s in perf.DEFAULT_CONTEXT_SIZES),
+            "default_max_tokens": DEFAULT_MAX_TOKENS,
+            "max_max_tokens": MAX_MAX_TOKENS,
             "slo_defaults": {
                 "ttft_ms": perf.PerfConfig().slo_ttft_p95_ms,
                 "tps": perf.PerfConfig().slo_stream_tps_p50,
@@ -210,7 +219,7 @@ def make_quality_config(
     *,
     static_only: str, suite_seeds: str, suite_split: str, variants: int,
     quality_context_sizes: str, input_price: str, output_price: str,
-    quality_max_tokens: int = 16384,
+    quality_max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> dict:
     """Build the QualityConfig for one run form, raising HTTP 422 on bad input."""
     from dataclasses import asdict
@@ -317,7 +326,7 @@ async def admin_start_run(
     variants: int = Form(1),
     static_only: str = Form(""),
     quality_context_sizes: str = Form(""),
-    quality_max_tokens: int = Form(16384),
+    quality_max_tokens: int = Form(DEFAULT_MAX_TOKENS),
     input_price: str = Form(""),
     output_price: str = Form(""),
     scheduled_at: str = Form(""),

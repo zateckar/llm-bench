@@ -24,7 +24,6 @@ Exit code 0 if every case behaves as specified.
 from __future__ import annotations
 
 import asyncio
-import os
 import sqlite3
 import sys
 import tempfile
@@ -49,7 +48,12 @@ def check(name: str, condition: bool, detail: str = "") -> None:
 # test connections run in autocommit mode to keep them mutually visible.
 # ---------------------------------------------------------------------------
 
-_tmp = tempfile.TemporaryDirectory()
+# Windows keeps the SQLite file open through pooled connections well after the
+# last close, so the tempdir teardown would raise a harmless PermissionError at
+# interpreter exit. Ignoring cleanup errors removes the need for the os._exit(0)
+# this file used to end with -- that skipped the stdout flush, so every "ok"
+# line was silently dropped whenever output was piped rather than a terminal.
+_tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
 db_path = Path(_tmp.name) / "bench.db"
 
 
@@ -69,6 +73,7 @@ def _test_connect(*args, **kwargs):
 
 import app.config as app_config  # noqa: E402
 
+_real_data_dir, _real_db_path = app_config.DATA_DIR, app_config.DATABASE_PATH
 app_config.DATA_DIR = Path(_tmp.name)
 app_config.DATABASE_PATH = db_path
 
@@ -221,12 +226,14 @@ check("wedged slot clears and next run starts", _rec.started == [r_next],
       f"started={_rec.started}")
 
 run_queue._spawn_benchmark = _original_spawn
+# Undo the global patches: this module is picked up by `unittest discover` under
+# the selftest_*.py pattern, and a leaked sqlite3.connect or scratch DATABASE_PATH
+# would follow every module loaded after it.
+sqlite3.connect = _real_connect
+app_config.DATA_DIR, app_config.DATABASE_PATH = _real_data_dir, _real_db_path
 
 print()
 if FAILURES:
     print(f"{len(FAILURES)} failure(s): {', '.join(FAILURES)}")
     sys.exit(1)
 print("All run-queue self-tests passed.")
-# Windows holds the DB file open through pooled connections; skip the tempdir
-# cleanup to avoid a noisy (harmless) atexit PermissionError.
-os._exit(0)

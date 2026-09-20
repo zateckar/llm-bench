@@ -10,8 +10,14 @@ from fastapi.responses import RedirectResponse
 from app.auth import require_admin
 from app.database import fetch_all, fetch_one
 from app.templates_config import templates
+from quality_suite import DEFAULT_MAX_OUTPUT_TOKENS, MAX_MAX_OUTPUT_TOKENS
 
 logger = logging.getLogger(__name__)
+
+# One source of truth for the output cap, so the plan builder cannot drift from
+# the suite default the CLI and the run form use.
+DEFAULT_MAX_TOKENS = DEFAULT_MAX_OUTPUT_TOKENS
+MAX_MAX_TOKENS = MAX_MAX_OUTPUT_TOKENS
 
 router = APIRouter()
 
@@ -48,7 +54,10 @@ def _spec_to_kwargs(spec: dict, fields: tuple[str, ...]) -> dict:
             kwargs[key] = "1" if value else ""
         elif key in ("limit", "workers", "variants", "quality_max_tokens"):
             try:
-                default = 16384 if key == "quality_max_tokens" else 0 if key == "limit" else 1
+                default = (
+                    DEFAULT_MAX_TOKENS if key == "quality_max_tokens"
+                    else 0 if key == "limit" else 1
+                )
                 kwargs[key] = int(value) if value not in (None, "") else default
             except (TypeError, ValueError) as exc:
                 raise HTTPException(status_code=422, detail=f"Invalid {key} in plan run") from exc
@@ -67,7 +76,7 @@ def _plan_spec_defaults() -> dict:
         "workload_mix": "uniform", "shared_prefix": False,
         "slo_ttft_ms": "", "slo_tps": "", "slo_errors": "", "req_per_user_h": "",
         "suite_seeds": "1729", "suite_split": "development", "variants": 1,
-        "quality_max_tokens": 16384,
+        "quality_max_tokens": DEFAULT_MAX_TOKENS,
         "static_only": False, "quality_context_sizes": "",
         "input_price": "", "output_price": "",
     }
@@ -149,7 +158,7 @@ def _run_row_to_spec(run: dict) -> dict:
                             or qconf.get("interactive", True)
                             or qconf.get("strengthen_code", True)),
         "quality_context_sizes": s(qconf.get("context_sizes")),
-        "quality_max_tokens": qconf.get("max_output_tokens", 16384),
+        "quality_max_tokens": qconf.get("max_output_tokens", DEFAULT_MAX_TOKENS),
         "input_price": s(qconf.get("input_price")),
         "output_price": s(qconf.get("output_price")),
     })
@@ -211,6 +220,7 @@ async def plan_new_page(request: Request):
         {
             "models": models,
             "spec_defaults_json": json.dumps(_plan_spec_defaults()),
+            "max_max_tokens": MAX_MAX_TOKENS,
             "prefill_json": "null", "plan_name": "", "plan_scheduled_input": "",
             "action": "/admin/plans", "heading": "New Run Plan",
             "browser_now_iso": _browser_now_iso(),
@@ -242,6 +252,7 @@ async def plan_edit_page(request: Request, plan_id: int):
         {
             "models": models,
             "spec_defaults_json": json.dumps(_plan_spec_defaults()),
+            "max_max_tokens": MAX_MAX_TOKENS,
             "prefill_json": json.dumps(specs),
             "plan_name": plan.get("name") or "",
             "plan_scheduled_input": utc_to_local_input(plan.get("scheduled_at")),

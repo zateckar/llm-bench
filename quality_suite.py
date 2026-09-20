@@ -12,6 +12,15 @@ from models import Question
 
 REVISION = "quality-v5"
 
+# Output budget for one question -- one turn for an interactive task -- with
+# reasoning included. Reasoning models routinely spend tens of thousands of
+# tokens inside <think> before the first answer token, so the default has to
+# leave real headroom: at 16384 a fifth of a 404-question run hit the cap with
+# no answer emitted at all, which scores the cap rather than the model.
+MIN_MAX_OUTPUT_TOKENS = 1024
+DEFAULT_MAX_OUTPUT_TOKENS = 65536
+MAX_MAX_OUTPUT_TOKENS = 262144
+
 # Prose pattern coverage is useful diagnostic information, but cannot establish
 # correctness: negating a keyword, omitting an untested claim or using a synonym
 # can all change the verdict. Keep these tasks out of the capability headline.
@@ -43,11 +52,16 @@ class QualityConfig:
     context_sizes: tuple[int, ...] = ()
     input_price: float | None = None
     output_price: float | None = None
-    max_output_tokens: int = 16384
+    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
 
     def __post_init__(self):
-        if type(self.max_output_tokens) is not int or not 1024 <= self.max_output_tokens <= 65536:
-            raise ValueError("max_output_tokens must be an integer in 1024..65536")
+        if type(self.max_output_tokens) is not int or not (
+            MIN_MAX_OUTPUT_TOKENS <= self.max_output_tokens <= MAX_MAX_OUTPUT_TOKENS
+        ):
+            raise ValueError(
+                "max_output_tokens must be an integer in "
+                f"{MIN_MAX_OUTPUT_TOKENS}..{MAX_MAX_OUTPUT_TOKENS}"
+            )
         if any(
             type(v) is not bool for v in (self.generated, self.interactive, self.strengthen_code)
         ):
@@ -92,8 +106,12 @@ def rng_for(config, seed, variant, family):
 
 
 def fingerprint(q):
+    # max_tokens is a run knob, not part of the question: raising the output cap
+    # must not fork the suite hash and split runs into incomparable cohorts.
+    # The response cache keys on it separately (benchmark.question_fingerprint).
+    fields = {k: v for k, v in asdict(q).items() if k != "max_tokens"}
     return hashlib.sha256(
-        json.dumps(asdict(q), sort_keys=True, ensure_ascii=True).encode()
+        json.dumps(fields, sort_keys=True, ensure_ascii=True).encode()
     ).hexdigest()
 
 
@@ -357,5 +375,10 @@ def assemble_questions(base, config):
                 questions.append(long_context_question(config, seed, variant, size))
     # Every model receives the same declared cap, including baseline anchors.
     # Keep truncations as failures; a larger budget cannot recover past answers.
-    return [replace(q, max_tokens=config.max_output_tokens) if not q.interaction else q
-            for q in questions]
+    # The cap must stay well clear of what reasoning models actually spend: at
+    # 16384 a fifth of one run burned the whole budget inside <think> and
+    # emitted no answer at all, which measures the cap rather than the model.
+    # Interactive tasks take the same cap per turn -- one JSON action still
+    # costs a full round of reasoning -- bounded across turns by their own
+    # total_output_budget.
+    return [replace(q, max_tokens=config.max_output_tokens) for q in questions]

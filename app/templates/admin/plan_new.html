@@ -117,7 +117,7 @@
                 </div>
                 <div class="flex flex-wrap gap-x-6 gap-y-2">
                     <label class="text-sm text-slate-300">Quality output tokens
-                        <input type="number" x-model.number="run.quality_max_tokens" min="1024" max="65536" class="bg-slate-800 rounded px-2 py-1">
+                        <input type="number" x-model.number="run.quality_max_tokens" min="1024" max="{{ max_max_tokens }}" class="bg-slate-800 rounded px-2 py-1">
                     </label>
                     <label class="flex items-center gap-2 text-sm text-slate-300">
                         <input type="checkbox" x-model="run.run_perf" class="rounded bg-slate-800 border-slate-600 text-blue-500">

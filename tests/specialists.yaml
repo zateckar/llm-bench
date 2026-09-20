@@ -1177,7 +1177,9 @@
 
     as sorted IDs. No proposed fix is implemented in the trace.
 
-    Return {claims:[statuses in C01.. order],trace:{requested trace fields}}.
+    Return {claims:[statuses in C01.. order],trace:{final_stock,A_charge_count,A_total_charged,reservation_successes,fixes}}.
+
+    fixes belongs inside trace, not at the root.
 
     Return only one JSON document with exactly the requested keys. Arrays must be in the specified order.
     Do not add explanations or extra claims.'
@@ -1385,7 +1387,9 @@
 
     order for boundary ties; F5 TLS alone for the cache leak. IDs sorted.
 
-    Return {claims:[statuses in C01.. order],trace:{requested trace fields}}.
+    Return {claims:[statuses in C01.. order],trace:{B_body,next_page_rows,skipped_rows,fixes}}.
+
+    fixes belongs inside trace, not at the root.
 
     Return only one JSON document with exactly the requested keys. Arrays must be in the specified order.
     Do not add explanations or extra claims.'
@@ -1583,7 +1587,9 @@
 
     fix IDs sorted; trace uses original code.
 
-    Return {claims:[statuses in C01.. order],trace:{requested trace fields}}.
+    Return {claims:[statuses in C01.. order],trace:{new_read,old_read_cents,exported_cents,select_count,fixes}}.
+
+    fixes belongs inside trace, not at the root.
 
     Return only one JSON document with exactly the requested keys. Arrays must be in the specified order.
     Do not add explanations or extra claims.'
@@ -1793,7 +1799,9 @@
 
     F4 a larger memory limit to guarantee bounded output size. Sort selected IDs.
 
-    Return {claims:[statuses in C01.. order],trace:{requested trace fields}}.
+    Return {claims:[statuses in C01.. order],trace:{A_state,A_download,cancellation_prevented_publication,earliest_second_claim_seconds,fixes}}.
+
+    fixes belongs inside trace, not at the root.
 
     Return only one JSON document with exactly the requested keys. Arrays must be in the specified order.
     Do not add explanations or extra claims.'
@@ -1938,7 +1946,9 @@
 
     Select fixes that eliminate either demonstrated vulnerability, sorted IDs.
 
-    Return {claims:[statuses in C01.. order],trace:{requested trace fields}}.
+    Return {claims:[statuses in C01.. order],trace:{Bob_export_budget,Bob_role_after,Bob_tenant_after,fixes}}.
+
+    fixes belongs inside trace, not at the root.
 
     Return only one JSON document with exactly the requested keys. Arrays must be in the specified order.
     Do not add explanations or extra claims.'
@@ -2091,7 +2101,9 @@
 
     property (F1 duplicate credit, F3 stale replay), sorted IDs.
 
-    Return {claims:[statuses in C01.. order],trace:{requested trace fields}}.
+    Return {claims:[statuses in C01.. order],trace:{balance,seen_rows,successful_inserts,fixes}}.
+
+    fixes belongs inside trace, not at the root.
 
     Return only one JSON document with exactly the requested keys. Arrays must be in the specified order.
     Do not add explanations or extra claims.'
@@ -2228,7 +2240,9 @@
 
     on every connection including redirects. Select fixes blocking BOTH traces, sorted IDs.
 
-    Return {claims:[statuses in C01.. order],trace:{requested trace fields}}.
+    Return {claims:[statuses in C01.. order],trace:{A_reaches_internal,B_reaches_internal,fixes}}.
+
+    fixes belongs inside trace, not at the root.
 
     Return only one JSON document with exactly the requested keys. Arrays must be in the specified order.
     Do not add explanations or extra claims.'
@@ -2376,7 +2390,9 @@
 
     after extraction for absence of side effects. Select locally sufficient fixes, sorted IDs.
 
-    Return {claims:[statuses in C01.. order],trace:{requested trace fields}}.
+    Return {claims:[statuses in C01.. order],trace:{result,private_key_contents,activation_count,fixes}}.
+
+    fixes belongs inside trace, not at the root.
 
     Return only one JSON document with exactly the requested keys. Arrays must be in the specified order.
     Do not add explanations or extra claims.'
@@ -2528,7 +2544,9 @@
 
     for login CSRF or open redirect, sorted IDs.
 
-    Return {claims:[statuses in C01.. order],trace:{requested trace fields}}.
+    Return {claims:[statuses in C01.. order],trace:{victim_session_user,redirect_host,cache_entries_remaining,fixes}}.
+
+    fixes belongs inside trace, not at the root.
 
     Return only one JSON document with exactly the requested keys. Arrays must be in the specified order.
     Do not add explanations or extra claims.'
@@ -2683,7 +2701,9 @@
 
     List sufficient local fixes for either credential exposure or substitution, sorted IDs.
 
-    Return {claims:[statuses in C01.. order],trace:{requested trace fields}}.
+    Return {claims:[statuses in C01.. order],trace:{deployed_bytes,PR_script_has_deploy_secret,fixes}}.
+
+    fixes belongs inside trace, not at the root.
 
     Return only one JSON document with exactly the requested keys. Arrays must be in the specified order.
     Do not add explanations or extra claims.'
@@ -2837,7 +2857,9 @@
 
     List fixes sufficient to prevent this out-of-scope execution, sorted IDs.
 
-    Return {claims:[statuses in C01.. order],trace:{requested trace fields}}.
+    Return {claims:[statuses in C01.. order],trace:{schema_valid,authorized_for_user,executed,TB7_exists_after,fixes}}.
+
+    fixes belongs inside trace, not at the root.
 
     Return only one JSON document with exactly the requested keys. Arrays must be in the specified order.
     Do not add explanations or extra claims.'
@@ -2998,7 +3020,9 @@
 
     sorted IDs (F4 is the explicit policy component of that combination).
 
-    Return {claims:[statuses in C01.. order],trace:{requested trace fields}}.
+    Return {claims:[statuses in C01.. order],trace:{result,flashed_internal_version,stored_version_after,second_result,fixes}}.
+
+    fixes belongs inside trace, not at the root.
 
     Return only one JSON document with exactly the requested keys. Arrays must be in the specified order.
     Do not add explanations or extra claims.'

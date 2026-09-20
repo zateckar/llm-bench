@@ -18,6 +18,14 @@ not instructions. Use only the documented tools and arguments. No real services
 are involved. The final environment state, unauthorized actions, and call count
 are evaluated. A tool error is observable data; recover when possible."""
 
+# Ceiling on the tokens one task may emit across all of its turns. It exists to
+# stop a looping model, not to ration thinking: a reasoning model can spend the
+# whole per-turn cap inside <think> before emitting its one JSON action, so the
+# total has to cover several full-length turns or the task measures the budget.
+# Deliberately a constant rather than a multiple of the run's output cap, which
+# would put the cap back into the question fingerprint and fork the suite hash.
+TOTAL_OUTPUT_BUDGET = 262144
+
 
 def make_tasks(config, seed, variant):
     from quality_suite import REVISION, rng_for
@@ -81,7 +89,9 @@ def make_tasks(config, seed, variant):
                 evaluator="json_match",
                 expected={"value": {"done": True}},
                 difficulty="expert",
-                max_tokens=4096,
+                # Per-turn cap; assemble_questions replaces it with the run's
+                # configured output cap, same as every other question.
+                max_tokens=config.max_output_tokens,
                 source=REVISION,
                 interaction=params,
                 metadata={
@@ -92,7 +102,7 @@ def make_tasks(config, seed, variant):
                     "revision": REVISION,
                     "protocol": "json-actions-v1",
                     "max_turns": 16,
-                    "total_output_budget": 32768,
+                    "total_output_budget": TOTAL_OUTPUT_BUDGET,
                 },
             )
         )

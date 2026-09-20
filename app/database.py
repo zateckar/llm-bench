@@ -4,7 +4,14 @@ import aiosqlite
 from pathlib import Path
 from datetime import datetime, timezone
 
-from app.config import DATABASE_PATH, DATA_DIR
+# Read the location off the module at call time, never bound at import. Tests
+# (and anything else) redirect the app to a scratch database by assigning
+# app.config.DATABASE_PATH; a `from app.config import DATABASE_PATH` here would
+# freeze the real path at first import and silently ignore the redirect, which
+# is how the self-tests ended up writing to the production database whenever
+# another module imported app.database first. app.services.run_queue and
+# benchmark_runner already resolve it lazily -- this matches them.
+from app import config as app_config
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
@@ -88,7 +95,7 @@ async def _apply_migrations(db: aiosqlite.Connection) -> None:
 
 async def get_db() -> aiosqlite.Connection:
     """Get a database connection."""
-    db = await aiosqlite.connect(str(DATABASE_PATH))
+    db = await aiosqlite.connect(str(app_config.DATABASE_PATH))
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA journal_mode=WAL")
     await db.execute("PRAGMA foreign_keys=ON")
@@ -97,7 +104,7 @@ async def get_db() -> aiosqlite.Connection:
 
 async def init_db():
     """Initialize database schema and seed admin user."""
-    DATA_DIR.mkdir(exist_ok=True)
+    app_config.DATA_DIR.mkdir(exist_ok=True)
     db = await get_db()
     try:
         schema = SCHEMA_PATH.read_text(encoding="utf-8")

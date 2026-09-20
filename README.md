@@ -121,7 +121,7 @@ Useful options:
 | `--suite-split evaluation` | use the evaluation generator stream (default `development`) |
 | `--variants 3` | variants per generated family and seed (1–10) |
 | `--static-only` | disable generated reasoning, interactive tasks, and extra code fixtures |
-| `--quality-max-tokens 16384` | uniform quality output cap including reasoning; 1,024–65,536 |
+| `--quality-max-tokens 65536` | uniform quality output cap including reasoning; 1,024–262,144. Reasoning models spend most of it inside `<think>`, so keep real headroom: a cap that bites scores itself, not the model. Changing it does not change the suite hash. |
 | `--quality-context-sizes 8192,32768,131072` | add answer-accuracy tests at these reference context sizes |
 | `--input-price 2 --output-price 8` | estimate USD cost using supplied per-million-token rates |
 

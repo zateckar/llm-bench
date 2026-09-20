@@ -57,7 +57,9 @@ from perf import (
     run_perf_suite,
 )
 from test_loader import SuiteError, load_all_tests
-from quality_suite import QualityConfig, assemble_questions, parse_ints, suite_hash
+from quality_suite import (
+    DEFAULT_MAX_OUTPUT_TOKENS, QualityConfig, assemble_questions, parse_ints, suite_hash,
+)
 from quality_execution import execute_question, score_response
 from quality_report import make_report as make_quality_report, markdown as quality_markdown
 
@@ -624,8 +626,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--variants", type=int, default=1, help="variants per generated family and seed, 1..10")
     parser.add_argument("--static-only", action="store_true", help="disable generated reasoning, interactive tasks, and extra code tests")
     parser.add_argument("--quality-context-sizes", default="", help="accuracy at reference token sizes, e.g. 8192,32768,131072")
-    parser.add_argument("--quality-max-tokens", type=int, default=16384,
-                        help="uniform noninteractive quality output cap, including reasoning (default 16384)")
+    parser.add_argument("--quality-max-tokens", type=int, default=DEFAULT_MAX_OUTPUT_TOKENS,
+                        help="uniform noninteractive quality output cap, including reasoning "
+                             f"(default {DEFAULT_MAX_OUTPUT_TOKENS})")
     parser.add_argument("--input-price", type=float, help="USD per million input tokens for cost estimates")
     parser.add_argument("--output-price", type=float, help="USD per million output tokens for cost estimates")
     parser.add_argument(

@@ -31,10 +31,16 @@ def review_cases(make_case):
         )
         for i, (claim, _) in enumerate(claims, 1):
             prompt += f"C{i:02d}: {claim}\n"
+        # Name the trace keys instead of saying "requested trace fields". The task
+        # text introduces `fixes` in its own sentence, so a model that reads
+        # "trace" as only the "Give x, y, z" list puts fixes at the root and is
+        # graded wrong for a prompt ambiguity rather than for its analysis.
+        keys = ",".join(trace)
         prompt += (
             "\n"
             + task.strip()
-            + "\nReturn {claims:[statuses in C01.. order],trace:{requested trace fields}}."
+            + f"\nReturn {{claims:[statuses in C01.. order],trace:{{{keys}}}}}."
+            + ("\nfixes belongs inside trace, not at the root." if "fixes" in trace else "")
         )
         cases.append(
             make_case(
