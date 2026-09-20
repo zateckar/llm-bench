@@ -171,7 +171,7 @@
 - id: IF-07
   category: Instruction Following
   difficulty: expert
-  description: "Alternating status is checked per element by JSON path"
+  description: "Every index, status, UUID field, type and exact key set is checked"
   prompt: |
     Return a JSON array of exactly 6 elements. Each element must be an object with exactly these keys:
     - "index": an integer, 0 through 5, in ascending order
@@ -185,12 +185,31 @@
         root: array
         length: 6
         no_markdown: true
+        strict_json: true
+        item_fields:
+          index: {type: integer}
+          uuid:
+            type: string
+            pattern: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}'
+          status: {type: string}
       - type: json_path
         path: "[0].index"
         value: 0
       - type: json_path
         path: "[5].index"
         value: 5
+      - type: json_path
+        path: "[1].index"
+        value: 1
+      - type: json_path
+        path: "[2].index"
+        value: 2
+      - type: json_path
+        path: "[3].index"
+        value: 3
+      - type: json_path
+        path: "[4].index"
+        value: 4
       - type: json_path
         path: "[0].status"
         value: pending
@@ -203,10 +222,12 @@
       - type: json_path
         path: "[5].status"
         value: completed
-      - type: count_occurrences
-        pattern: '\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b'
-        count: 6
-        description: "six distinct valid UUIDv4 strings"
+      - type: json_path
+        path: "[2].status"
+        value: pending
+      - type: json_path
+        path: "[3].status"
+        value: completed
 
 - id: IF-08
   category: Instruction Following

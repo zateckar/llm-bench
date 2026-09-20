@@ -1,0 +1,1749 @@
+- id: S6-policy-01
+  category: Agentic Use Cases
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'An incident has one hidden state, fixed throughout the run. Every state below is possible.
+
+    Only the named remedy for the true state is safe. Tests are deterministic, reveal a binary
+
+    outcome, have the stated positive cost and do not change the state. You may adapt the next
+
+    test to previous outcomes. You can stop as soon as all remaining states have the SAME
+
+    remedy; you need not identify the exact state. Minimize the WORST total test cost, not the
+
+    mean or the number of tests. Remedy application costs zero. Repeating a test adds no evidence.
+
+    States in column order: ["s0","s1","s2","s3","s4","s5","s6","s7"]
+
+    Corresponding safe remedies: ["repair-D","repair-C","repair-A","repair-B","repair-C","repair-A","repair-B","repair-D"]
+
+    Tests: [{"id":"T0","cost":2,"outcomes":[0,1,0,1,0,1,0,1]},{"id":"T1","cost":1,"outcomes":[0,0,1,1,0,0,1,1]},{"id":"T2","cost":3,"outcomes":[0,0,0,0,1,1,1,1]},{"id":"T3","cost":2,"outcomes":[1,0,0,0,1,1,1,0]},{"id":"T4","cost":2,"outcomes":[0,0,0,1,1,0,1,0]},{"id":"T5","cost":3,"outcomes":[0,1,0,1,1,0,0,1]},{"id":"T6","cost":4,"outcomes":[1,0,1,0,0,0,1,0]}]
+
+    Return worst_cost, optimal_first_tests (ALL minimizing first test IDs, sorted), and
+
+    cost_by_first_test (test ID -> minimum worst total cost when forced to start with that test,
+
+    including its cost). A test that never splits the initial states has value null in that map
+
+    and is not a candidate first test. Branches may stop at different depths.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      worst_cost: 5
+      optimal_first_tests:
+      - T0
+      - T1
+      cost_by_first_test:
+        T0: 5
+        T1: 5
+        T2: 6
+        T3: 7
+        T4: 7
+        T5: 6
+        T6: 8
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-policy-02
+  category: Agentic Use Cases
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'An incident has one hidden state, fixed throughout the run. Every state below is possible.
+
+    Only the named remedy for the true state is safe. Tests are deterministic, reveal a binary
+
+    outcome, have the stated positive cost and do not change the state. You may adapt the next
+
+    test to previous outcomes. You can stop as soon as all remaining states have the SAME
+
+    remedy; you need not identify the exact state. Minimize the WORST total test cost, not the
+
+    mean or the number of tests. Remedy application costs zero. Repeating a test adds no evidence.
+
+    States in column order: ["s0","s1","s2","s3","s4","s5","s6","s7"]
+
+    Corresponding safe remedies: ["repair-B","repair-C","repair-A","repair-B","repair-C","repair-D","repair-A","repair-D"]
+
+    Tests: [{"id":"T0","cost":1,"outcomes":[0,1,0,1,0,1,0,1]},{"id":"T1","cost":4,"outcomes":[0,0,1,1,0,0,1,1]},{"id":"T2","cost":4,"outcomes":[0,0,0,0,1,1,1,1]},{"id":"T3","cost":2,"outcomes":[1,0,1,0,1,1,0,1]},{"id":"T4","cost":4,"outcomes":[1,0,1,0,0,1,0,0]},{"id":"T5","cost":5,"outcomes":[0,0,0,1,0,1,1,0]},{"id":"T6","cost":1,"outcomes":[0,1,1,0,1,0,0,0]}]
+
+    Return worst_cost, optimal_first_tests (ALL minimizing first test IDs, sorted), and
+
+    cost_by_first_test (test ID -> minimum worst total cost when forced to start with that test,
+
+    including its cost). A test that never splits the initial states has value null in that map
+
+    and is not a candidate first test. Branches may stop at different depths.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      worst_cost: 5
+      optimal_first_tests:
+      - T6
+      cost_by_first_test:
+        T0: 6
+        T1: 7
+        T2: 6
+        T3: 7
+        T4: 8
+        T5: 10
+        T6: 5
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-policy-03
+  category: Agentic Use Cases
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'An incident has one hidden state, fixed throughout the run. Every state below is possible.
+
+    Only the named remedy for the true state is safe. Tests are deterministic, reveal a binary
+
+    outcome, have the stated positive cost and do not change the state. You may adapt the next
+
+    test to previous outcomes. You can stop as soon as all remaining states have the SAME
+
+    remedy; you need not identify the exact state. Minimize the WORST total test cost, not the
+
+    mean or the number of tests. Remedy application costs zero. Repeating a test adds no evidence.
+
+    States in column order: ["s0","s1","s2","s3","s4","s5","s6","s7"]
+
+    Corresponding safe remedies: ["repair-D","repair-B","repair-C","repair-B","repair-D","repair-A","repair-A","repair-C"]
+
+    Tests: [{"id":"T0","cost":3,"outcomes":[0,1,0,1,0,1,0,1]},{"id":"T1","cost":5,"outcomes":[0,0,1,1,0,0,1,1]},{"id":"T2","cost":3,"outcomes":[0,0,0,0,1,1,1,1]},{"id":"T3","cost":5,"outcomes":[1,1,1,0,0,1,1,0]},{"id":"T4","cost":5,"outcomes":[0,1,1,0,1,1,0,0]},{"id":"T5","cost":4,"outcomes":[0,1,0,0,1,1,1,0]},{"id":"T6","cost":4,"outcomes":[1,1,1,0,1,1,0,0]}]
+
+    Return worst_cost, optimal_first_tests (ALL minimizing first test IDs, sorted), and
+
+    cost_by_first_test (test ID -> minimum worst total cost when forced to start with that test,
+
+    including its cost). A test that never splits the initial states has value null in that map
+
+    and is not a candidate first test. Branches may stop at different depths.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      worst_cost: 11
+      optimal_first_tests:
+      - T0
+      - T1
+      - T2
+      - T4
+      cost_by_first_test:
+        T0: 11
+        T1: 11
+        T2: 11
+        T3: 14
+        T4: 11
+        T5: 12
+        T6: 12
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-toolplan-01
+  category: Tool Using
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Plan calls for a read-only evidence collection job. Initially only token auth is available.
+
+    Each call may run at most once and only when ALL its required tokens already exist. It adds
+
+    all its produced tokens; tokens are never consumed. No parallel calls. The final state must
+
+    contain a,b,c,d,e,f,receipt. A produced receipt does not remove the other requirements.
+
+    Minimize total cost; break ties by fewer calls, then lexicographically smallest sequence of
+
+    call IDs. Ignore tools not listed. Calls: [{"id":"C0","requires":["auth"],"produces":["snapshot"],"cost":2},{"id":"C1","requires":["snapshot"],"produces":["a","b"],"cost":4},{"id":"C2","requires":["snapshot"],"produces":["c","d"],"cost":4},{"id":"C3","requires":["a"],"produces":["e"],"cost":2},{"id":"C4","requires":["b","c"],"produces":["e","f"],"cost":5},{"id":"C5","requires":["auth"],"produces":["b","d"],"cost":6},{"id":"C6","requires":["d"],"produces":["c","f"],"cost":2},{"id":"C7","requires":["e","f"],"produces":["receipt"],"cost":3},{"id":"C8","requires":["a","d"],"produces":["receipt"],"cost":7},{"id":"C9","requires":["auth"],"produces":["a","c","e"],"cost":11}]
+
+    Return {"cost":integer,"call_count":integer,"calls":[IDs in execution order]}.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      cost: 17
+      call_count: 6
+      calls:
+      - C0
+      - C1
+      - C2
+      - C3
+      - C6
+      - C7
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-toolplan-02
+  category: Tool Using
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Plan calls for a read-only evidence collection job. Initially only token auth is available.
+
+    Each call may run at most once and only when ALL its required tokens already exist. It adds
+
+    all its produced tokens; tokens are never consumed. No parallel calls. The final state must
+
+    contain a,b,c,d,e,f,receipt. A produced receipt does not remove the other requirements.
+
+    Minimize total cost; break ties by fewer calls, then lexicographically smallest sequence of
+
+    call IDs. Ignore tools not listed. Calls: [{"id":"C0","requires":["auth"],"produces":["snapshot"],"cost":4},{"id":"C1","requires":["snapshot"],"produces":["a","b"],"cost":5},{"id":"C2","requires":["snapshot"],"produces":["c","d"],"cost":6},{"id":"C3","requires":["a"],"produces":["e"],"cost":2},{"id":"C4","requires":["b","c"],"produces":["e","f"],"cost":5},{"id":"C5","requires":["auth"],"produces":["b","d"],"cost":8},{"id":"C6","requires":["d"],"produces":["c","f"],"cost":2},{"id":"C7","requires":["e","f"],"produces":["receipt"],"cost":2},{"id":"C8","requires":["a","d"],"produces":["receipt"],"cost":6},{"id":"C9","requires":["auth"],"produces":["a","c","e"],"cost":9}]
+
+    Return {"cost":integer,"call_count":integer,"calls":[IDs in execution order]}.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      cost: 21
+      call_count: 4
+      calls:
+      - C5
+      - C6
+      - C9
+      - C7
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-toolplan-03
+  category: Tool Using
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Plan calls for a read-only evidence collection job. Initially only token auth is available.
+
+    Each call may run at most once and only when ALL its required tokens already exist. It adds
+
+    all its produced tokens; tokens are never consumed. No parallel calls. The final state must
+
+    contain a,b,c,d,e,f,receipt. A produced receipt does not remove the other requirements.
+
+    Minimize total cost; break ties by fewer calls, then lexicographically smallest sequence of
+
+    call IDs. Ignore tools not listed. Calls: [{"id":"C0","requires":["auth"],"produces":["snapshot"],"cost":4},{"id":"C1","requires":["snapshot"],"produces":["a","b"],"cost":4},{"id":"C2","requires":["snapshot"],"produces":["c","d"],"cost":4},{"id":"C3","requires":["a"],"produces":["e"],"cost":2},{"id":"C4","requires":["b","c"],"produces":["e","f"],"cost":4},{"id":"C5","requires":["auth"],"produces":["b","d"],"cost":8},{"id":"C6","requires":["d"],"produces":["c","f"],"cost":3},{"id":"C7","requires":["e","f"],"produces":["receipt"],"cost":3},{"id":"C8","requires":["a","d"],"produces":["receipt"],"cost":7},{"id":"C9","requires":["auth"],"produces":["a","c","e"],"cost":11}]
+
+    Return {"cost":integer,"call_count":integer,"calls":[IDs in execution order]}.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      cost: 19
+      call_count: 5
+      calls:
+      - C0
+      - C1
+      - C2
+      - C4
+      - C7
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-bitemporal-01
+  category: Reading Comprehension
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Reconstruct three accounting snapshots. Each query is [business_time,knowledge_cutoff].
+
+    For each account A0..A6 first retain rows with from <= business_time < to AND recorded <=
+
+    knowledge_cutoff. Among these select greatest (recorded,priority), lexicographically as an
+
+    integer pair. Priority is a tie-breaker, not a global revision number. A selected void row
+
+    is still the source but contributes no money; never resurrect an older row after a void.
+
+    Missing accounts have null sources. Negative amounts reduce totals. Owners come from the
+
+    selected rows, not from any newer or older row.
+
+    Rows: [{"id":"r24","account":"A2","from":8,"to":11,"recorded":10,"priority":4,"amount":62,"owner":"east","void":true},{"id":"r64","account":"A6","from":6,"to":8,"recorded":8,"priority":4,"amount":52,"owner":"west","void":true},{"id":"r52","account":"A5","from":7,"to":12,"recorded":7,"priority":2,"amount":-10,"owner":"west","void":false},{"id":"r54","account":"A5","from":7,"to":11,"recorded":1,"priority":4,"amount":30,"owner":"west","void":false},{"id":"r10","account":"A1","from":6,"to":11,"recorded":10,"priority":0,"amount":41,"owner":"west","void":false},{"id":"r23","account":"A2","from":1,"to":5,"recorded":1,"priority":3,"amount":68,"owner":"east","void":false},{"id":"r51","account":"A5","from":3,"to":9,"recorded":5,"priority":1,"amount":-17,"owner":"east","void":false},{"id":"r62","account":"A6","from":6,"to":10,"recorded":1,"priority":2,"amount":-24,"owner":"east","void":false},{"id":"r21","account":"A2","from":6,"to":12,"recorded":5,"priority":1,"amount":2,"owner":"west","void":false},{"id":"r01","account":"A0","from":8,"to":11,"recorded":9,"priority":1,"amount":-2,"owner":"east","void":false},{"id":"r32","account":"A3","from":5,"to":9,"recorded":9,"priority":2,"amount":38,"owner":"east","void":false},{"id":"r13","account":"A1","from":5,"to":11,"recorded":7,"priority":3,"amount":-2,"owner":"east","void":false},{"id":"r61","account":"A6","from":3,"to":6,"recorded":5,"priority":1,"amount":0,"owner":"east","void":false},{"id":"r34","account":"A3","from":7,"to":13,"recorded":1,"priority":4,"amount":68,"owner":"east","void":false},{"id":"r31","account":"A3","from":8,"to":11,"recorded":4,"priority":1,"amount":71,"owner":"east","void":false},{"id":"r43","account":"A4","from":1,"to":4,"recorded":1,"priority":3,"amount":56,"owner":"west","void":false},{"id":"r40","account":"A4","from":5,"to":8,"recorded":3,"priority":0,"amount":74,"owner":"west","void":false},{"id":"r50","account":"A5","from":3,"to":10,"recorded":6,"priority":0,"amount":57,"owner":"east","void":false},{"id":"r02","account":"A0","from":7,"to":10,"recorded":5,"priority":2,"amount":28,"owner":"east","void":false},{"id":"r42","account":"A4","from":0,"to":5,"recorded":3,"priority":2,"amount":56,"owner":"west","void":false},{"id":"r11","account":"A1","from":5,"to":10,"recorded":8,"priority":1,"amount":52,"owner":"east","void":false},{"id":"r60","account":"A6","from":3,"to":9,"recorded":6,"priority":0,"amount":50,"owner":"west","void":false},{"id":"r63","account":"A6","from":6,"to":8,"recorded":10,"priority":3,"amount":20,"owner":"west","void":false},{"id":"r14","account":"A1","from":4,"to":11,"recorded":4,"priority":4,"amount":27,"owner":"west","void":false},{"id":"r20","account":"A2","from":8,"to":13,"recorded":10,"priority":0,"amount":2,"owner":"west","void":false},{"id":"r22","account":"A2","from":8,"to":12,"recorded":7,"priority":2,"amount":11,"owner":"east","void":false},{"id":"r03","account":"A0","from":6,"to":13,"recorded":1,"priority":3,"amount":-23,"owner":"west","void":false},{"id":"r41","account":"A4","from":4,"to":10,"recorded":10,"priority":1,"amount":-10,"owner":"east","void":false},{"id":"r53","account":"A5","from":6,"to":8,"recorded":3,"priority":3,"amount":62,"owner":"west","void":false},{"id":"r00","account":"A0","from":8,"to":11,"recorded":2,"priority":0,"amount":-14,"owner":"east","void":false},{"id":"r30","account":"A3","from":1,"to":7,"recorded":1,"priority":0,"amount":79,"owner":"east","void":false},{"id":"r44","account":"A4","from":8,"to":11,"recorded":1,"priority":4,"amount":37,"owner":"west","void":true},{"id":"r12","account":"A1","from":1,"to":7,"recorded":10,"priority":2,"amount":45,"owner":"west","void":false},{"id":"r04","account":"A0","from":4,"to":6,"recorded":8,"priority":4,"amount":56,"owner":"west","void":true},{"id":"r33","account":"A3","from":7,"to":11,"recorded":1,"priority":3,"amount":-1,"owner":"east","void":false}]
+
+    Queries: [[5,6],[7,9],[9,12]]
+
+    Return snapshots in query order. Each has sources (all seven account -> source ID or null),
+
+    totals (east and west, include zero), and void_accounts (sorted account IDs).
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      snapshots:
+      - sources:
+          A0: null
+          A1: r14
+          A2: null
+          A3: r30
+          A4: r40
+          A5: r50
+          A6: r60
+        totals:
+          east: 136
+          west: 151
+        void_accounts: []
+      - sources:
+          A0: r02
+          A1: r11
+          A2: r21
+          A3: r32
+          A4: r40
+          A5: r52
+          A6: r64
+        totals:
+          east: 118
+          west: 66
+        void_accounts:
+        - A6
+      - sources:
+          A0: r01
+          A1: r10
+          A2: r24
+          A3: r31
+          A4: r41
+          A5: r52
+          A6: r62
+        totals:
+          east: 35
+          west: 31
+        void_accounts:
+        - A2
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-bitemporal-02
+  category: Reading Comprehension
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Reconstruct three accounting snapshots. Each query is [business_time,knowledge_cutoff].
+
+    For each account A0..A6 first retain rows with from <= business_time < to AND recorded <=
+
+    knowledge_cutoff. Among these select greatest (recorded,priority), lexicographically as an
+
+    integer pair. Priority is a tie-breaker, not a global revision number. A selected void row
+
+    is still the source but contributes no money; never resurrect an older row after a void.
+
+    Missing accounts have null sources. Negative amounts reduce totals. Owners come from the
+
+    selected rows, not from any newer or older row.
+
+    Rows: [{"id":"r60","account":"A6","from":7,"to":11,"recorded":11,"priority":0,"amount":1,"owner":"west","void":false},{"id":"r01","account":"A0","from":8,"to":15,"recorded":3,"priority":1,"amount":11,"owner":"west","void":false},{"id":"r30","account":"A3","from":5,"to":7,"recorded":11,"priority":0,"amount":56,"owner":"east","void":false},{"id":"r51","account":"A5","from":0,"to":5,"recorded":7,"priority":1,"amount":26,"owner":"west","void":false},{"id":"r62","account":"A6","from":8,"to":14,"recorded":2,"priority":2,"amount":5,"owner":"west","void":false},{"id":"r03","account":"A0","from":0,"to":4,"recorded":8,"priority":3,"amount":51,"owner":"west","void":false},{"id":"r20","account":"A2","from":1,"to":7,"recorded":8,"priority":0,"amount":15,"owner":"west","void":false},{"id":"r43","account":"A4","from":0,"to":5,"recorded":2,"priority":3,"amount":-27,"owner":"east","void":false},{"id":"r14","account":"A1","from":5,"to":8,"recorded":11,"priority":4,"amount":56,"owner":"west","void":false},{"id":"r21","account":"A2","from":6,"to":8,"recorded":7,"priority":1,"amount":-6,"owner":"west","void":false},{"id":"r02","account":"A0","from":8,"to":14,"recorded":5,"priority":2,"amount":-11,"owner":"west","void":false},{"id":"r22","account":"A2","from":0,"to":2,"recorded":6,"priority":2,"amount":-25,"owner":"east","void":false},{"id":"r31","account":"A3","from":2,"to":5,"recorded":1,"priority":1,"amount":47,"owner":"east","void":false},{"id":"r23","account":"A2","from":1,"to":5,"recorded":2,"priority":3,"amount":55,"owner":"east","void":false},{"id":"r64","account":"A6","from":2,"to":8,"recorded":10,"priority":4,"amount":76,"owner":"west","void":true},{"id":"r50","account":"A5","from":7,"to":13,"recorded":5,"priority":0,"amount":-18,"owner":"west","void":false},{"id":"r63","account":"A6","from":4,"to":10,"recorded":5,"priority":3,"amount":-28,"owner":"west","void":false},{"id":"r04","account":"A0","from":3,"to":10,"recorded":2,"priority":4,"amount":-18,"owner":"west","void":true},{"id":"r40","account":"A4","from":3,"to":7,"recorded":3,"priority":0,"amount":76,"owner":"west","void":false},{"id":"r34","account":"A3","from":5,"to":8,"recorded":5,"priority":4,"amount":19,"owner":"east","void":false},{"id":"r32","account":"A3","from":4,"to":7,"recorded":11,"priority":2,"amount":77,"owner":"west","void":false},{"id":"r24","account":"A2","from":0,"to":7,"recorded":7,"priority":4,"amount":41,"owner":"west","void":true},{"id":"r52","account":"A5","from":6,"to":9,"recorded":11,"priority":2,"amount":36,"owner":"east","void":false},{"id":"r12","account":"A1","from":1,"to":7,"recorded":4,"priority":2,"amount":22,"owner":"east","void":false},{"id":"r54","account":"A5","from":0,"to":5,"recorded":3,"priority":4,"amount":13,"owner":"east","void":false},{"id":"r10","account":"A1","from":7,"to":14,"recorded":9,"priority":0,"amount":-5,"owner":"east","void":false},{"id":"r44","account":"A4","from":0,"to":5,"recorded":10,"priority":4,"amount":76,"owner":"west","void":true},{"id":"r11","account":"A1","from":7,"to":12,"recorded":11,"priority":1,"amount":77,"owner":"east","void":false},{"id":"r53","account":"A5","from":4,"to":10,"recorded":4,"priority":3,"amount":72,"owner":"west","void":false},{"id":"r00","account":"A0","from":3,"to":10,"recorded":9,"priority":0,"amount":41,"owner":"east","void":false},{"id":"r33","account":"A3","from":0,"to":2,"recorded":2,"priority":3,"amount":28,"owner":"west","void":false},{"id":"r61","account":"A6","from":5,"to":7,"recorded":8,"priority":1,"amount":29,"owner":"west","void":false},{"id":"r13","account":"A1","from":1,"to":4,"recorded":3,"priority":3,"amount":-4,"owner":"east","void":false},{"id":"r42","account":"A4","from":3,"to":5,"recorded":2,"priority":2,"amount":-16,"owner":"east","void":false},{"id":"r41","account":"A4","from":8,"to":14,"recorded":5,"priority":1,"amount":50,"owner":"east","void":false}]
+
+    Queries: [[5,6],[7,9],[9,12]]
+
+    Return snapshots in query order. Each has sources (all seven account -> source ID or null),
+
+    totals (east and west, include zero), and void_accounts (sorted account IDs).
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      snapshots:
+      - sources:
+          A0: r04
+          A1: r12
+          A2: null
+          A3: r34
+          A4: r40
+          A5: r53
+          A6: r63
+        totals:
+          east: 41
+          west: 120
+        void_accounts:
+        - A0
+      - sources:
+          A0: r00
+          A1: r10
+          A2: r21
+          A3: r34
+          A4: null
+          A5: r50
+          A6: r63
+        totals:
+          east: 55
+          west: -52
+        void_accounts: []
+      - sources:
+          A0: r00
+          A1: r11
+          A2: null
+          A3: null
+          A4: r41
+          A5: r50
+          A6: r60
+        totals:
+          east: 168
+          west: -17
+        void_accounts: []
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-bitemporal-03
+  category: Reading Comprehension
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Reconstruct three accounting snapshots. Each query is [business_time,knowledge_cutoff].
+
+    For each account A0..A6 first retain rows with from <= business_time < to AND recorded <=
+
+    knowledge_cutoff. Among these select greatest (recorded,priority), lexicographically as an
+
+    integer pair. Priority is a tie-breaker, not a global revision number. A selected void row
+
+    is still the source but contributes no money; never resurrect an older row after a void.
+
+    Missing accounts have null sources. Negative amounts reduce totals. Owners come from the
+
+    selected rows, not from any newer or older row.
+
+    Rows: [{"id":"r41","account":"A4","from":2,"to":8,"recorded":10,"priority":1,"amount":-10,"owner":"west","void":false},{"id":"r34","account":"A3","from":4,"to":6,"recorded":11,"priority":4,"amount":14,"owner":"east","void":false},{"id":"r21","account":"A2","from":1,"to":7,"recorded":10,"priority":1,"amount":20,"owner":"east","void":false},{"id":"r40","account":"A4","from":2,"to":6,"recorded":10,"priority":0,"amount":-2,"owner":"west","void":false},{"id":"r51","account":"A5","from":4,"to":11,"recorded":2,"priority":1,"amount":67,"owner":"east","void":false},{"id":"r03","account":"A0","from":1,"to":3,"recorded":10,"priority":3,"amount":78,"owner":"east","void":false},{"id":"r10","account":"A1","from":5,"to":11,"recorded":4,"priority":0,"amount":-17,"owner":"east","void":false},{"id":"r43","account":"A4","from":5,"to":7,"recorded":4,"priority":3,"amount":-11,"owner":"east","void":false},{"id":"r13","account":"A1","from":7,"to":11,"recorded":1,"priority":3,"amount":66,"owner":"east","void":false},{"id":"r04","account":"A0","from":5,"to":7,"recorded":8,"priority":4,"amount":41,"owner":"east","void":true},{"id":"r00","account":"A0","from":2,"to":9,"recorded":4,"priority":0,"amount":-2,"owner":"east","void":false},{"id":"r44","account":"A4","from":1,"to":6,"recorded":3,"priority":4,"amount":15,"owner":"east","void":true},{"id":"r01","account":"A0","from":0,"to":7,"recorded":9,"priority":1,"amount":33,"owner":"west","void":false},{"id":"r30","account":"A3","from":0,"to":3,"recorded":6,"priority":0,"amount":77,"owner":"east","void":false},{"id":"r23","account":"A2","from":5,"to":9,"recorded":10,"priority":3,"amount":0,"owner":"east","void":false},{"id":"r42","account":"A4","from":1,"to":7,"recorded":11,"priority":2,"amount":75,"owner":"east","void":false},{"id":"r64","account":"A6","from":6,"to":11,"recorded":9,"priority":4,"amount":26,"owner":"east","void":true},{"id":"r62","account":"A6","from":0,"to":4,"recorded":9,"priority":2,"amount":60,"owner":"west","void":false},{"id":"r02","account":"A0","from":4,"to":11,"recorded":3,"priority":2,"amount":27,"owner":"east","void":false},{"id":"r61","account":"A6","from":3,"to":8,"recorded":1,"priority":1,"amount":68,"owner":"east","void":false},{"id":"r52","account":"A5","from":2,"to":7,"recorded":11,"priority":2,"amount":-21,"owner":"east","void":false},{"id":"r33","account":"A3","from":8,"to":15,"recorded":4,"priority":3,"amount":68,"owner":"east","void":false},{"id":"r14","account":"A1","from":4,"to":7,"recorded":4,"priority":4,"amount":-12,"owner":"east","void":false},{"id":"r50","account":"A5","from":8,"to":10,"recorded":7,"priority":0,"amount":58,"owner":"west","void":false},{"id":"r53","account":"A5","from":0,"to":4,"recorded":3,"priority":3,"amount":57,"owner":"east","void":false},{"id":"r24","account":"A2","from":6,"to":9,"recorded":3,"priority":4,"amount":3,"owner":"west","void":true},{"id":"r60","account":"A6","from":7,"to":9,"recorded":1,"priority":0,"amount":41,"owner":"east","void":false},{"id":"r12","account":"A1","from":7,"to":13,"recorded":2,"priority":2,"amount":57,"owner":"west","void":false},{"id":"r11","account":"A1","from":1,"to":6,"recorded":7,"priority":1,"amount":-11,"owner":"east","void":false},{"id":"r63","account":"A6","from":3,"to":9,"recorded":2,"priority":3,"amount":78,"owner":"west","void":false},{"id":"r32","account":"A3","from":8,"to":13,"recorded":11,"priority":2,"amount":-19,"owner":"east","void":false},{"id":"r31","account":"A3","from":3,"to":7,"recorded":1,"priority":1,"amount":78,"owner":"east","void":false},{"id":"r22","account":"A2","from":0,"to":5,"recorded":8,"priority":2,"amount":37,"owner":"east","void":false},{"id":"r20","account":"A2","from":1,"to":3,"recorded":5,"priority":0,"amount":67,"owner":"east","void":false},{"id":"r54","account":"A5","from":4,"to":11,"recorded":11,"priority":4,"amount":16,"owner":"west","void":false}]
+
+    Queries: [[5,6],[7,9],[9,12]]
+
+    Return snapshots in query order. Each has sources (all seven account -> source ID or null),
+
+    totals (east and west, include zero), and void_accounts (sorted account IDs).
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      snapshots:
+      - sources:
+          A0: r00
+          A1: r14
+          A2: null
+          A3: r31
+          A4: r43
+          A5: r51
+          A6: r63
+        totals:
+          east: 120
+          west: 78
+        void_accounts: []
+      - sources:
+          A0: r00
+          A1: r10
+          A2: r24
+          A3: null
+          A4: null
+          A5: r51
+          A6: r64
+        totals:
+          east: 48
+          west: 0
+        void_accounts:
+        - A2
+        - A6
+      - sources:
+          A0: r02
+          A1: r10
+          A2: null
+          A3: r32
+          A4: null
+          A5: r54
+          A6: r64
+        totals:
+          east: -9
+          west: 16
+        void_accounts:
+        - A6
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-eventsummary-01
+  category: Summarization
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Produce a compact structured reconciliation of the delivered event log. Process in listed
+
+    order. Globally deduplicate by event id before doing anything else: first delivery wins even
+
+    if a later payload differs. issue creates an invoice with its customer and gross amount.
+
+    pay adds cash; refund subtracts cash; credit reduces gross amount. void sets gross to zero
+
+    and closes the invoice, WITHOUT returning any cash. All later events for a void invoice are
+
+    ignored. Every non-issue references an already issued invoice; no invoice is issued twice.
+
+    For each customer, open counts nonvoid invoices, receivable sums gross-minus-cash on NONVOID
+
+    invoices (allow negatives), and cash sums net cash on ALL invoices including void ones.
+
+    Log: [{"id":"e0a","invoice":"I0","op":"issue","customer":"K0","amount":56},{"id":"e0b","invoice":"I0","op":"pay","amount":15},{"id":"e0c","invoice":"I0","op":"credit","amount":8},{"id":"e1a","invoice":"I1","op":"issue","customer":"K1","amount":38},{"id":"e1b","invoice":"I1","op":"pay","amount":22},{"id":"e1c","invoice":"I1","op":"credit","amount":24},{"id":"e2a","invoice":"I2","op":"issue","customer":"K2","amount":58},{"id":"e2b","invoice":"I2","op":"pay","amount":28},{"id":"e0b","invoice":"I0","op":"pay","amount":999},{"id":"e2c","invoice":"I2","op":"credit","amount":15},{"id":"e3a","invoice":"I3","op":"issue","customer":"K0","amount":75},{"id":"e3b","invoice":"I3","op":"pay","amount":43},{"id":"e3c","invoice":"I3","op":"credit","amount":22},{"id":"e4a","invoice":"I4","op":"issue","customer":"K1","amount":57},{"id":"e4b","invoice":"I4","op":"pay","amount":22},{"id":"e4c","invoice":"I4","op":"credit","amount":20},{"id":"e5a","invoice":"I5","op":"issue","customer":"K2","amount":80},{"id":"e5b","invoice":"I5","op":"pay","amount":41},{"id":"e5c","invoice":"I5","op":"credit","amount":11},{"id":"e6a","invoice":"I6","op":"issue","customer":"K0","amount":78},{"id":"e6b","invoice":"I6","op":"pay","amount":65},{"id":"e6c","invoice":"I6","op":"credit","amount":15},{"id":"e7a","invoice":"I7","op":"issue","customer":"K1","amount":69},{"id":"e7b","invoice":"I7","op":"pay","amount":61},{"id":"e7c","invoice":"I7","op":"credit","amount":21},{"id":"e8a","invoice":"I8","op":"issue","customer":"K2","amount":61},{"id":"e8b","invoice":"I8","op":"pay","amount":46},{"id":"e8c","invoice":"I8","op":"credit","amount":24},{"id":"void1","invoice":"I1","op":"void"},{"id":"late1","invoice":"I1","op":"pay","amount":40},{"id":"refund2","invoice":"I2","op":"refund","amount":12},{"id":"void4","invoice":"I4","op":"void"},{"id":"late4","invoice":"I4","op":"credit","amount":20}]
+
+    Return customers (K0,K1,K2 each with open,receivable,cash), ignored (event IDs in delivery
+
+    order, one entry per ignored delivery, whether duplicate or post-void), and void_invoices
+
+    (sorted invoice IDs). Do not summarize by mentioning keywords; reconcile the actual totals.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      customers:
+        K0:
+          open: 3
+          receivable: 41
+          cash: 123
+        K1:
+          open: 1
+          receivable: -13
+          cash: 105
+        K2:
+          open: 3
+          receivable: 46
+          cash: 103
+      ignored:
+      - e0b
+      - late1
+      - late4
+      void_invoices:
+      - I1
+      - I4
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-eventsummary-02
+  category: Summarization
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Produce a compact structured reconciliation of the delivered event log. Process in listed
+
+    order. Globally deduplicate by event id before doing anything else: first delivery wins even
+
+    if a later payload differs. issue creates an invoice with its customer and gross amount.
+
+    pay adds cash; refund subtracts cash; credit reduces gross amount. void sets gross to zero
+
+    and closes the invoice, WITHOUT returning any cash. All later events for a void invoice are
+
+    ignored. Every non-issue references an already issued invoice; no invoice is issued twice.
+
+    For each customer, open counts nonvoid invoices, receivable sums gross-minus-cash on NONVOID
+
+    invoices (allow negatives), and cash sums net cash on ALL invoices including void ones.
+
+    Log: [{"id":"e0a","invoice":"I0","op":"issue","customer":"K0","amount":47},{"id":"e0b","invoice":"I0","op":"pay","amount":52},{"id":"e0c","invoice":"I0","op":"credit","amount":11},{"id":"e1a","invoice":"I1","op":"issue","customer":"K1","amount":66},{"id":"e1b","invoice":"I1","op":"pay","amount":60},{"id":"e1c","invoice":"I1","op":"credit","amount":22},{"id":"e2a","invoice":"I2","op":"issue","customer":"K2","amount":74},{"id":"e2b","invoice":"I2","op":"pay","amount":63},{"id":"e0b","invoice":"I0","op":"pay","amount":999},{"id":"e2c","invoice":"I2","op":"credit","amount":9},{"id":"e3a","invoice":"I3","op":"issue","customer":"K0","amount":88},{"id":"e3b","invoice":"I3","op":"pay","amount":26},{"id":"e3c","invoice":"I3","op":"credit","amount":18},{"id":"e4a","invoice":"I4","op":"issue","customer":"K1","amount":41},{"id":"e4b","invoice":"I4","op":"pay","amount":62},{"id":"e4c","invoice":"I4","op":"credit","amount":13},{"id":"e5a","invoice":"I5","op":"issue","customer":"K2","amount":77},{"id":"e5b","invoice":"I5","op":"pay","amount":30},{"id":"e5c","invoice":"I5","op":"credit","amount":18},{"id":"e6a","invoice":"I6","op":"issue","customer":"K0","amount":91},{"id":"e6b","invoice":"I6","op":"pay","amount":66},{"id":"e6c","invoice":"I6","op":"credit","amount":8},{"id":"e7a","invoice":"I7","op":"issue","customer":"K1","amount":86},{"id":"e7b","invoice":"I7","op":"pay","amount":60},{"id":"e7c","invoice":"I7","op":"credit","amount":11},{"id":"e8a","invoice":"I8","op":"issue","customer":"K2","amount":94},{"id":"e8b","invoice":"I8","op":"pay","amount":14},{"id":"e8c","invoice":"I8","op":"credit","amount":5},{"id":"void1","invoice":"I1","op":"void"},{"id":"late1","invoice":"I1","op":"pay","amount":40},{"id":"refund2","invoice":"I2","op":"refund","amount":12},{"id":"void4","invoice":"I4","op":"void"},{"id":"late4","invoice":"I4","op":"credit","amount":20}]
+
+    Return customers (K0,K1,K2 each with open,receivable,cash), ignored (event IDs in delivery
+
+    order, one entry per ignored delivery, whether duplicate or post-void), and void_invoices
+
+    (sorted invoice IDs). Do not summarize by mentioning keywords; reconcile the actual totals.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      customers:
+        K0:
+          open: 3
+          receivable: 45
+          cash: 144
+        K1:
+          open: 1
+          receivable: 15
+          cash: 182
+        K2:
+          open: 3
+          receivable: 118
+          cash: 95
+      ignored:
+      - e0b
+      - late1
+      - late4
+      void_invoices:
+      - I1
+      - I4
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-eventsummary-03
+  category: Summarization
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Produce a compact structured reconciliation of the delivered event log. Process in listed
+
+    order. Globally deduplicate by event id before doing anything else: first delivery wins even
+
+    if a later payload differs. issue creates an invoice with its customer and gross amount.
+
+    pay adds cash; refund subtracts cash; credit reduces gross amount. void sets gross to zero
+
+    and closes the invoice, WITHOUT returning any cash. All later events for a void invoice are
+
+    ignored. Every non-issue references an already issued invoice; no invoice is issued twice.
+
+    For each customer, open counts nonvoid invoices, receivable sums gross-minus-cash on NONVOID
+
+    invoices (allow negatives), and cash sums net cash on ALL invoices including void ones.
+
+    Log: [{"id":"e0a","invoice":"I0","op":"issue","customer":"K0","amount":83},{"id":"e0b","invoice":"I0","op":"pay","amount":48},{"id":"e0c","invoice":"I0","op":"credit","amount":10},{"id":"e1a","invoice":"I1","op":"issue","customer":"K1","amount":46},{"id":"e1b","invoice":"I1","op":"pay","amount":68},{"id":"e1c","invoice":"I1","op":"credit","amount":18},{"id":"e2a","invoice":"I2","op":"issue","customer":"K2","amount":48},{"id":"e2b","invoice":"I2","op":"pay","amount":49},{"id":"e0b","invoice":"I0","op":"pay","amount":999},{"id":"e2c","invoice":"I2","op":"credit","amount":18},{"id":"e3a","invoice":"I3","op":"issue","customer":"K0","amount":96},{"id":"e3b","invoice":"I3","op":"pay","amount":51},{"id":"e3c","invoice":"I3","op":"credit","amount":16},{"id":"e4a","invoice":"I4","op":"issue","customer":"K1","amount":43},{"id":"e4b","invoice":"I4","op":"pay","amount":21},{"id":"e4c","invoice":"I4","op":"credit","amount":18},{"id":"e5a","invoice":"I5","op":"issue","customer":"K2","amount":72},{"id":"e5b","invoice":"I5","op":"pay","amount":20},{"id":"e5c","invoice":"I5","op":"credit","amount":12},{"id":"e6a","invoice":"I6","op":"issue","customer":"K0","amount":61},{"id":"e6b","invoice":"I6","op":"pay","amount":54},{"id":"e6c","invoice":"I6","op":"credit","amount":7},{"id":"e7a","invoice":"I7","op":"issue","customer":"K1","amount":83},{"id":"e7b","invoice":"I7","op":"pay","amount":38},{"id":"e7c","invoice":"I7","op":"credit","amount":6},{"id":"e8a","invoice":"I8","op":"issue","customer":"K2","amount":72},{"id":"e8b","invoice":"I8","op":"pay","amount":13},{"id":"e8c","invoice":"I8","op":"credit","amount":5},{"id":"void1","invoice":"I1","op":"void"},{"id":"late1","invoice":"I1","op":"pay","amount":40},{"id":"refund2","invoice":"I2","op":"refund","amount":12},{"id":"void4","invoice":"I4","op":"void"},{"id":"late4","invoice":"I4","op":"credit","amount":20}]
+
+    Return customers (K0,K1,K2 each with open,receivable,cash), ignored (event IDs in delivery
+
+    order, one entry per ignored delivery, whether duplicate or post-void), and void_invoices
+
+    (sorted invoice IDs). Do not summarize by mentioning keywords; reconcile the actual totals.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      customers:
+        K0:
+          open: 3
+          receivable: 54
+          cash: 153
+        K1:
+          open: 1
+          receivable: 39
+          cash: 127
+        K2:
+          open: 3
+          receivable: 87
+          cash: 70
+      ignored:
+      - e0b
+      - late1
+      - late4
+      void_invoices:
+      - I1
+      - I4
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-archivepaths-01
+  category: Needle Retrieval
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'The archive encodes directed handoff links rather than a directly retrievable answer. For
+
+    each link ID, choose its highest approved revision. Unapproved revisions have no effect.
+
+    If that chosen row is disabled the link does not exist; do not fall back to an older row.
+
+    Find the minimum total cost path from start to end. Count ALL paths achieving that cost,
+
+    select the lexicographically first node sequence, and find the INTERNAL nodes present on
+
+    EVERY optimal path. Paths use only the selected links. Link costs add; there are no cycles.
+
+    Archive: [{"id":"N30-N40","from":"N30","to":"N40","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N22-N30","from":"N22","to":"N30","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N30-N43","from":"N30","to":"N43","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N33-N41","from":"N33","to":"N41","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N22-N32","from":"N22","to":"N32","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N32-N40","from":"N32","to":"N40","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N22-N33","from":"N22","to":"N33","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N21-N32","from":"N21","to":"N32","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N11-N20","from":"N11","to":"N20","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N23-N32","from":"N23","to":"N32","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N21-N30","from":"N21","to":"N30","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N12-N22","from":"N12","to":"N22","cost":3,"rev":2,"approved":true,"disabled":true},{"id":"N11-N21","from":"N11","to":"N21","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N20-N31","from":"N20","to":"N31","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N31-N41","from":"N31","to":"N41","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N21-N33","from":"N21","to":"N33","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N12-N21","from":"N12","to":"N21","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N21-N31","from":"N21","to":"N31","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N10-N20","from":"N10","to":"N20","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N32-N43","from":"N32","to":"N43","cost":6,"rev":2,"approved":true,"disabled":false},{"id":"N10-N21","from":"N10","to":"N21","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N20-N30","from":"N20","to":"N30","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N10-N23","from":"N10","to":"N23","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N30-N40","from":"N30","to":"N40","cost":5,"rev":2,"approved":true,"disabled":true},{"id":"N31-N40","from":"N31","to":"N40","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N10-N22","from":"N10","to":"N22","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N22-N31","from":"N22","to":"N31","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N20-N31","from":"N20","to":"N31","cost":2,"rev":2,"approved":true,"disabled":false},{"id":"N43-end","from":"N43","to":"end","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N22-N33","from":"N22","to":"N33","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N33-N42","from":"N33","to":"N42","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N12-N20","from":"N12","to":"N20","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N31-N40","from":"N31","to":"N40","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N21-N31","from":"N21","to":"N31","cost":2,"rev":2,"approved":true,"disabled":false},{"id":"start-N11","from":"start","to":"N11","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N33-N43","from":"N33","to":"N43","cost":4,"rev":2,"approved":true,"disabled":true},{"id":"N11-N20","from":"N11","to":"N20","cost":0,"rev":3,"approved":false,"disabled":true},{"id":"start-N10","from":"start","to":"N10","cost":6,"rev":2,"approved":true,"disabled":true},{"id":"start-N10","from":"start","to":"N10","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N30-N41","from":"N30","to":"N41","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N42-end","from":"N42","to":"end","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N40-end","from":"N40","to":"end","cost":2,"rev":2,"approved":true,"disabled":false},{"id":"N32-N43","from":"N32","to":"N43","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N33-N42","from":"N33","to":"N42","cost":0,"rev":3,"approved":false,"disabled":true},{"id":"N12-N23","from":"N12","to":"N23","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N32-N42","from":"N32","to":"N42","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N20-N33","from":"N20","to":"N33","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N32-N40","from":"N32","to":"N40","cost":3,"rev":2,"approved":true,"disabled":false},{"id":"N41-end","from":"N41","to":"end","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N23-N30","from":"N23","to":"N30","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N20-N32","from":"N20","to":"N32","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N12-N22","from":"N12","to":"N22","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N11-N20","from":"N11","to":"N20","cost":6,"rev":2,"approved":true,"disabled":true},{"id":"N20-N32","from":"N20","to":"N32","cost":6,"rev":2,"approved":true,"disabled":false},{"id":"N23-N33","from":"N23","to":"N33","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N13-N20","from":"N13","to":"N20","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N13-N21","from":"N13","to":"N21","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N30-N41","from":"N30","to":"N41","cost":1,"rev":2,"approved":true,"disabled":true},{"id":"start-N13","from":"start","to":"N13","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N33-N43","from":"N33","to":"N43","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N32-N41","from":"N32","to":"N41","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N22-N30","from":"N22","to":"N30","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N31-N43","from":"N31","to":"N43","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"start-N11","from":"start","to":"N11","cost":3,"rev":2,"approved":true,"disabled":false},{"id":"N33-N42","from":"N33","to":"N42","cost":6,"rev":2,"approved":true,"disabled":true},{"id":"N23-N31","from":"N23","to":"N31","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N11-N23","from":"N11","to":"N23","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N11-N22","from":"N11","to":"N22","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"start-N12","from":"start","to":"N12","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N21-N30","from":"N21","to":"N30","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N10-N21","from":"N10","to":"N21","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N13-N20","from":"N13","to":"N20","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N30-N42","from":"N30","to":"N42","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N11-N21","from":"N11","to":"N21","cost":2,"rev":2,"approved":true,"disabled":false},{"id":"N42-end","from":"N42","to":"end","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N13-N22","from":"N13","to":"N22","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N13-N22","from":"N13","to":"N22","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N21-N32","from":"N21","to":"N32","cost":1,"rev":2,"approved":true,"disabled":false},{"id":"N33-N40","from":"N33","to":"N40","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N32-N40","from":"N32","to":"N40","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N23-N33","from":"N23","to":"N33","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N31-N43","from":"N31","to":"N43","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N13-N23","from":"N13","to":"N23","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N22-N32","from":"N22","to":"N32","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N40-end","from":"N40","to":"end","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N10-N21","from":"N10","to":"N21","cost":4,"rev":2,"approved":true,"disabled":false},{"id":"N30-N41","from":"N30","to":"N41","cost":0,"rev":3,"approved":false,"disabled":true},{"id":"N13-N23","from":"N13","to":"N23","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N31-N42","from":"N31","to":"N42","cost":2,"rev":1,"approved":true,"disabled":false}]
+
+    Return cost, optimal_count, first_path (nodes in traversal order), mandatory_internal
+
+    (sorted nodes, excluding start and end). Relevant evidence includes rejected revisions.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      cost: 8
+      optimal_count: 1
+      first_path:
+      - start
+      - N11
+      - N21
+      - N32
+      - N42
+      - end
+      mandatory_internal:
+      - N11
+      - N21
+      - N32
+      - N42
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-archivepaths-02
+  category: Needle Retrieval
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'The archive encodes directed handoff links rather than a directly retrievable answer. For
+
+    each link ID, choose its highest approved revision. Unapproved revisions have no effect.
+
+    If that chosen row is disabled the link does not exist; do not fall back to an older row.
+
+    Find the minimum total cost path from start to end. Count ALL paths achieving that cost,
+
+    select the lexicographically first node sequence, and find the INTERNAL nodes present on
+
+    EVERY optimal path. Paths use only the selected links. Link costs add; there are no cycles.
+
+    Archive: [{"id":"N10-N21","from":"N10","to":"N21","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N32-N42","from":"N32","to":"N42","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N11-N23","from":"N11","to":"N23","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N11-N21","from":"N11","to":"N21","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N12-N23","from":"N12","to":"N23","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N30-N41","from":"N30","to":"N41","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N30-N42","from":"N30","to":"N42","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N12-N20","from":"N12","to":"N20","cost":2,"rev":2,"approved":true,"disabled":true},{"id":"N22-N31","from":"N22","to":"N31","cost":1,"rev":2,"approved":true,"disabled":false},{"id":"N23-N33","from":"N23","to":"N33","cost":3,"rev":2,"approved":true,"disabled":true},{"id":"N20-N32","from":"N20","to":"N32","cost":2,"rev":2,"approved":true,"disabled":true},{"id":"N22-N30","from":"N22","to":"N30","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N33-N40","from":"N33","to":"N40","cost":4,"rev":2,"approved":true,"disabled":true},{"id":"N12-N21","from":"N12","to":"N21","cost":4,"rev":2,"approved":true,"disabled":true},{"id":"N13-N23","from":"N13","to":"N23","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N30-N40","from":"N30","to":"N40","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N21-N32","from":"N21","to":"N32","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N20-N30","from":"N20","to":"N30","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"start-N13","from":"start","to":"N13","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N32-N43","from":"N32","to":"N43","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"start-N11","from":"start","to":"N11","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N32-N42","from":"N32","to":"N42","cost":5,"rev":2,"approved":true,"disabled":true},{"id":"N22-N31","from":"N22","to":"N31","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N31-N43","from":"N31","to":"N43","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N12-N22","from":"N12","to":"N22","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"start-N10","from":"start","to":"N10","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N33-N42","from":"N33","to":"N42","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N10-N22","from":"N10","to":"N22","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N43-end","from":"N43","to":"end","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"start-N12","from":"start","to":"N12","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N13-N21","from":"N13","to":"N21","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N11-N20","from":"N11","to":"N20","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N20-N31","from":"N20","to":"N31","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N21-N33","from":"N21","to":"N33","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N41-end","from":"N41","to":"end","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N33-N42","from":"N33","to":"N42","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N23-N31","from":"N23","to":"N31","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N31-N43","from":"N31","to":"N43","cost":6,"rev":2,"approved":true,"disabled":false},{"id":"N33-N43","from":"N33","to":"N43","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N23-N33","from":"N23","to":"N33","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N30-N42","from":"N30","to":"N42","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N22-N32","from":"N22","to":"N32","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N11-N20","from":"N11","to":"N20","cost":3,"rev":2,"approved":true,"disabled":false},{"id":"N10-N22","from":"N10","to":"N22","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N30-N40","from":"N30","to":"N40","cost":4,"rev":2,"approved":true,"disabled":false},{"id":"N23-N30","from":"N23","to":"N30","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N31-N42","from":"N31","to":"N42","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N12-N23","from":"N12","to":"N23","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N33-N41","from":"N33","to":"N41","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N31-N41","from":"N31","to":"N41","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N33-N43","from":"N33","to":"N43","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N22-N33","from":"N22","to":"N33","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N32-N41","from":"N32","to":"N41","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N30-N43","from":"N30","to":"N43","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"start-N12","from":"start","to":"N12","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N21-N31","from":"N21","to":"N31","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N13-N22","from":"N13","to":"N22","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N23-N32","from":"N23","to":"N32","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N21-N31","from":"N21","to":"N31","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N20-N33","from":"N20","to":"N33","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N20-N32","from":"N20","to":"N32","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N30-N40","from":"N30","to":"N40","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N10-N20","from":"N10","to":"N20","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N10-N21","from":"N10","to":"N21","cost":3,"rev":2,"approved":true,"disabled":false},{"id":"N11-N20","from":"N11","to":"N20","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N11-N22","from":"N11","to":"N22","cost":1,"rev":2,"approved":true,"disabled":true},{"id":"N22-N30","from":"N22","to":"N30","cost":5,"rev":2,"approved":true,"disabled":true},{"id":"N32-N40","from":"N32","to":"N40","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N12-N23","from":"N12","to":"N23","cost":5,"rev":2,"approved":true,"disabled":false},{"id":"N21-N30","from":"N21","to":"N30","cost":1,"rev":2,"approved":true,"disabled":true},{"id":"N31-N42","from":"N31","to":"N42","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N31-N43","from":"N31","to":"N43","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N21-N33","from":"N21","to":"N33","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N31-N41","from":"N31","to":"N41","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N11-N21","from":"N11","to":"N21","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N12-N21","from":"N12","to":"N21","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N22-N33","from":"N22","to":"N33","cost":3,"rev":2,"approved":true,"disabled":false},{"id":"N11-N22","from":"N11","to":"N22","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N31-N40","from":"N31","to":"N40","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N21-N30","from":"N21","to":"N30","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N32-N40","from":"N32","to":"N40","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N12-N20","from":"N12","to":"N20","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N42-end","from":"N42","to":"end","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N33-N41","from":"N33","to":"N41","cost":5,"rev":2,"approved":true,"disabled":false},{"id":"N13-N20","from":"N13","to":"N20","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N10-N23","from":"N10","to":"N23","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N40-end","from":"N40","to":"end","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N33-N40","from":"N33","to":"N40","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N31-N40","from":"N31","to":"N40","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N30-N43","from":"N30","to":"N43","cost":0,"rev":3,"approved":false,"disabled":false}]
+
+    Return cost, optimal_count, first_path (nodes in traversal order), mandatory_internal
+
+    (sorted nodes, excluding start and end). Relevant evidence includes rejected revisions.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      cost: 7
+      optimal_count: 1
+      first_path:
+      - start
+      - N12
+      - N22
+      - N32
+      - N40
+      - end
+      mandatory_internal:
+      - N12
+      - N22
+      - N32
+      - N40
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-archivepaths-03
+  category: Needle Retrieval
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'The archive encodes directed handoff links rather than a directly retrievable answer. For
+
+    each link ID, choose its highest approved revision. Unapproved revisions have no effect.
+
+    If that chosen row is disabled the link does not exist; do not fall back to an older row.
+
+    Find the minimum total cost path from start to end. Count ALL paths achieving that cost,
+
+    select the lexicographically first node sequence, and find the INTERNAL nodes present on
+
+    EVERY optimal path. Paths use only the selected links. Link costs add; there are no cycles.
+
+    Archive: [{"id":"N22-N33","from":"N22","to":"N33","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N33-N41","from":"N33","to":"N41","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N12-N20","from":"N12","to":"N20","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N32-N43","from":"N32","to":"N43","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N12-N22","from":"N12","to":"N22","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N22-N32","from":"N22","to":"N32","cost":4,"rev":2,"approved":true,"disabled":false},{"id":"N23-N31","from":"N23","to":"N31","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N23-N31","from":"N23","to":"N31","cost":4,"rev":2,"approved":true,"disabled":false},{"id":"N13-N23","from":"N13","to":"N23","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N33-N40","from":"N33","to":"N40","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"start-N13","from":"start","to":"N13","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N20-N32","from":"N20","to":"N32","cost":6,"rev":2,"approved":true,"disabled":false},{"id":"start-N10","from":"start","to":"N10","cost":3,"rev":2,"approved":true,"disabled":true},{"id":"N22-N32","from":"N22","to":"N32","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N12-N22","from":"N12","to":"N22","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N11-N20","from":"N11","to":"N20","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N13-N20","from":"N13","to":"N20","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"start-N11","from":"start","to":"N11","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N30-N43","from":"N30","to":"N43","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N21-N31","from":"N21","to":"N31","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N41-end","from":"N41","to":"end","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N20-N33","from":"N20","to":"N33","cost":3,"rev":2,"approved":true,"disabled":false},{"id":"N11-N21","from":"N11","to":"N21","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N20-N30","from":"N20","to":"N30","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N42-end","from":"N42","to":"end","cost":6,"rev":2,"approved":true,"disabled":true},{"id":"N11-N21","from":"N11","to":"N21","cost":5,"rev":2,"approved":true,"disabled":true},{"id":"N13-N21","from":"N13","to":"N21","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N41-end","from":"N41","to":"end","cost":3,"rev":2,"approved":true,"disabled":true},{"id":"N31-N43","from":"N31","to":"N43","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N21-N30","from":"N21","to":"N30","cost":1,"rev":2,"approved":true,"disabled":false},{"id":"N22-N31","from":"N22","to":"N31","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N20-N32","from":"N20","to":"N32","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N30-N43","from":"N30","to":"N43","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N10-N22","from":"N10","to":"N22","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N30-N40","from":"N30","to":"N40","cost":1,"rev":2,"approved":true,"disabled":false},{"id":"N20-N31","from":"N20","to":"N31","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N13-N22","from":"N13","to":"N22","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N21-N33","from":"N21","to":"N33","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N31-N42","from":"N31","to":"N42","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N20-N31","from":"N20","to":"N31","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N12-N20","from":"N12","to":"N20","cost":6,"rev":2,"approved":true,"disabled":false},{"id":"N32-N42","from":"N32","to":"N42","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N30-N42","from":"N30","to":"N42","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N21-N30","from":"N21","to":"N30","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N10-N23","from":"N10","to":"N23","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N11-N20","from":"N11","to":"N20","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N31-N43","from":"N31","to":"N43","cost":3,"rev":2,"approved":true,"disabled":false},{"id":"N31-N42","from":"N31","to":"N42","cost":1,"rev":2,"approved":true,"disabled":false},{"id":"N32-N40","from":"N32","to":"N40","cost":4,"rev":2,"approved":true,"disabled":false},{"id":"N13-N21","from":"N13","to":"N21","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N33-N42","from":"N33","to":"N42","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N42-end","from":"N42","to":"end","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"start-N13","from":"start","to":"N13","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N20-N33","from":"N20","to":"N33","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"start-N12","from":"start","to":"N12","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N21-N32","from":"N21","to":"N32","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N30-N40","from":"N30","to":"N40","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N20-N33","from":"N20","to":"N33","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N10-N21","from":"N10","to":"N21","cost":4,"rev":2,"approved":true,"disabled":false},{"id":"N13-N22","from":"N13","to":"N22","cost":5,"rev":2,"approved":true,"disabled":false},{"id":"N22-N30","from":"N22","to":"N30","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N20-N32","from":"N20","to":"N32","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N22-N31","from":"N22","to":"N31","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N40-end","from":"N40","to":"end","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N12-N23","from":"N12","to":"N23","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"start-N10","from":"start","to":"N10","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N11-N23","from":"N11","to":"N23","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N10-N21","from":"N10","to":"N21","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N23-N33","from":"N23","to":"N33","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N13-N23","from":"N13","to":"N23","cost":3,"rev":2,"approved":true,"disabled":false},{"id":"N32-N40","from":"N32","to":"N40","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N23-N30","from":"N23","to":"N30","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N12-N21","from":"N12","to":"N21","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N13-N22","from":"N13","to":"N22","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N32-N41","from":"N32","to":"N41","cost":6,"rev":1,"approved":true,"disabled":false},{"id":"N31-N40","from":"N31","to":"N40","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N31-N42","from":"N31","to":"N42","cost":1,"rev":1,"approved":true,"disabled":false},{"id":"N11-N22","from":"N11","to":"N22","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N33-N43","from":"N33","to":"N43","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N40-end","from":"N40","to":"end","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N13-N20","from":"N13","to":"N20","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N10-N20","from":"N10","to":"N20","cost":4,"rev":1,"approved":true,"disabled":false},{"id":"N11-N22","from":"N11","to":"N22","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N31-N41","from":"N31","to":"N41","cost":3,"rev":1,"approved":true,"disabled":false},{"id":"N23-N32","from":"N23","to":"N32","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N43-end","from":"N43","to":"end","cost":5,"rev":1,"approved":true,"disabled":false},{"id":"N22-N30","from":"N22","to":"N30","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N32-N40","from":"N32","to":"N40","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N23-N30","from":"N23","to":"N30","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N21-N31","from":"N21","to":"N31","cost":2,"rev":2,"approved":true,"disabled":false},{"id":"N11-N23","from":"N11","to":"N23","cost":4,"rev":2,"approved":true,"disabled":true},{"id":"N31-N41","from":"N31","to":"N41","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N30-N41","from":"N30","to":"N41","cost":2,"rev":1,"approved":true,"disabled":false},{"id":"N31-N40","from":"N31","to":"N40","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N32-N42","from":"N32","to":"N42","cost":0,"rev":3,"approved":false,"disabled":false},{"id":"N33-N43","from":"N33","to":"N43","cost":2,"rev":1,"approved":true,"disabled":false}]
+
+    Return cost, optimal_count, first_path (nodes in traversal order), mandatory_internal
+
+    (sorted nodes, excluding start and end). Relevant evidence includes rejected revisions.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      cost: 10
+      optimal_count: 2
+      first_path:
+      - start
+      - N13
+      - N23
+      - N30
+      - N40
+      - end
+      mandatory_internal:
+      - N13
+      - N23
+      - N40
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-scopedstate-01
+  category: Long Context Coherence
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Follow a nested configuration session. The root initially has color=11, quota=22, region=33.
+
+    push creates an EMPTY child overlay; reads inherit through parents. set writes only the
+
+    current overlay. unset writes an explicit null mask: reads return null, not a parent''s
+
+    value. commit pops the child and copies only its explicit entries (including null masks)
+
+    into its parent. rollback pops and discards the child. Neither operation pops the root.
+
+    read records visible [color,quota,region]. All operations below are valid and ordered.
+
+    The final stack has only the root. Integer values are opaque configuration data.
+
+    Operations: [["push"],["set","quota",76],["push"],["unset","quota"],["read"],["commit"],["read"],["commit"],["read"],["push"],["set","quota",22],["push"],["unset","quota"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","region",73],["push"],["unset","region"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","color",40],["push"],["unset","quota"],["read"],["commit"],["read"],["commit"],["read"],["push"],["set","region",46],["push"],["unset","quota"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","region",52],["push"],["unset","quota"],["read"],["commit"],["read"],["commit"],["read"]]
+
+    Return reads (one three-element array for every read in chronological order) and root
+
+    (final explicit root entries for color,quota,region). Do not conflate null with inheritance.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      reads:
+      - - 11
+        - null
+        - 33
+      - - 11
+        - null
+        - 33
+      - - 11
+        - null
+        - 33
+      - - 11
+        - null
+        - 33
+      - - 11
+        - 22
+        - 33
+      - - 11
+        - 22
+        - 33
+      - - 11
+        - 22
+        - null
+      - - 11
+        - 22
+        - 73
+      - - 11
+        - 22
+        - 73
+      - - 40
+        - null
+        - 73
+      - - 40
+        - null
+        - 73
+      - - 40
+        - null
+        - 73
+      - - 40
+        - null
+        - 46
+      - - 40
+        - null
+        - 46
+      - - 40
+        - null
+        - 46
+      - - 40
+        - null
+        - 52
+      - - 40
+        - null
+        - 52
+      - - 40
+        - null
+        - 52
+      root:
+        color: 40
+        quota: null
+        region: 52
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-scopedstate-02
+  category: Long Context Coherence
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Follow a nested configuration session. The root initially has color=11, quota=22, region=33.
+
+    push creates an EMPTY child overlay; reads inherit through parents. set writes only the
+
+    current overlay. unset writes an explicit null mask: reads return null, not a parent''s
+
+    value. commit pops the child and copies only its explicit entries (including null masks)
+
+    into its parent. rollback pops and discards the child. Neither operation pops the root.
+
+    read records visible [color,quota,region]. All operations below are valid and ordered.
+
+    The final stack has only the root. Integer values are opaque configuration data.
+
+    Operations: [["push"],["set","quota",57],["push"],["unset","color"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","color",90],["push"],["unset","quota"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","color",40],["push"],["unset","color"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","quota",78],["push"],["unset","color"],["read"],["commit"],["read"],["commit"],["read"],["push"],["set","region",16],["push"],["unset","quota"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","color",20],["push"],["unset","quota"],["read"],["commit"],["read"],["commit"],["read"]]
+
+    Return reads (one three-element array for every read in chronological order) and root
+
+    (final explicit root entries for color,quota,region). Do not conflate null with inheritance.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      reads:
+      - - null
+        - 57
+        - 33
+      - - 11
+        - 57
+        - 33
+      - - 11
+        - 57
+        - 33
+      - - 90
+        - null
+        - 33
+      - - 90
+        - 57
+        - 33
+      - - 90
+        - 57
+        - 33
+      - - null
+        - 57
+        - 33
+      - - 40
+        - 57
+        - 33
+      - - 40
+        - 57
+        - 33
+      - - null
+        - 78
+        - 33
+      - - null
+        - 78
+        - 33
+      - - null
+        - 78
+        - 33
+      - - null
+        - null
+        - 16
+      - - null
+        - 78
+        - 16
+      - - null
+        - 78
+        - 16
+      - - 20
+        - null
+        - 16
+      - - 20
+        - null
+        - 16
+      - - 20
+        - null
+        - 16
+      root:
+        color: 20
+        quota: null
+        region: 16
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-scopedstate-03
+  category: Long Context Coherence
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Follow a nested configuration session. The root initially has color=11, quota=22, region=33.
+
+    push creates an EMPTY child overlay; reads inherit through parents. set writes only the
+
+    current overlay. unset writes an explicit null mask: reads return null, not a parent''s
+
+    value. commit pops the child and copies only its explicit entries (including null masks)
+
+    into its parent. rollback pops and discards the child. Neither operation pops the root.
+
+    read records visible [color,quota,region]. All operations below are valid and ordered.
+
+    The final stack has only the root. Integer values are opaque configuration data.
+
+    Operations: [["push"],["set","quota",94],["push"],["unset","quota"],["read"],["commit"],["read"],["commit"],["read"],["push"],["set","color",95],["push"],["unset","color"],["read"],["commit"],["read"],["commit"],["read"],["push"],["set","quota",68],["push"],["unset","region"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","quota",73],["push"],["unset","quota"],["read"],["commit"],["read"],["commit"],["read"],["push"],["set","quota",71],["push"],["unset","quota"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","quota",65],["push"],["unset","quota"],["read"],["commit"],["read"],["commit"],["read"]]
+
+    Return reads (one three-element array for every read in chronological order) and root
+
+    (final explicit root entries for color,quota,region). Do not conflate null with inheritance.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      reads:
+      - - 11
+        - null
+        - 33
+      - - 11
+        - null
+        - 33
+      - - 11
+        - null
+        - 33
+      - - null
+        - null
+        - 33
+      - - null
+        - null
+        - 33
+      - - null
+        - null
+        - 33
+      - - null
+        - 68
+        - null
+      - - null
+        - 68
+        - 33
+      - - null
+        - 68
+        - 33
+      - - null
+        - null
+        - 33
+      - - null
+        - null
+        - 33
+      - - null
+        - null
+        - 33
+      - - null
+        - null
+        - 33
+      - - null
+        - 71
+        - 33
+      - - null
+        - 71
+        - 33
+      - - null
+        - null
+        - 33
+      - - null
+        - null
+        - 33
+      - - null
+        - null
+        - 33
+      root:
+        color: null
+        quota: null
+        region: 33
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-diagnosis-01
+  category: R&D
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Diagnose this combinational controller. Inputs a,b,c,d and all gates are bits. Gate order
+
+    is topological. xor=exclusive OR, and=AND, or=inclusive OR. Only output g5 is measurable.
+
+    There is either no fault (healthy) or exactly one gate output is permanently forced to 0
+
+    or 1, replacing that gate''s result before downstream gates execute. Faults stay fixed.
+
+    Netlist [gate,operation,left,right]: [["g0","xor","a","b"],["g1","and","b","c"],["g2","or","g0","d"],["g3","xor","g1","g2"],["g4","and","a","g3"],["g5","xor","g4","c"]]
+
+    Fault labels: ["healthy","g0=0","g0=1","g1=0","g1=1","g2=0","g2=1","g3=0","g3=1","g4=0","g4=1","g5=0","g5=1"]
+
+    Observed input abcd -> output: {"0000":0,"0001":0}
+
+    Available additional input abcd -> measurement cost: {"0011":5,"0100":1,"0110":3,"1001":1,"1010":2,"1011":1,"1101":1,"1110":4}
+
+    Return candidates (all consistent fault labels sorted), indistinguishable (partition
+
+    candidates by identical outcomes on ALL available additional probes; sort each class and
+
+    then sort classes lexicographically), cost, and probe_sets. Select a NONADAPTIVE subset
+
+    of additional probes that distinguishes those classes, not faults inside an inseparable
+
+    class. Minimize cost, then number of probes. probe_sets contains ALL subsets tied on both
+
+    objectives, each sorted lexicographically and the outer list also sorted. Include singleton
+
+    classes. With only one class, the minimum probe set is empty and costs zero.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      candidates:
+      - g0=0
+      - g0=1
+      - g1=0
+      - g1=1
+      - g2=0
+      - g2=1
+      - g3=0
+      - g3=1
+      - g4=0
+      - g5=0
+      - healthy
+      indistinguishable:
+      - - g0=0
+      - - g0=1
+        - g1=0
+        - g2=1
+      - - g1=1
+        - g2=0
+      - - g3=0
+        - g4=0
+      - - g3=1
+        - healthy
+      - - g5=0
+      cost: 7
+      probe_sets:
+      - - '1001'
+        - '1010'
+        - '1110'
+      - - '1010'
+        - '1101'
+        - '1110'
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-diagnosis-02
+  category: R&D
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Diagnose this combinational controller. Inputs a,b,c,d and all gates are bits. Gate order
+
+    is topological. xor=exclusive OR, and=AND, or=inclusive OR. Only output g5 is measurable.
+
+    There is either no fault (healthy) or exactly one gate output is permanently forced to 0
+
+    or 1, replacing that gate''s result before downstream gates execute. Faults stay fixed.
+
+    Netlist [gate,operation,left,right]: [["g0","xor","a","b"],["g1","and","b","c"],["g2","or","g0","d"],["g3","xor","g1","g2"],["g4","and","a","g3"],["g5","xor","g4","c"]]
+
+    Fault labels: ["healthy","g0=0","g0=1","g1=0","g1=1","g2=0","g2=1","g3=0","g3=1","g4=0","g4=1","g5=0","g5=1"]
+
+    Observed input abcd -> output: {"0000":0,"0001":0}
+
+    Available additional input abcd -> measurement cost: {"0010":1,"0011":4,"0110":4,"0111":1,"1001":4,"1011":5,"1101":4,"1110":4}
+
+    Return candidates (all consistent fault labels sorted), indistinguishable (partition
+
+    candidates by identical outcomes on ALL available additional probes; sort each class and
+
+    then sort classes lexicographically), cost, and probe_sets. Select a NONADAPTIVE subset
+
+    of additional probes that distinguishes those classes, not faults inside an inseparable
+
+    class. Minimize cost, then number of probes. probe_sets contains ALL subsets tied on both
+
+    objectives, each sorted lexicographically and the outer list also sorted. Include singleton
+
+    classes. With only one class, the minimum probe set is empty and costs zero.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      candidates:
+      - g0=0
+      - g0=1
+      - g1=0
+      - g1=1
+      - g2=0
+      - g2=1
+      - g3=0
+      - g3=1
+      - g4=0
+      - g5=0
+      - healthy
+      indistinguishable:
+      - - g0=0
+        - g3=1
+        - healthy
+      - - g0=1
+        - g1=0
+        - g2=1
+      - - g1=1
+        - g2=0
+      - - g3=0
+        - g4=0
+      - - g5=0
+      cost: 9
+      probe_sets:
+      - - '0010'
+        - '1001'
+        - '1110'
+      - - '0010'
+        - '1101'
+        - '1110'
+      - - '0111'
+        - '1001'
+        - '1110'
+      - - '0111'
+        - '1101'
+        - '1110'
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-diagnosis-03
+  category: R&D
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Diagnose this combinational controller. Inputs a,b,c,d and all gates are bits. Gate order
+
+    is topological. xor=exclusive OR, and=AND, or=inclusive OR. Only output g5 is measurable.
+
+    There is either no fault (healthy) or exactly one gate output is permanently forced to 0
+
+    or 1, replacing that gate''s result before downstream gates execute. Faults stay fixed.
+
+    Netlist [gate,operation,left,right]: [["g0","xor","a","b"],["g1","and","b","c"],["g2","or","g0","d"],["g3","xor","g1","g2"],["g4","and","a","g3"],["g5","xor","g4","c"]]
+
+    Fault labels: ["healthy","g0=0","g0=1","g1=0","g1=1","g2=0","g2=1","g3=0","g3=1","g4=0","g4=1","g5=0","g5=1"]
+
+    Observed input abcd -> output: {"0000":0,"0010":1}
+
+    Available additional input abcd -> measurement cost: {"0101":5,"0110":5,"1000":5,"1010":1,"1011":2,"1100":2,"1110":3,"1111":1}
+
+    Return candidates (all consistent fault labels sorted), indistinguishable (partition
+
+    candidates by identical outcomes on ALL available additional probes; sort each class and
+
+    then sort classes lexicographically), cost, and probe_sets. Select a NONADAPTIVE subset
+
+    of additional probes that distinguishes those classes, not faults inside an inseparable
+
+    class. Minimize cost, then number of probes. probe_sets contains ALL subsets tied on both
+
+    objectives, each sorted lexicographically and the outer list also sorted. Include singleton
+
+    classes. With only one class, the minimum probe set is empty and costs zero.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      candidates:
+      - g0=0
+      - g0=1
+      - g1=0
+      - g1=1
+      - g2=0
+      - g2=1
+      - g3=0
+      - g3=1
+      - g4=0
+      - healthy
+      indistinguishable:
+      - - g0=0
+      - - g0=1
+        - g2=1
+      - - g1=0
+      - - g1=1
+      - - g2=0
+      - - g3=0
+        - g4=0
+      - - g3=1
+      - - healthy
+      cost: 6
+      probe_sets:
+      - - '1010'
+        - '1011'
+        - '1100'
+        - '1111'
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-inheritance-01
+  category: Factual Knowledge
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Apply the stipulated linked-locus inheritance model, with no outside population assumptions.
+
+    Parent 1 haplotypes are AB/ab and recombination probability is 12/100. Parent 2 haplotypes
+
+    are Ab/aB and recombination probability is 20/100. Each parent''s two parental gametes
+
+    each have probability (1-r)/2; the other two gametes each have probability r/2. Gametes
+
+    from different parents are independent. At locus A, AA offspring survive with probability
+
+    1/2; Aa and aa survive with probability 1. No other viability selection occurs.
+
+    Among survivors phenotype is white if aa (regardless of B), dark if at least one A AND at
+
+    least one B, light otherwise. A double heterozygote has Aa AND Bb, irrespective of phase.
+
+    Return survival (probability an offspring survives), phenotypes (dark/light/white conditional
+
+    on survival), and double_heterozygote_given_dark (conditional on surviving AND being dark).
+
+    Every probability must be an exact reduced [numerator,denominator] pair with positive
+
+    denominator. Distinguish preselection probabilities from conditional survivor frequencies.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      survival:
+      - 7
+      - 8
+      phenotypes:
+        dark:
+        - 431
+        - 875
+        light:
+        - 194
+        - 875
+        white:
+        - 2
+        - 7
+      double_heterozygote_given_dark:
+      - 136
+      - 431
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-inheritance-02
+  category: Factual Knowledge
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Apply the stipulated linked-locus inheritance model, with no outside population assumptions.
+
+    Parent 1 haplotypes are AB/ab and recombination probability is 18/100. Parent 2 haplotypes
+
+    are Ab/aB and recombination probability is 30/100. Each parent''s two parental gametes
+
+    each have probability (1-r)/2; the other two gametes each have probability r/2. Gametes
+
+    from different parents are independent. At locus A, AA offspring survive with probability
+
+    1/3; Aa and aa survive with probability 1. No other viability selection occurs.
+
+    Among survivors phenotype is white if aa (regardless of B), dark if at least one A AND at
+
+    least one B, light otherwise. A double heterozygote has Aa AND Bb, irrespective of phase.
+
+    Return survival (probability an offspring survives), phenotypes (dark/light/white conditional
+
+    on survival), and double_heterozygote_given_dark (conditional on surviving AND being dark).
+
+    Every probability must be an exact reduced [numerator,denominator] pair with positive
+
+    denominator. Distinguish preselection probabilities from conditional survivor frequencies.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      survival:
+      - 5
+      - 6
+      phenotypes:
+        dark:
+        - 499
+        - 1000
+        light:
+        - 201
+        - 1000
+        white:
+        - 3
+        - 10
+      double_heterozygote_given_dark:
+      - 1116
+      - 2495
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-inheritance-03
+  category: Factual Knowledge
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Apply the stipulated linked-locus inheritance model, with no outside population assumptions.
+
+    Parent 1 haplotypes are AB/ab and recombination probability is 24/100. Parent 2 haplotypes
+
+    are Ab/aB and recombination probability is 10/100. Each parent''s two parental gametes
+
+    each have probability (1-r)/2; the other two gametes each have probability r/2. Gametes
+
+    from different parents are independent. At locus A, AA offspring survive with probability
+
+    1/4; Aa and aa survive with probability 1. No other viability selection occurs.
+
+    Among survivors phenotype is white if aa (regardless of B), dark if at least one A AND at
+
+    least one B, light otherwise. A double heterozygote has Aa AND Bb, irrespective of phase.
+
+    Return survival (probability an offspring survives), phenotypes (dark/light/white conditional
+
+    on survival), and double_heterozygote_given_dark (conditional on surviving AND being dark).
+
+    Every probability must be an exact reduced [numerator,denominator] pair with positive
+
+    denominator. Distinguish preselection probabilities from conditional survivor frequencies.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      survival:
+      - 13
+      - 16
+      phenotypes:
+        dark:
+        - 744
+        - 1625
+        light:
+        - 381
+        - 1625
+        white:
+        - 4
+        - 13
+      double_heterozygote_given_dark:
+      - 73
+      - 186
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-reshape-01
+  category: Instruction Following
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/allenai/IFBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: "Apply EVERY stage in order to this five-row, six-column integer matrix: [[-6,4,-4,7,-6,-1],[-6,-4,6,6,-1,7],[6,-1,4,7,2,2],[4,-7,-1,-8,-9,-4],[8,0,8,7,-7,7]]\n\
+    1. Rotate the entire matrix 90 degrees clockwise, producing six rows and five columns.\n2. Traverse\
+    \ rotated rows from top to bottom; rows with even zero-based index left-to-right,\n   odd rows right-to-left.\
+    \ This produces one flat sequence of 30 values.\n3. Using indices in that ORIGINAL flat sequence,\
+    \ drop positions i where i modulo 4 is 1.\n   Also drop values divisible by 3. Do not renumber until\
+    \ both filters are complete.\n4. Renumber survivors j from zero. Starting accumulator at zero, add\
+    \ survivor when j is\n   even, subtract it when j is odd. After EACH operation emit accumulator modulo\
+    \ 7 as a\n   number 0..6 (Euclidean remainder even for a negative accumulator).\n5. Run-length encode\
+    \ consecutive equal emitted numbers as [number,count]. Do not merge\n   equal numbers separated by\
+    \ other numbers. checksum is sum((j+1)*emitted[j]).\nReturn runs, kept (number of survivors), and\
+    \ checksum. Output numbers, not strings.\nReturn only one JSON object with exactly the requested keys.\
+    \ Arrays have the order specified above; do not add prose."
+  evaluator: json_match
+  expected:
+    value:
+      runs:
+      - - 1
+        - 1
+      - - 5
+        - 1
+      - - 4
+        - 2
+      - - 5
+        - 1
+      - - 6
+        - 1
+      - - 3
+        - 1
+      - - 0
+        - 2
+      - - 1
+        - 3
+      - - 3
+        - 1
+      - - 4
+        - 2
+      - - 2
+        - 1
+      - - 5
+        - 1
+      kept: 17
+      checksum: 426
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-reshape-02
+  category: Instruction Following
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/allenai/IFBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: "Apply EVERY stage in order to this five-row, six-column integer matrix: [[-7,1,3,4,2,-2],[3,-5,-6,4,-6,-7],[9,-7,6,-7,0,1],[1,5,5,0,-3,-1],[3,5,-3,-9,1,-3]]\n\
+    1. Rotate the entire matrix 90 degrees clockwise, producing six rows and five columns.\n2. Traverse\
+    \ rotated rows from top to bottom; rows with even zero-based index left-to-right,\n   odd rows right-to-left.\
+    \ This produces one flat sequence of 30 values.\n3. Using indices in that ORIGINAL flat sequence,\
+    \ drop positions i where i modulo 4 is 1.\n   Also drop values divisible by 3. Do not renumber until\
+    \ both filters are complete.\n4. Renumber survivors j from zero. Starting accumulator at zero, add\
+    \ survivor when j is\n   even, subtract it when j is odd. After EACH operation emit accumulator modulo\
+    \ 7 as a\n   number 0..6 (Euclidean remainder even for a negative accumulator).\n5. Run-length encode\
+    \ consecutive equal emitted numbers as [number,count]. Do not merge\n   equal numbers separated by\
+    \ other numbers. checksum is sum((j+1)*emitted[j]).\nReturn runs, kept (number of survivors), and\
+    \ checksum. Output numbers, not strings.\nReturn only one JSON object with exactly the requested keys.\
+    \ Arrays have the order specified above; do not add prose."
+  evaluator: json_match
+  expected:
+    value:
+      runs:
+      - - 0
+        - 1
+      - - 5
+        - 2
+      - - 0
+        - 1
+      - - 5
+        - 1
+      - - 1
+        - 1
+      - - 5
+        - 1
+      - - 4
+        - 1
+      - - 6
+        - 2
+      - - 0
+        - 1
+      - - 1
+        - 1
+      kept: 12
+      checksum: 249
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-reshape-03
+  category: Instruction Following
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/allenai/IFBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: "Apply EVERY stage in order to this five-row, six-column integer matrix: [[-5,-8,-8,-2,-2,-5],[-3,0,4,-8,1,2],[-7,7,-3,-8,2,-3],[7,8,3,1,2,-6],[6,-5,-2,1,0,-7]]\n\
+    1. Rotate the entire matrix 90 degrees clockwise, producing six rows and five columns.\n2. Traverse\
+    \ rotated rows from top to bottom; rows with even zero-based index left-to-right,\n   odd rows right-to-left.\
+    \ This produces one flat sequence of 30 values.\n3. Using indices in that ORIGINAL flat sequence,\
+    \ drop positions i where i modulo 4 is 1.\n   Also drop values divisible by 3. Do not renumber until\
+    \ both filters are complete.\n4. Renumber survivors j from zero. Starting accumulator at zero, add\
+    \ survivor when j is\n   even, subtract it when j is odd. After EACH operation emit accumulator modulo\
+    \ 7 as a\n   number 0..6 (Euclidean remainder even for a negative accumulator).\n5. Run-length encode\
+    \ consecutive equal emitted numbers as [number,count]. Do not merge\n   equal numbers separated by\
+    \ other numbers. checksum is sum((j+1)*emitted[j]).\nReturn runs, kept (number of survivors), and\
+    \ checksum. Output numbers, not strings.\nReturn only one JSON object with exactly the requested keys.\
+    \ Arrays have the order specified above; do not add prose."
+  evaluator: json_match
+  expected:
+    value:
+      runs:
+      - - 0
+        - 1
+      - - 5
+        - 2
+      - - 4
+        - 1
+      - - 2
+        - 1
+      - - 3
+        - 1
+      - - 1
+        - 1
+      - - 2
+        - 1
+      - - 3
+        - 1
+      - - 2
+        - 1
+      - - 4
+        - 1
+      - - 3
+        - 1
+      - - 1
+        - 1
+      - - 6
+        - 1
+      kept: 14
+      checksum: 316
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-translation-01
+  category: Translation
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Translate the German policy into the requested English-keyed semantic representation.
+
+    Source policy (ASCII transliteration preserves the original language): Nur wenn alle freigegebenen
+    Berichte unterschrieben sind und kein freigegebener Bericht widerrufen wurde, darf die Lieferung erfolgen.
+    Entwuerfe zaehlen nicht. Bei einer leeren Menge freigegebener Berichte gilt die Bedingung als erfuellt.
+
+    English domain definitions: freigegeben/schvalena means approved; unterschrieben/podepsana
+
+    means signed; widerrufen/odvolana means revoked; Entwurf/navrh means draft.
+
+    Treat a necessary condition (only if) as insufficient to establish permission; a biconditional
+
+    (if and only if) establishes both permission when true and prohibition when false. A revoked
+
+    approved report always prohibits delivery under these policies. No other permissions exist
+
+    in the evidence, but do NOT assume missing permissions are false: label them unknown.
+
+    Scenarios in order, each report is [approved,signed,revoked]: [[],[[true,true,false]],[[true,false,false]],[[true,true,false],[true,false,false]],[[false,false,true],[true,true,false]],[[true,true,true],[true,false,false]],[[false,true,false]],[[true,false,false],[true,false,false]]]
+
+    Return signature_quantifier (all, any, or not_all), condition_sufficient (Boolean),
+
+    drafts_count (Boolean), statuses (allowed/forbidden/unknown per scenario). These keys encode
+
+    the translated meaning; no free-form translation or outside assumptions are requested.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      signature_quantifier: all
+      condition_sufficient: false
+      drafts_count: false
+      statuses:
+      - unknown
+      - unknown
+      - forbidden
+      - forbidden
+      - unknown
+      - forbidden
+      - unknown
+      - forbidden
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-translation-02
+  category: Translation
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Translate the Czech policy into the requested English-keyed semantic representation.
+
+    Source policy (ASCII transliteration preserves the original language): Dodavka smi probehnout prave
+    tehdy, kdyz je alespon jedna schvalena zprava podepsana a zadna schvalena zprava nebyla odvolana.
+    Navrhy se nepocitaji. Prazdna mnozina schvalenych zprav podminku nesplnuje.
+
+    English domain definitions: freigegeben/schvalena means approved; unterschrieben/podepsana
+
+    means signed; widerrufen/odvolana means revoked; Entwurf/navrh means draft.
+
+    Treat a necessary condition (only if) as insufficient to establish permission; a biconditional
+
+    (if and only if) establishes both permission when true and prohibition when false. A revoked
+
+    approved report always prohibits delivery under these policies. No other permissions exist
+
+    in the evidence, but do NOT assume missing permissions are false: label them unknown.
+
+    Scenarios in order, each report is [approved,signed,revoked]: [[],[[true,true,false]],[[true,false,false]],[[true,true,false],[true,false,false]],[[false,false,true],[true,true,false]],[[true,true,true],[true,false,false]],[[false,true,false]],[[true,false,false],[true,false,false]]]
+
+    Return signature_quantifier (all, any, or not_all), condition_sufficient (Boolean),
+
+    drafts_count (Boolean), statuses (allowed/forbidden/unknown per scenario). These keys encode
+
+    the translated meaning; no free-form translation or outside assumptions are requested.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      signature_quantifier: any
+      condition_sufficient: true
+      drafts_count: false
+      statuses:
+      - forbidden
+      - allowed
+      - forbidden
+      - allowed
+      - allowed
+      - forbidden
+      - forbidden
+      - forbidden
+    mode: exact
+    strict_json: true
+  max_tokens: 65536
+- id: S6-translation-03
+  category: Translation
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  prompt: 'Translate the German policy into the requested English-keyed semantic representation.
+
+    Source policy (ASCII transliteration preserves the original language): Die Lieferung darf genau dann
+    erfolgen, wenn nicht jeder freigegebene Bericht unterschrieben ist und kein freigegebener Bericht
+    widerrufen wurde. Entwuerfe zaehlen nicht. Bei einer leeren Menge ist ''jeder'' wahr.
+
+    English domain definitions: freigegeben/schvalena means approved; unterschrieben/podepsana
+
+    means signed; widerrufen/odvolana means revoked; Entwurf/navrh means draft.
+
+    Treat a necessary condition (only if) as insufficient to establish permission; a biconditional
+
+    (if and only if) establishes both permission when true and prohibition when false. A revoked
+
+    approved report always prohibits delivery under these policies. No other permissions exist
+
+    in the evidence, but do NOT assume missing permissions are false: label them unknown.
+
+    Scenarios in order, each report is [approved,signed,revoked]: [[],[[true,true,false]],[[true,false,false]],[[true,true,false],[true,false,false]],[[false,false,true],[true,true,false]],[[true,true,true],[true,false,false]],[[false,true,false]],[[true,false,false],[true,false,false]]]
+
+    Return signature_quantifier (all, any, or not_all), condition_sufficient (Boolean),
+
+    drafts_count (Boolean), statuses (allowed/forbidden/unknown per scenario). These keys encode
+
+    the translated meaning; no free-form translation or outside assumptions are requested.
+
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above;
+    do not add prose.'
+  evaluator: json_match
+  expected:
+    value:
+      signature_quantifier: not_all
+      condition_sufficient: true
+      drafts_count: false
+      statuses:
+      - forbidden
+      - forbidden
+      - allowed
+      - allowed
+      - forbidden
+      - forbidden
+      - forbidden
+      - allowed
+    mode: exact
+    strict_json: true
+  max_tokens: 65536

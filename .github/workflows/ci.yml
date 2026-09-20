@@ -55,6 +55,9 @@ jobs:
       - name: Verify database JSON regressions and ceiling challenges
         run: uv run python selftest_ceiling.py
 
+      - name: Verify stretch answer keys and grading regressions
+        run: uv run python selftest_stretch.py
+
       - name: Verify generated, interactive, and long-context evaluation
         run: uv run python selftest_quality.py
 

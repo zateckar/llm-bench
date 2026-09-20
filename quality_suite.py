@@ -10,7 +10,7 @@ import random
 
 from models import Question
 
-REVISION = "quality-v5"
+REVISION = "quality-v6"
 
 # Output budget for one question -- one turn for an interactive task -- with
 # reasoning included. Reasoning models routinely spend tens of thousands of
@@ -339,9 +339,10 @@ def assemble_questions(base, config):
             q,
             metadata={
                 **q.metadata,
-                "family": q.id.rsplit("-", 1)[0] if q.id.startswith("H5-") else q.id,
+                "family": q.id.rsplit("-", 1)[0] if q.id.startswith(("H5-", "S6-")) else q.id,
                 "scope": question_scope(q),
-                "cohort": "ceiling-v5" if q.id.startswith("H5-") else "anchor",
+                "cohort": "stretch-v6" if q.id.startswith("S6-") else
+                "ceiling-v5" if q.id.startswith("H5-") else "anchor",
             },
         )
         for q in base

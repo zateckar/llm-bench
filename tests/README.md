@@ -50,7 +50,7 @@ silently scoring wrong.
 
 ## Challenge revision
 
-The suite contains 397 static questions across 28 categories. Six categories use 56 `challenge-v2` items:
+The suite contains 427 static questions across 28 categories. Six categories use 56 `challenge-v2` items:
 
 | Category | IDs | Count | Main demands |
 |----------|-----|-------|--------------|
@@ -139,6 +139,8 @@ Question difficulty is provisional. Compare fresh runs using the same quality-v5
 
 ## Ceiling-v5
 
+The newer stretch-v6 additions are documented below; ceiling-v5 remains a separate reporting subset.
+
 `ceiling.yaml` adds 52 original questions across 13 categories after 145/187 capability
 items were passed by all four models in runs 44–47. `hard_cases.py` and
 `hard_code_cases.py` regenerate these fixtures. Reporting groups the four variants of
@@ -151,3 +153,25 @@ for benchmark inspirations, measured limitations, JSON fixes, and reproduction c
 other fields, reorder arrays, ignore keys, accept wrong versions, or repair malformed
 JSON. Use it only for documented semantic equivalents or ambiguous legacy contracts;
 new prompts should specify field types and null/enum behavior unambiguously.
+
+## Stretch-v6
+
+`stretch_cases.py` generates 30 original JSON tasks in `stretch.yaml`, three variants
+of ten families, targeting categories saturated in runs 48–50. These add adaptive
+planning, tool dependencies, bitemporal reconciliation, event summaries, graph
+retrieval, scoped state, circuit diagnosis, conditional inheritance, ordered data
+transforms, and German/Czech semantic translation. See
+[BENCHMARK_REVIEW_V6.md](../BENCHMARK_REVIEW_V6.md) for evidence, source benchmarks,
+scope limitations and fresh-run instructions.
+
+Regenerate with `python stretch_cases.py` and verify with
+`python selftest_stretch.py`. Independent derivations check the keys and 1,718
+mutated answers must fail. New tasks participate in default CLI/web runs and have
+a separate stretch score. Variants are clustered into one family per category.
+The default assembled suite has 434 questions; static-only has 427.
+
+The format check `type: json` supports opt-in `strict_json: true` and `item_fields`
+for arrays of objects. The latter requires exactly the named keys for every element;
+each field declares `type: integer|string|boolean`, with optional full-match
+`pattern` for strings. Indices/status values are checked through `json_path`.
+`IF-07` uses these together to check the entire requested UUID array.

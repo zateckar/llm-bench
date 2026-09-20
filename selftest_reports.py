@@ -253,9 +253,9 @@ class ReportTests(unittest.TestCase):
         from quality_suite import assemble_questions
         from test_loader import load_all_tests
 
-        q = next(q for q in load_all_tests() if q.id == "H5-CL-worlds-01")
-        q = assemble_questions([q], QualityConfig(generated=False, interactive=False))[0]
-        quality = make_report([Result(q, "{}", 0, outcome="task_failure")],
+        questions = [q for q in load_all_tests() if q.id in {"H5-CL-worlds-01", "S6-policy-01"}]
+        questions = assemble_questions(questions, QualityConfig(generated=False, interactive=False))
+        quality = make_report([Result(q, "{}", 0, outcome="task_failure") for q in questions],
                               QualityConfig(), ClientConfig("https://fake.invalid", "unused", "fake"))
         meta = {"metadata": {"protocol": "json-actions-v1"}, "diagnostics": {"transcript": [
             {"role": "assistant", "content": '{"tool":"read","args":{}}'},
@@ -271,10 +271,16 @@ class ReportTests(unittest.TestCase):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
             self.assertIn("Ceiling-v5 challenge subset", response.text)
+            self.assertIn("Stretch-v6 subset", response.text)
             self.assertIn("Interactive transcript", response.text)
             self.assertIn("Turn 2", response.text)
             self.assertIn("&lt;script&gt;bad()&lt;/script&gt;", response.text)
             self.assertNotIn("<script>bad()</script>", response.text)
+
+        for url in ("/compare?runs=1&runs=2", "/compare/report.html?runs=1&runs=2"):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("Stretch-v6", response.text)
 
     def test_performance_values_and_online_parity(self):
         selected = [asyncio.run(reports.load_run(i)) for i in (1, 2)]

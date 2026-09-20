@@ -30,4 +30,5 @@ data/
 *.swo
 *~
 .dirac*/*
-QUALITY_AUDIT_V5.md
+QUALITY_AUDIT*.md
+BENCHMARK_REVIEW_V6.md

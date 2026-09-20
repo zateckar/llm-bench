@@ -114,9 +114,10 @@
 
     <section class="card p-5 space-y-3">
         <h2 class="text-lg font-semibold text-white">Capability, cost, and latency</h2>
-        <table class="w-full text-sm"><thead><tr><th>Run</th><th>Balanced capability</th><th>95% interval</th><th>Quality cost estimate</th><th>p50 task latency</th></tr></thead><tbody>
+        <table class="w-full text-sm"><thead><tr><th>Run</th><th>Balanced capability</th><th>Stretch-v6</th><th>95% interval</th><th>Quality cost estimate</th><th>p50 task latency</th></tr></thead><tbody>
         {% for run in selected_runs %}{% if run.quality %}{% set s = run.quality.summary %}
         <tr><td>#{{ run.id }} {{ run.model_name }}</td><td>{{ '%.1f%%'|format(s.category_balanced*100) if s.category_balanced is not none else 'n/a' }}</td>
+            <td>{% if s.get('stretch', {}).get('count', 0) %}{{ '%.1f%%'|format(s.stretch.category_balanced*100) }} ({{ s.stretch.passes }}/{{ s.stretch.count }}){% else %}n/a{% endif %}</td>
             <td>{% if s.category_balanced_ci95 %}{{ '%.1f'|format(s.category_balanced_ci95[0]*100) }}–{{ '%.1f'|format(s.category_balanced_ci95[1]*100) }}%{% else %}n/a{% endif %}</td>
             <td>{{ '$%.6f'|format(s.estimated_cost_usd) if s.estimated_cost_usd is not none else 'Not configured' }}</td>
             <td>{{ '%.0f ms'|format(s.latency_p50_ms) if s.latency_p50_ms is not none else 'n/a' }}</td></tr>

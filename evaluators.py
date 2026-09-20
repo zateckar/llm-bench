@@ -1109,7 +1109,7 @@ def eval_code_exec(response: str, expected: Any, **_) -> tuple[float, str]:
 
 
 def _check_json(response: str, check: dict) -> tuple[bool, str]:
-    doc, err = extract_json(response)
+    doc, err = extract_json(response, strict=check.get("strict_json", False))
     if err:
         return False, f"Valid JSON: FAIL ({err})"
     kind = check.get("root")
@@ -1123,6 +1123,22 @@ def _check_json(response: str, check: dict) -> tuple[bool, str]:
     if length is not None and (not isinstance(doc, (list, dict)) or len(doc) != int(length)):
         actual = len(doc) if isinstance(doc, (list, dict)) else "n/a"
         return False, f"Valid JSON: FAIL (length {actual} != {length})"
+    # An opt-in, deliberately small schema for arrays of records. Check fields
+    # where they occur; counting UUID-shaped substrings anywhere is insufficient.
+    fields = check.get("item_fields")
+    if fields is not None:
+        if not isinstance(doc, list):
+            return False, "Valid JSON: FAIL (item_fields requires an array)"
+        types = {"integer": int, "string": str, "boolean": bool}
+        for i, row in enumerate(doc):
+            if not isinstance(row, dict) or set(row) != set(fields):
+                return False, f"Valid JSON: FAIL (item {i} has incorrect keys)"
+            for key, spec in fields.items():
+                value = row[key]
+                if type(value) is not types[spec["type"]]:
+                    return False, f"Valid JSON: FAIL (item {i}.{key} has incorrect type)"
+                if "pattern" in spec and not re.fullmatch(spec["pattern"], value):
+                    return False, f"Valid JSON: FAIL (item {i}.{key} does not match pattern)"
     return True, "Valid JSON: PASS"
 
 

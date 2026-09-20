@@ -166,6 +166,28 @@ def check_format_check(report: Report, where: str, expected: object) -> None:
             check_regex(report, where, check.get("pattern", check.get("value")), f"{label} (pattern)")
             if not isinstance(check.get("count"), int):
                 report.error(where, f"{label} count_occurrences needs an integer `count`")
+        elif ctype == "json":
+            if "strict_json" in check and type(check["strict_json"]) is not bool:
+                report.error(where, f"{label} strict_json must be boolean")
+            if "item_fields" in check:
+                fields = check["item_fields"]
+                if check.get("root") != "array" or not isinstance(fields, dict) or not fields:
+                    report.error(where, f"{label} item_fields needs an array root and nonempty mapping")
+                else:
+                    for key, spec in fields.items():
+                        if not isinstance(key, str) or not key:
+                            report.error(where, f"{label} item field names must be nonempty strings")
+                        if not isinstance(spec, dict) or spec.get("type") not in {
+                            "integer", "string", "boolean"
+                        }:
+                            report.error(where, f"{label} invalid item field {key}")
+                            continue
+                        if set(spec) - {"type", "pattern"}:
+                            report.error(where, f"{label} unknown options for item field {key}")
+                        if "pattern" in spec:
+                            if spec["type"] != "string":
+                                report.error(where, f"{label} patterns require string fields")
+                            check_regex(report, where, spec["pattern"], f"{label}.{key}")
         elif ctype == "json_path":
             if not check.get("path"):
                 report.error(where, f"{label} json_path needs a `path`")

@@ -15,6 +15,12 @@
         <div><p class="text-xs text-slate-400">Quality-call cost estimate</p><p class="text-lg text-white">{{ '$%.6f'|format(qs.estimated_cost_usd) if qs.estimated_cost_usd is not none else 'Not configured' }}</p></div>
     </div>
     <p class="text-xs text-slate-400">Seeds {{ quality.quality_config.seeds|join(', ') }} · {{ quality.quality_config.split }} · {{ quality.quality_config.variants }} variant(s) per family</p>
+    {% if qs.get('stretch', {}).get('count', 0) %}
+    <div class="rounded border border-slate-700 p-3 space-y-2">
+        <p class="text-sm text-white">Stretch-v6 subset: {{ '%.1f%%'|format(qs.stretch.category_balanced*100) }} category/family-balanced capability; {{ qs.stretch.passes }}/{{ qs.stretch.count }} full passes across {{ qs.stretch.families }} families.</p>
+        <p class="text-xs text-slate-400">Separate from anchors and ceiling-v5. Variants share a family; empirical difficulty requires fresh matched runs.</p>
+    </div>
+    {% endif %}
     {% if qs.get('challenge', {}).get('count', 0) %}
     <div class="rounded border border-slate-700 p-3 space-y-2">
         <p class="text-sm text-white">Ceiling-v5 challenge subset: {{ '%.1f%%'|format(qs.challenge.category_balanced*100) }} category/family-balanced capability; {{ qs.challenge.passes }}/{{ qs.challenge.count }} full passes across {{ qs.challenge.families }} families.</p>

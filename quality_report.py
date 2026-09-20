@@ -80,6 +80,8 @@ def summarize(rows, input_price=None, output_price=None):
     heuristic = [r for r in usable if r["scope"] == "heuristic"]
     challenge = [r for r in capability if r["metadata"].get("cohort") == "ceiling-v5"
                  or r["id"].startswith("H5-")]
+    stretch = [r for r in capability if r["metadata"].get("cohort") == "stretch-v6"
+               or r["id"].startswith("S6-")]
     groups = clusters(capability)
     cost_rows = [r for r in rows if not r.get("cached")]
     prompt = sum(r["tokens"]["prompt_tokens"] for r in cost_rows)
@@ -166,6 +168,14 @@ def summarize(rows, input_price=None, output_price=None):
                 for name in sorted({r["category"] for r in challenge})
                 for items in [[r for r in challenge if r["category"] == name]]
             },
+        },
+        "stretch": {
+            "cohort": "stretch-v6",
+            "count": len(stretch),
+            "families": sum(len(v) for v in clusters(stretch).values()),
+            "category_balanced": balanced(clusters(stretch)),
+            "full_pass_rate": balanced(clusters(stretch, "passed")),
+            "passes": sum(r["passed"] for r in stretch),
         },
         "estimated_cost_usd": cost,
         "input_price_per_million": input_price,
@@ -292,6 +302,15 @@ def markdown(report):
             f"Ceiling-v5 challenge subset: **{pct(c['category_balanced'])}** balanced capability; "
             f"{c['passes']}/{c['count']} full passes across {c['families']} families.",
             "Variants share a family. Easier anchors are excluded from this diagnostic subset.",
+            "",
+        ]
+    if s.get("stretch", {}).get("count"):
+        c = s["stretch"]
+        lines += [
+            f"Stretch-v6 subset: **{pct(c['category_balanced'])}** balanced capability; "
+            f"{c['passes']}/{c['count']} full passes across {c['families']} families.",
+            "Reported separately from anchors and ceiling-v5. Variants share a family; "
+            "empirical difficulty requires fresh matched runs.",
             "",
         ]
     if s["interactive"]["tasks"]:

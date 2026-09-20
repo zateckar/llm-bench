@@ -4,6 +4,7 @@ import argparse
 from contextlib import closing
 from collections import Counter, defaultdict
 import json
+import hashlib
 from pathlib import Path
 import sqlite3
 import statistics
@@ -18,6 +19,7 @@ def audit_database(path, run_ids=None, replay=False):
     # SQLite's read-only URI also prevents accidentally creating a missing database.
     with closing(sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)) as db:
         db.row_factory = sqlite3.Row
+        db.execute("BEGIN")  # One consistent snapshot even while another run is writing.
         runs = db.execute(
             "SELECT r.id,m.name,r.status,r.test_suite_hash,r.quality_json "
             "FROM test_runs r JOIN models m ON m.id=r.model_id ORDER BY r.id"
@@ -131,6 +133,8 @@ def audit_database(path, run_ids=None, replay=False):
                             "mean": statistics.mean(r["score"] for r in v),
                             "passes": sum(r["passed"] for r in v),
                             "truncations": sum(r["outcome"] == "truncation" for r in v),
+                            "capability_count": sum(r["scope"] == "capability" for r in v),
+                            "capability_passes": sum(r["passed"] for r in v if r["scope"] == "capability"),
                         }
                         for k, v in sorted(categories.items())
                     },
@@ -139,29 +143,43 @@ def audit_database(path, run_ids=None, replay=False):
             )
     cohorts = defaultdict(list)
     for run in report:
-        cohorts[run["suite_hash"]].append(run)
+        if run["status"] != "completed":
+            continue  # Partial runs remain in the audit, never in ceiling calibration.
+        protocol = json.dumps(run["protocol"], sort_keys=True)
+        # Unknown protocols cannot establish a matched historical comparison.
+        digest = hashlib.sha256(protocol.encode()).hexdigest()[:12] if run["protocol"] else f"unknown-{run['run_id']}"
+        cohorts[f"{run['suite_hash']}:{digest}"].append(run)
     item_analysis = {}
-    for suite_hash, cohort in cohorts.items():
+    for cohort_key, cohort in cohorts.items():
         by_id = defaultdict(list)
         for run in cohort:
             for item in run["items"]:
                 if item["scored"]:
                     by_id[item["id"]].append(item)
-        item_analysis[suite_hash] = {
+        item_analysis[cohort_key] = {
             id: {"category": items[0]["category"], "scope": items[0]["scope"],
                  "observations": len(items), "passes": sum(i["passed"] for i in items),
                  "mean": statistics.mean(i["score"] for i in items),
-                 "all_passed": all(i["passed"] for i in items),
+                 "complete_coverage": len(items) == len(cohort),
+                 "all_passed": len(cohort) > 1 and len(items) == len(cohort)
+                 and all(i["passed"] for i in items),
                  "score_range": max(i["score"] for i in items)-min(i["score"] for i in items)}
             for id, items in sorted(by_id.items())
         }
     return {
+        "schema_version": 2,
         "note": "Historical grades are unchanged. Optional replay uses current graders only for "
         "unchanged static prompts; it cannot recover truncated output or evaluate revised prompts. "
         "Endpoint aliases do not verify model identity. "
         "Compare identical suites and protocols; truncation remains a scored failure.",
         "runs": report,
-        "item_analysis_by_suite": item_analysis,
+        "cohorts": {
+            key: {"suite_hash": runs[0]["suite_hash"], "protocol": runs[0]["protocol"],
+                  "run_ids": [r["run_id"] for r in runs],
+                  "distinct_model_aliases": len({r["name"] for r in runs})}
+            for key, runs in cohorts.items()
+        },
+        "item_analysis_by_cohort": item_analysis,
     }
 
 
