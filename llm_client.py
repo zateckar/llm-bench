@@ -28,6 +28,61 @@ logger = logging.getLogger(__name__)
 # suite when the server does not report prompt_tokens.
 CHARS_PER_TOKEN = 4.0
 
+# --- degenerate repetition -------------------------------------------------
+#
+# A model that has fallen into a loop emits near-zero new information and does
+# not climb back out; left alone it generates until it hits the output cap,
+# which costs minutes per question and is already scored zero. Detecting it is
+# worth doing because "the cap was too small" and "the model looped" call for
+# opposite responses from whoever reads the report.
+#
+# The signal is the fraction of *distinct* word n-grams in the recent tail.
+# Exact cycle detection is not enough: real loops drift ("...pattern X true.
+# Good. ...pattern Y false. Good."), so a measure tolerant of small variation
+# is needed. Calibrated against one 404-question run: of the 326 answers that
+# finished, the lowest scored 0.853, while 25 loops scored below 0.06. The
+# default threshold sits roughly 3x below the closest legitimate answer, and
+# flagged nothing that a model actually completed.
+REPETITION_WINDOW_CHARS = 4000
+REPETITION_NGRAM = 8
+# Never arm before this much text: short structured output (JSON rows, tables,
+# enumerations) is legitimately repetitive, and no real answer loops this early.
+REPETITION_MIN_CHARS = 8000
+# Deltas between checks. Each check is O(window), so this keeps the detector
+# off the hot path of the decode loop.
+REPETITION_CHECK_EVERY = 200
+# Reported like a finish_reason so it travels with the request, not the answer.
+REPETITION_FINISH_REASON = "repetition"
+
+
+def distinct_ngram_ratio(
+    text: str, window: int = REPETITION_WINDOW_CHARS, n: int = REPETITION_NGRAM
+) -> float:
+    """Fraction of word n-grams in the last `window` chars that are unique.
+
+    1.0 means every n-gram is new; a looping model tends to 0. Returns 1.0 for
+    text too short to judge, so a caller can treat "not enough evidence" and
+    "healthy" the same way.
+    """
+    words = text[-window:].split()
+    if len(words) < n * 4:
+        return 1.0
+    grams = [tuple(words[i:i + n]) for i in range(len(words) - n + 1)]
+    return len(set(grams)) / len(grams)
+
+
+def _tail(parts: list[str], window: int) -> str:
+    """Join just enough trailing pieces to cover `window` characters."""
+    collected: list[str] = []
+    total = 0
+    for piece in reversed(parts):
+        collected.append(piece)
+        total += len(piece)
+        if total >= window:
+            break
+    collected.reverse()
+    return "".join(collected)[-window:]
+
 
 @dataclass
 class ClientConfig:
@@ -44,6 +99,12 @@ class ClientConfig:
     # Ask for usage in the final streaming chunk. Some gateways reject the
     # field, so the client drops it and retries once if that happens.
     request_stream_usage: bool = True
+    # Off by default, and deliberately so: the perf suite measures the server's
+    # decode rate with prompts whose output is repetitive on purpose, and
+    # cutting one short would silently corrupt a throughput number. Only the
+    # quality runners, which grade answers, switch it on.
+    detect_repetition: bool = False
+    repetition_threshold: float = 0.30
     extra_headers: dict = field(default_factory=dict)
 
     @property
@@ -236,6 +297,13 @@ class ChatClient:
 
         chunks: list[str] = []
         reasoning_chunks: list[str] = []
+        # Content and reasoning interleaved in arrival order: a loop can happen
+        # in either stream, and on reasoning endpoints it usually happens in
+        # the one that never reaches `chunks`.
+        generated: list[str] = []
+        generated_chars = 0
+        since_check = 0
+        looped = False
         ttft: float | None = None
         delta_count = 0
         usage = TokenUsage()
@@ -287,7 +355,37 @@ class ChatClient:
                         if ttft is None:
                             ttft = (time.perf_counter() - started) * 1000.0
                         reasoning_chunks.append(reasoning)
+                        piece = reasoning
                         delta_count += 1
+                    else:
+                        continue
+
+                    if not self.config.detect_repetition:
+                        continue
+                    generated.append(piece)
+                    generated_chars += len(piece)
+                    since_check += 1
+                    if (
+                        generated_chars < REPETITION_MIN_CHARS
+                        or since_check < REPETITION_CHECK_EVERY
+                    ):
+                        continue
+                    since_check = 0
+                    ratio = distinct_ngram_ratio(_tail(generated, REPETITION_WINDOW_CHARS))
+                    if ratio < self.config.repetition_threshold:
+                        logger.info(
+                            "Stopping a looping generation after %d chars "
+                            "(distinct %d-gram ratio %.3f < %.2f)",
+                            generated_chars, REPETITION_NGRAM, ratio,
+                            self.config.repetition_threshold,
+                        )
+                        # Overrides any finish_reason the server has sent:
+                        # the generation is being abandoned, not completed.
+                        self._last_finish_reason = REPETITION_FINISH_REASON
+                        looped = True
+                        break
+                if looped:
+                    break
         finally:
             resp.close()
 

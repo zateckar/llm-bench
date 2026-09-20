@@ -137,8 +137,14 @@ def summarize(rows, input_price=None, output_price=None):
         "category_balanced_pass_rate": balanced(clusters(capability, "passed")),
         "truncation_rate": sum(r["outcome"] == "truncation" for r in usable) / len(usable)
         if usable else None,
+        # Reported apart from truncation because the two point at different
+        # fixes: a truncation may mean the budget was too small, a loop never
+        # does.
+        "repetition_rate": sum(r["outcome"] == "repetition" for r in usable) / len(usable)
+        if usable else None,
         "budget_note": "Output-limit failures remain in scores. High truncation rates measure "
-        "budget-constrained completion as well as capability; compare identical output budgets.",
+        "budget-constrained completion as well as capability; compare identical output budgets. "
+        "Repetition failures are generations abandoned mid-loop and are not budget-related.",
         "confidence_method": "Percentile bootstrap, 1000 draws; families clustered within fixed categories. "
         "An interval requires at least two families in every included category. "
         "Measures sampled-item uncertainty, not model run-to-run variability.",
@@ -264,6 +270,8 @@ def markdown(report):
         f"- Category/family-balanced full-pass rate: {pct(s.get('category_balanced_pass_rate'))}",
         f"- Legacy prose-pattern diagnostics: {s.get('heuristic_count', 0)} items, excluded from capability.",
         f"- Output-limit failure rate: {pct(s.get('truncation_rate'))}; these remain scored failures.",
+        f"- Degenerate-repetition rate: {pct(s.get('repetition_rate'))}; generations abandoned "
+        "mid-loop, also scored failures. A larger output budget does not fix these.",
         f"- Creative-writing constraint compliance: {pct(s['compliance_score'])}; artistic quality is not measured.",
         "- Outcomes: " + ", ".join(f"{k}: {v}" for k, v in sorted(s["outcomes"].items())),
         "- Quality-call cost estimate: "

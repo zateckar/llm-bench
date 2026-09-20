@@ -1,6 +1,7 @@
 """Shared quality execution and failure attribution for CLI and web."""
 
 from evaluators import EVALUATORS, extract_json, strip_think_blocks
+from llm_client import REPETITION_FINISH_REASON
 from models import Result
 
 
@@ -24,6 +25,15 @@ def score_response(q, response, tokens, metrics, cached=False):
             else "endpoint_error"
         )
         result.detail = f"Request failed: {metrics.error}"
+        return result
+    if metrics.finish_reason == REPETITION_FINISH_REASON:
+        # Kept separate from truncation on purpose: a truncation says the
+        # output budget was too small, a loop says raising it would only buy
+        # more of the same text. Both are scored failures.
+        result.outcome, result.detail = (
+            "repetition",
+            "Degenerate repetition; generation was stopped and is not a pass",
+        )
         return result
     if metrics.finish_reason in {"length", "max_tokens"}:
         result.outcome, result.detail = (

@@ -29,6 +29,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -315,6 +316,10 @@ def run_benchmark(
     print_lock = threading.Lock()
     started = time.perf_counter()
 
+    # Quality questions only. The same config is handed to the perf suite,
+    # which measures decode rate on deliberately repetitive prompts and must
+    # never have a generation cut short under it.
+    client_config = replace(client_config, detect_repetition=True)
     shared_client = ChatClient(client_config)
     worker_local = threading.local()
     # Register every created worker client so its session's sockets can be

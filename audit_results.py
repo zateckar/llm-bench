@@ -75,7 +75,9 @@ def audit_database(path, run_ids=None, replay=False):
                         item["replay_skipped"] = (
                             "Question or output contract changed; fresh answer required"
                         )
-                    elif not scored or item["outcome"] in {"truncation", "missing_answer"}:
+                    elif not scored or item["outcome"] in {
+                        "truncation", "missing_answer", "repetition",
+                    }:
                         item["replay_skipped"] = "Original answer unavailable or incomplete"
                     elif "fixture_seed" in meta.get("metadata", {}):
                         item["replay_skipped"] = (

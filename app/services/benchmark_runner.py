@@ -15,6 +15,7 @@ import sqlite3
 import sys
 import threading
 import time
+from dataclasses import replace
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
@@ -476,6 +477,10 @@ def _run_benchmark_impl(
                 )
 
         started = time.perf_counter()
+        # Quality phase only; `config` is reused by the perf phase, which
+        # measures decode rate on deliberately repetitive prompts and must
+        # never have a generation cut short under it.
+        quality_config_client = replace(config, detect_repetition=True)
         try:
             if workers > 1:
                 with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -487,7 +492,7 @@ def _run_benchmark_impl(
                     def job(idx: int, question: Question) -> None:
                         client = getattr(local, "client", None)
                         if client is None:
-                            client = ChatClient(config)
+                            client = ChatClient(quality_config_client)
                             local.client = client
                         work(idx, question, client)
 
@@ -497,7 +502,7 @@ def _run_benchmark_impl(
                     for future in futures:
                         future.result()
             else:
-                client = ChatClient(config)
+                client = ChatClient(quality_config_client)
                 for i, q in enumerate(questions):
                     if not _run_is_active(run_id):
                         return

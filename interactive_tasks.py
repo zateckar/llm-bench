@@ -10,6 +10,7 @@ import json
 
 from models import Question, RequestMetrics, Result, TokenUsage
 from evaluators import extract_json, strip_think_blocks
+from llm_client import REPETITION_FINISH_REASON
 
 PROTOCOL = """You are operating an isolated simulated environment. Respond each turn with
 exactly one JSON object {"tool":"name","args":{...}}, or {"done":true} when finished.
@@ -316,6 +317,12 @@ def run_interaction(q, client, cancelled=lambda: False):
         if not metrics.ok:
             aggregate.ok, aggregate.error = False, metrics.error
             outcome, detail = "endpoint_error", f"Request failed: {metrics.error}"
+            break
+        if metrics.finish_reason == REPETITION_FINISH_REASON:
+            outcome, detail = (
+                "repetition",
+                f"Turn {turn}: degenerate repetition; generation was stopped",
+            )
             break
         if metrics.finish_reason in {"length", "max_tokens"}:
             outcome, detail = "truncation", "Action truncated by output limit"

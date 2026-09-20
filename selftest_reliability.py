@@ -220,6 +220,85 @@ class ReliabilityTests(unittest.TestCase):
         content, _, _ = client.complete("reply")
         self.assertEqual(content, "<think>42</think>")
 
+    def _streaming_client(self, pieces, **config):
+        """A client whose endpoint streams `pieces` as reasoning deltas."""
+        closed = []
+
+        class Response:
+            status_code = 200
+
+            def iter_lines(self):
+                for piece in pieces:
+                    if closed:
+                        # A real socket stops delivering once the client hangs
+                        # up; without this the test cannot tell an early abort
+                        # from simply consuming the whole stream.
+                        return
+                    yield (
+                        b'data: {"choices":[{"delta":{"reasoning_content":'
+                        + json.dumps(piece).encode()
+                        + b"}}]}"
+                    )
+                yield b'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}'
+                yield b"data: [DONE]"
+
+            def close(self):
+                closed.append(True)
+
+        client = ChatClient(
+            ClientConfig("https://fake.invalid", "unused", "fake", **config)
+        )
+        client.session.post = lambda *a, **k: Response()
+        return client
+
+    def test_repetition_is_detected_and_scored_as_a_failure(self):
+        # 600 copies of a drifting phrase: the shape real loops take, where
+        # exact-cycle detection fails but the n-gram ratio collapses.
+        loop = [f"Potential hidden test: pattern {i % 3} true. Good. " for i in range(600)]
+        client = self._streaming_client(loop, detect_repetition=True)
+        text, _usage, metrics = client.complete("go")
+        self.assertEqual(metrics.finish_reason, "repetition")
+        # Abandoned mid-stream, so only part of the generation arrived.
+        self.assertLess(len(text), len("".join(loop)))
+
+        q = self.questions["RV4-IF-01"]
+        r = score_response(q, text, TokenUsage(), metrics)
+        self.assertEqual((r.score, r.outcome), (0, "repetition"))
+        self.assertIn("repetition", r.detail.lower())
+
+    def test_repetition_detection_is_off_unless_asked_for(self):
+        # The perf suite shares ClientConfig and measures decode rate on
+        # deliberately repetitive prompts; a default-on detector would cut one
+        # short and silently corrupt the throughput number.
+        loop = [f"Potential hidden test: pattern {i % 3} true. Good. " for i in range(600)]
+        client = self._streaming_client(loop)
+        text, _usage, metrics = client.complete("go")
+        self.assertEqual(metrics.finish_reason, "stop")
+        self.assertEqual(text, f"<think>{''.join(loop).strip()}</think>")
+
+    def test_long_varied_answers_are_never_flagged(self):
+        # Well past the arming length and past every check point, but each
+        # sentence is new. This is the false positive that would corrupt a run.
+        varied = [
+            f"Step {i}: evaluate constraint {i * 7 % 101} against the tolerance "
+            f"band {i * 13 % 89} and record the residual {i * 31 % 97}. "
+            for i in range(600)
+        ]
+        client = self._streaming_client(varied, detect_repetition=True)
+        text, _usage, metrics = client.complete("go")
+        self.assertEqual(metrics.finish_reason, "stop")
+        self.assertEqual(text, f"<think>{''.join(varied).strip()}</think>")
+
+    def test_repetition_ratio_separates_real_loops_from_real_answers(self):
+        from llm_client import distinct_ngram_ratio
+
+        loop = "b=1 and then b=2 and then b=3 and then " * 400
+        varied = " ".join(f"token{i} unique phrase {i * 3}" for i in range(2000))
+        self.assertLess(distinct_ngram_ratio(loop), 0.30)
+        self.assertGreater(distinct_ngram_ratio(varied), 0.85)
+        # Too little text to judge is reported as healthy, never as a loop.
+        self.assertEqual(distinct_ngram_ratio("short answer"), 1.0)
+
     def test_uniform_budget_and_provenance(self):
         base = list(self.questions.values())
         default = assemble_questions(base, QualityConfig())
