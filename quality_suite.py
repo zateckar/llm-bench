@@ -10,7 +10,7 @@ import random
 
 from models import Question
 
-REVISION = "quality-v4"
+REVISION = "quality-v5"
 
 # Prose pattern coverage is useful diagnostic information, but cannot establish
 # correctness: negating a keyword, omitting an untested claim or using a synonym
@@ -321,8 +321,9 @@ def assemble_questions(base, config):
             q,
             metadata={
                 **q.metadata,
-                "family": q.id,
+                "family": q.id.rsplit("-", 1)[0] if q.id.startswith("H5-") else q.id,
                 "scope": question_scope(q),
+                "cohort": "ceiling-v5" if q.id.startswith("H5-") else "anchor",
             },
         )
         for q in base

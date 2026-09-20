@@ -564,8 +564,8 @@
                                         <div class="bg-slate-950 rounded p-3 text-xs text-slate-300 max-h-40 overflow-auto scrollbar-thin whitespace-pre-wrap">{{ r.prompt }}</div>
                                     </div>
                                     <div>
-                                        <p class="text-xs font-medium text-slate-500 mb-1">Response</p>
-                                        <div class="bg-slate-950 rounded p-3 text-xs text-slate-300 max-h-40 overflow-auto scrollbar-thin whitespace-pre-wrap">{{ r.response }}</div>
+                                        <p class="text-xs font-medium text-slate-500 mb-1">{{ 'Interactive transcript (each assistant turn is graded separately)' if r.interactive_turns else 'Response' }}</p>
+                                        <div class="bg-slate-950 rounded p-3 text-xs text-slate-300 max-h-64 overflow-auto scrollbar-thin whitespace-pre-wrap">{% if r.interactive_turns %}{% for turn in r.interactive_turns %}<p class="font-semibold">Turn {{ turn.number }} · {{ turn.role }}</p><pre class="whitespace-pre-wrap">{{ turn.content }}</pre>{% endfor %}{% else %}{{ r.response }}{% endif %}</div>
                                     </div>
                                 </div>
                                 <div>

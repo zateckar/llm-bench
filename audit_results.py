@@ -44,7 +44,29 @@ def audit_database(path, run_ids=None, replay=False):
                     "scored": scored,
                     "outcome": meta.get("outcome", "legacy_unknown"),
                     "detail": row["detail"],
+                    "scope": meta.get("scope", "legacy_unknown"),
                 }
+                if row["evaluator"] == "json_match":
+                    from evaluators import extract_json, strip_think_blocks
+
+                    if meta.get("metadata", {}).get("protocol") == "json-actions-v1":
+                        # response stores a transcript, not a proposed final action.
+                        turns = meta.get("diagnostics", {}).get("transcript", [])
+                        assistant_turns = [t for t in turns if t.get("role") == "assistant"]
+                        item["json_audit"] = {
+                            "kind": "interactive_transcript",
+                            "assistant_turns": len(assistant_turns),
+                            "invalid_turns": [
+                                {"turn": i, "missing_final_action": not bool(strip_think_blocks(t["content"]).strip()),
+                                 "error": extract_json(t["content"], strict=True)[1]}
+                                for i, t in enumerate(assistant_turns, 1)
+                                if extract_json(t["content"], strict=True)[1]
+                            ],
+                        }
+                    else:
+                        _, error = extract_json(row["response"] or "", strict=True)
+                        item["json_audit"] = {"kind": "static_answer", "strict_document_valid": error is None,
+                                              "parse_error": error}
                 items.append(item)
                 if replay:
                     q = questions.get(row["test_id"])
@@ -75,6 +97,18 @@ def audit_database(path, run_ids=None, replay=False):
                     categories[row["category"]].append(item)
             usable = [r for r in items if r["scored"]]
             saved = json.loads(run["quality_json"] or "{}")
+            replay_summary = None
+            if replay and saved.get("results"):
+                from quality_report import summarize
+
+                by_id = {i["id"]: i for i in items}
+                corrected = []
+                for original in saved["results"]:
+                    updated = dict(original)
+                    if by_id.get(original["id"], {}).get("replay"):
+                        updated.update(by_id[original["id"]]["replay"])
+                    corrected.append(updated)
+                replay_summary = summarize(corrected)
             report.append(
                 {
                     "run_id": run["id"],
@@ -82,6 +116,8 @@ def audit_database(path, run_ids=None, replay=False):
                     "status": run["status"],
                     "suite_hash": run["test_suite_hash"],
                     "protocol": saved.get("protocol"),
+                    "saved_summary": saved.get("summary"),
+                    "replay_summary": replay_summary,
                     "count": len(items),
                     "scored": len(usable),
                     "mean": statistics.mean(r["score"] for r in usable) if usable else None,
@@ -99,12 +135,31 @@ def audit_database(path, run_ids=None, replay=False):
                     "items": items,
                 }
             )
+    cohorts = defaultdict(list)
+    for run in report:
+        cohorts[run["suite_hash"]].append(run)
+    item_analysis = {}
+    for suite_hash, cohort in cohorts.items():
+        by_id = defaultdict(list)
+        for run in cohort:
+            for item in run["items"]:
+                if item["scored"]:
+                    by_id[item["id"]].append(item)
+        item_analysis[suite_hash] = {
+            id: {"category": items[0]["category"], "scope": items[0]["scope"],
+                 "observations": len(items), "passes": sum(i["passed"] for i in items),
+                 "mean": statistics.mean(i["score"] for i in items),
+                 "all_passed": all(i["passed"] for i in items),
+                 "score_range": max(i["score"] for i in items)-min(i["score"] for i in items)}
+            for id, items in sorted(by_id.items())
+        }
     return {
         "note": "Historical grades are unchanged. Optional replay uses current graders only for "
         "unchanged static prompts; it cannot recover truncated output or evaluate revised prompts. "
         "Endpoint aliases do not verify model identity. "
         "Compare identical suites and protocols; truncation remains a scored failure.",
         "runs": report,
+        "item_analysis_by_suite": item_analysis,
     }
 
 

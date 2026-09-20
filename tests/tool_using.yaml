@@ -22,6 +22,9 @@
     repeat completed calls, add explanations, or include unnecessary calls.
   evaluator: json_match
   expected:
+    value_aliases:
+      '[1].args.version': [v4]
+      '[2].args.version': [v2]
     value:
     - tool: list_objects
       args:

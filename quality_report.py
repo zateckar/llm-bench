@@ -78,6 +78,8 @@ def summarize(rows, input_price=None, output_price=None):
     capability = [r for r in usable if r["scope"] == "capability"]
     compliance = [r for r in usable if r["scope"] == "compliance"]
     heuristic = [r for r in usable if r["scope"] == "heuristic"]
+    challenge = [r for r in capability if r["metadata"].get("cohort") == "ceiling-v5"
+                 or r["id"].startswith("H5-")]
     groups = clusters(capability)
     cost_rows = [r for r in rows if not r.get("cached")]
     prompt = sum(r["tokens"]["prompt_tokens"] for r in cost_rows)
@@ -96,6 +98,8 @@ def summarize(rows, input_price=None, output_price=None):
             "score": statistics.mean(r["score"] for r in items) if items else None,
             "scope": "compliance" if category == "Creative Writing" else "capability",
             "heuristic_count": sum(r["scope"] == "heuristic" for r in all_items),
+            "families": len({r["family"] for r in items}),
+            "passes": sum(r["passed"] for r in items),
         }
     context_rows = []
     for size in sorted(
@@ -143,6 +147,20 @@ def summarize(rows, input_price=None, output_price=None):
         "heuristic_mean": statistics.mean(r["score"] for r in heuristic) if heuristic else None,
         "outcomes": dict(Counter(r["outcome"] for r in rows)),
         "categories": category_rows,
+        "challenge": {
+            "cohort": "ceiling-v5",
+            "count": len(challenge),
+            "families": sum(len(v) for v in clusters(challenge).values()),
+            "category_balanced": balanced(clusters(challenge)),
+            "full_pass_rate": balanced(clusters(challenge, "passed")),
+            "passes": sum(r["passed"] for r in challenge),
+            "categories": {
+                name: {"count": len(items), "passes": sum(r["passed"] for r in items),
+                       "score": statistics.mean(r["score"] for r in items)}
+                for name in sorted({r["category"] for r in challenge})
+                for items in [[r for r in challenge if r["category"] == name]]
+            },
+        },
         "estimated_cost_usd": cost,
         "input_price_per_million": input_price,
         "output_price_per_million": output_price,
@@ -260,6 +278,14 @@ def markdown(report):
         s["cost_note"],
         "",
     ]
+    if s.get("challenge", {}).get("count"):
+        c = s["challenge"]
+        lines += [
+            f"Ceiling-v5 challenge subset: **{pct(c['category_balanced'])}** balanced capability; "
+            f"{c['passes']}/{c['count']} full passes across {c['families']} families.",
+            "Variants share a family. Easier anchors are excluded from this diagnostic subset.",
+            "",
+        ]
     if s["interactive"]["tasks"]:
         a = s["interactive"]
         lines.append(

@@ -15,6 +15,15 @@
         <div><p class="text-xs text-slate-400">Quality-call cost estimate</p><p class="text-lg text-white">{{ '$%.6f'|format(qs.estimated_cost_usd) if qs.estimated_cost_usd is not none else 'Not configured' }}</p></div>
     </div>
     <p class="text-xs text-slate-400">Seeds {{ quality.quality_config.seeds|join(', ') }} · {{ quality.quality_config.split }} · {{ quality.quality_config.variants }} variant(s) per family</p>
+    {% if qs.get('challenge', {}).get('count', 0) %}
+    <div class="rounded border border-slate-700 p-3 space-y-2">
+        <p class="text-sm text-white">Ceiling-v5 challenge subset: {{ '%.1f%%'|format(qs.challenge.category_balanced*100) }} category/family-balanced capability; {{ qs.challenge.passes }}/{{ qs.challenge.count }} full passes across {{ qs.challenge.families }} families.</p>
+        <p class="text-xs text-slate-400">Reported separately so easier anchors do not dilute challenge failures. Difficulty is not yet empirically calibrated; variants share a family.</p>
+        <table class="w-full text-xs"><thead><tr><th class="text-left">Challenge category</th><th>Full passes</th><th>Mean</th></tr></thead><tbody>
+        {% for name, item in qs.challenge.categories.items() %}<tr><td>{{ name }}</td><td class="text-center">{{ item.passes }}/{{ item.count }}</td><td class="text-center">{{ '%.1f%%'|format(item.score*100) }}</td></tr>{% endfor %}
+        </tbody></table>
+    </div>
+    {% endif %}
     <div class="flex flex-wrap gap-3 text-sm text-slate-300">{% for name, count in qs.outcomes.items() %}<span>{{ name|replace('_',' ') }}: {{ count }}</span>{% endfor %}</div>
     {% if qs.get('category_balanced_pass_rate') is not none %}<p class="text-sm text-slate-300">Category/family-balanced full passes: {{ '%.1f%%'|format(qs.category_balanced_pass_rate*100) }}. Partial credit is included in the capability mean above.</p>{% endif %}
     {% if qs.get('heuristic_count', 0) %}<p class="text-sm text-slate-400">{{ qs.heuristic_count }} legacy prose-pattern checks are diagnostic only ({{ '%.1f%%'|format(qs.heuristic_mean*100) }} coverage). They are excluded from capability scores because keyword coverage cannot establish factual correctness.</p>{% endif %}

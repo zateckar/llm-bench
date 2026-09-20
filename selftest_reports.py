@@ -249,6 +249,33 @@ class ReportTests(unittest.TestCase):
             self.assertNotIn("private.invalid", response.text)
         self.assertIn("identical capability questions scored by both", response.text)
 
+    def test_challenge_cohort_and_interactive_turns_render_safely(self):
+        from quality_suite import assemble_questions
+        from test_loader import load_all_tests
+
+        q = next(q for q in load_all_tests() if q.id == "H5-CL-worlds-01")
+        q = assemble_questions([q], QualityConfig(generated=False, interactive=False))[0]
+        quality = make_report([Result(q, "{}", 0, outcome="task_failure")],
+                              QualityConfig(), ClientConfig("https://fake.invalid", "unused", "fake"))
+        meta = {"metadata": {"protocol": "json-actions-v1"}, "diagnostics": {"transcript": [
+            {"role": "assistant", "content": '{"tool":"read","args":{}}'},
+            {"role": "tool", "content": {"value": 7}},
+            {"role": "assistant", "content": "<script>bad()</script>"},
+        ]}}
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute("UPDATE test_runs SET quality_json=?, perf_json=NULL WHERE id=1", (json.dumps(quality),))
+            db.execute("UPDATE test_results SET quality_metadata_json=? WHERE run_id=1 AND test_id='Q0'",
+                       (json.dumps(meta),))
+            db.commit()
+        for url in ("/runs/1", "/runs/1/report.html"):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("Ceiling-v5 challenge subset", response.text)
+            self.assertIn("Interactive transcript", response.text)
+            self.assertIn("Turn 2", response.text)
+            self.assertIn("&lt;script&gt;bad()&lt;/script&gt;", response.text)
+            self.assertNotIn("<script>bad()</script>", response.text)
+
     def test_performance_values_and_online_parity(self):
         selected = [asyncio.run(reports.load_run(i)) for i in (1, 2)]
         view = reports.performance_view(selected)

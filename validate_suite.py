@@ -345,6 +345,32 @@ def check_json_match(report: Report, where: str, expected: object) -> None:
     ignore = expected.get("ignore_keys")
     if ignore is not None and not isinstance(ignore, list):
         report.error(where, "json_match ignore_keys must be a list")
+    aliases = expected.get("value_aliases", {})
+    if not isinstance(aliases, dict):
+        report.error(where, "json_match value_aliases must map exact leaf paths to alternatives")
+    else:
+        # Build canonical comparator paths; do not accept misspelled or wildcard paths.
+        leaves = {}
+
+        def visit(value, path=""):
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    visit(child, f"{path}.{key}".lstrip("."))
+            elif isinstance(value, list):
+                for i, child in enumerate(value):
+                    visit(child, f"{path}[{i}]")
+            else:
+                leaves[path] = value
+
+        visit(expected.get("value"))
+        for path, values in aliases.items():
+            if not isinstance(path, str) or path not in leaves:
+                report.error(where, f"json_match alias path {path!r} is not an exact scalar leaf")
+            if not isinstance(values, list) or not values or any(
+                isinstance(v, (dict, list)) or (type(v) is float and not math.isfinite(v))
+                for v in (values if isinstance(values, list) else [])
+            ):
+                report.error(where, f"json_match aliases for {path!r} must be a nonempty scalar list")
 
 
 def check_regex_all(report: Report, where: str, expected: object) -> None:

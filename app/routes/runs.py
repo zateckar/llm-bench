@@ -182,7 +182,10 @@ async def run_detail(request: Request, run_id: int):
     )
 
     results_by_category = {}
+    from app.services.html_reports import interactive_turns
+
     for r in results:
+        r["interactive_turns"] = interactive_turns(r)
         cat = r["category"]
         if cat not in results_by_category:
             results_by_category[cat] = []

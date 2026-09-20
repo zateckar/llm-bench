@@ -268,6 +268,11 @@
       - SUPPORTED
     mode: exact
     strict_json: true
+    value_aliases:
+      labels[1]:
+      - null
+      labels[4]:
+      - null
   max_tokens: 16384
 - id: RV4-FK-01
   category: Factual Knowledge
@@ -338,6 +343,11 @@
       risk_difference_pp: -6
     mode: exact
     strict_json: true
+    value_aliases:
+      verdicts[1]:
+      - null
+      verdicts[2]:
+      - null
   max_tokens: 16384
 - id: RV4-TH-02
   category: Truthfulness

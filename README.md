@@ -10,23 +10,28 @@ Built with **Python 3.13**, **FastAPI**, **HTMX**, **Tailwind CSS** and **SQLite
 
 ### Quality
 
-The **reliability-v4** revision adds 46 verified tasks across all 23 static categories, corrects database-discovered grading defects, and separates 124 legacy prose-pattern diagnostics from capability scores. Quality output budgets default to 16,384 tokens uniformly across models. See [the database audit](QUALITY_AUDIT.md) for evidence, limitations, and migration details. Historical grades remain unchanged; the revised suite requires fresh matched runs.
+The **reliability-v4** revision adds 46 verified tasks across the original 23 static categories, corrects database-discovered grading defects, and separates 124 legacy prose-pattern diagnostics from capability scores. Quality output budgets default to 16,384 tokens uniformly across models. See [the database audit](QUALITY_AUDIT.md) for evidence, limitations, and migration details. Historical grades remain unchanged; the revised suite requires fresh matched runs.
 
-315 static questions across 23 categories, plus seeded reasoning and interactive tasks (322 questions by default). Every question declares its own **pass threshold** (1.0 by default), so partial credit never counts as a pass:
+**Specialist-v1** adds 30 tasks: Legal (4, including patents and trademarks), Finances (4, including Treasury), R&D (4, covering automotive, mechanical design and robotics), Language Translations (6, all directions between Czech, English and German), Code Review (4 repository snapshots), and 8 additional complex Security reviews. See [specialist coverage and grading](tests/SPECIALISTS.md).
+
+**Ceiling-v5** fixes six false failures found in the latest four runs and adds 52 compositional challenges across 13 categories, including 215 code fixtures. It reports the challenge subset separately and groups related variants into families. See [the latest audit and benchmark design](QUALITY_AUDIT_V5.md). JSON equivalences are explicitly scoped to individual fields; incorrect values, missing actions and truncated answers still fail.
+
+397 static questions across 28 categories, plus seeded reasoning and interactive tasks (404 questions by default). Every question declares its own **pass threshold** (1.0 by default), so partial credit never counts as a pass:
 
 | Area | Categories |
 |------|-----------|
 | Reasoning | Logical Reasoning, Mathematical Reasoning, Reading Comprehension, Classification |
 | Knowledge | Factual Knowledge, Truthfulness |
-| Code | Code Generation, Advanced Coding, Terminal Algorithms, Terminal Debugging |
+| Code | Code Generation, Advanced Coding, Code Review, Terminal Algorithms, Terminal Debugging |
 | Long context | Needle Retrieval, Long Context Coherence, Summarization |
 | Agentic | Tool Using, Agentic Use Cases |
 | Ops & security | Security, Terminal System Admin, Terminal File Operations, Terminal Science |
-| Language & style | Instruction Following, Creative Writing, Translation, Ethical Reasoning |
+| Language & style | Instruction Following, Creative Writing, Translation, Language Translations, Ethical Reasoning |
+| Specialist domains | Legal, Finances, R&D |
 
 Each question carries a **difficulty** tier (`easy` / `medium` / `hard` / `expert`) that feeds a difficulty-weighted score alongside the raw average, so a model that only clears the easy items cannot hide behind a flat percentage.
 
-62 items execute the model's code in a sandboxed subprocess and compare returned values structurally, rather than pattern-matching prose about the code.
+66 items execute the model's code in a sandboxed subprocess and compare returned values structurally, rather than pattern-matching prose about the code.
 
 The **challenge-v2** revision replaces 106 familiar puzzles, routine calculations, and generic planning questions with 56 harder questions across logical reasoning, mathematics, advanced coding, agentic use cases, tool use, and reading comprehension. Tasks include constrained optimization, exact conditional probabilities, transaction replay, concurrent-update recovery, and code with boundary and tie-breaking requirements. All requested JSON fields must match; code must pass every fixture. Reliability-v4 applies a uniform 16,384-token quality cap by default.
 
@@ -177,6 +182,8 @@ uv run python validate_suite.py --strict
 ```bash
 uv run python selftest_evaluators.py
 uv run python selftest_reliability.py
+uv run python selftest_specialists.py
+uv run python selftest_ceiling.py
 ```
 
 - **No false passes.** Every evaluator has at least one adversarial case — a plausible-looking wrong answer — that must score below the pass bar. Each corresponds to a real scoring defect: a number that appears only as an intermediate step, half the required keywords, required steps in the wrong order, a correct label under the wrong item number, a response that hedges and then fabricates specifics, a review that finds most issues and then declares the code secure.

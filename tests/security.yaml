@@ -298,6 +298,10 @@
   evaluator: json_match
   expected:
     mode: exact
+    value_aliases:
+      '[0].id': ['A01:2021']
+      '[1].id': ['A02:2021']
+      '[2].id': ['A03:2021']
     value:
       - id: "A01"
         name: "Broken Access Control"

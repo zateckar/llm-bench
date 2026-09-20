@@ -642,6 +642,20 @@ def build_cases():
 
     _code_cases(cases)
     _creative_cases(cases)
+    # The legacy footer says to use null for unknown values while these two
+    # prompts name an UNKNOWN label. Honor both readings at those exact leaves.
+    for case in cases:
+        value = case.get("expected", {}).get("value") if isinstance(case.get("expected"), dict) else None
+        if isinstance(value, dict) and any(
+            isinstance(value.get(key), list) and "UNKNOWN" in value[key]
+            for key in ("labels", "verdicts")
+        ):
+            field = "labels" if "labels" in value else "verdicts"
+            case["expected"]["value_aliases"] = {
+                f"{field}[{i}]": [None]
+                for i, value in enumerate(case["expected"]["value"][field])
+                if value == "UNKNOWN"
+            }
     return cases
 
 

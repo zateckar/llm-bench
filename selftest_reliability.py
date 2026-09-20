@@ -28,7 +28,7 @@ class ReliabilityTests(unittest.TestCase):
         for raw in build_cases():
             q = _parse_question(raw, raw["id"])
             self.assertEqual(q, self.questions[q.id])
-        categories = {q.category for q in self.questions.values()}
+        categories = {raw["category"] for raw in build_cases()}
         for category in categories:
             self.assertGreaterEqual(
                 sum(

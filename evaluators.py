@@ -460,6 +460,14 @@ def extract_json(response: str, *, strict: bool = False) -> tuple[Any, str | Non
 
     Returns ``(value, None)`` or ``(None, reason)``.
     """
+    # Parse complete JSON before touching markup. A JSON string may legitimately
+    # contain '<think>...</think>'; those bytes are data, not a reasoning channel.
+    raw = response.strip()
+    raw_fence = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n?```", raw, re.DOTALL | re.IGNORECASE)
+    try:
+        return _load_json(raw_fence[1] if raw_fence else raw), None
+    except ValueError:
+        pass
     text = strip_think_blocks(response).strip()
 
     if strict:
@@ -1582,6 +1590,7 @@ def eval_json_match(response: str, expected: Any, **_) -> tuple[float, str]:
     want = spec.get("value")
     mode = str(spec.get("mode", "exact"))
     ignore_keys = {str(k) for k in (spec.get("ignore_keys") or [])}
+    aliases = spec.get("value_aliases", {})
 
     doc, err = extract_json(response, strict=spec.get("strict_json", False))
     if err:
@@ -1589,6 +1598,10 @@ def eval_json_match(response: str, expected: Any, **_) -> tuple[float, str]:
 
     def compare(got: Any, target: Any, path: str) -> list[str]:
         problems: list[str] = []
+        # Explicit, question-local leaf equivalents only. Never coerce every
+        # numeric string, sort every array, or search for a favorable answer.
+        if path in aliases and any(values_equal(got, v, rel=0, abs_tol=0) for v in aliases[path]):
+            return []
         if isinstance(target, dict):
             if not isinstance(got, dict):
                 return [f"{path or 'root'}: expected object, got {type(got).__name__}"]
@@ -1619,7 +1632,7 @@ def eval_json_match(response: str, expected: Any, **_) -> tuple[float, str]:
     problems = compare(doc, want, "")
     if not problems:
         return 1.0, "JSON matches expected structure and values"
-    return 0.0, f"{len(problems)} mismatch(es): " + "; ".join(problems[:5])
+    return 0.0, f"JSON parsed; {len(problems)} value/structure mismatch(es): " + "; ".join(problems[:5])
 
 
 def eval_ordered_labels(response: str, expected: Any, **_) -> tuple[float, str]:

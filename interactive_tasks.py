@@ -9,7 +9,7 @@ import copy
 import json
 
 from models import Question, RequestMetrics, Result, TokenUsage
-from evaluators import extract_json
+from evaluators import extract_json, strip_think_blocks
 
 PROTOCOL = """You are operating an isolated simulated environment. Respond each turn with
 exactly one JSON object {"tool":"name","args":{...}}, or {"done":true} when finished.
@@ -285,7 +285,7 @@ def run_interaction(q, client, cancelled=lambda: False):
     transcript, tokens, aggregate = [], TokenUsage(), RequestMetrics(attempts=0, streamed=True)
     outcome, detail = "task_failure", "Turn budget exhausted"
     remaining = q.metadata["total_output_budget"]
-    for _ in range(q.metadata["max_turns"]):
+    for turn in range(1, q.metadata["max_turns"] + 1):
         if cancelled():
             outcome, detail = "cancelled", "Run stopped"
             break
@@ -307,13 +307,16 @@ def run_interaction(q, client, cancelled=lambda: False):
             aggregate.ok, aggregate.error = False, metrics.error
             outcome, detail = "endpoint_error", f"Request failed: {metrics.error}"
             break
-        if metrics.finish_reason == "length":
+        if metrics.finish_reason in {"length", "max_tokens"}:
             outcome, detail = "truncation", "Action truncated by output limit"
             break
         remaining -= usage.completion_tokens
-        action, error = extract_json(response)
+        if not strip_think_blocks(response).strip():
+            outcome, detail = "missing_answer", f"Turn {turn}: no final JSON action; reasoning alone is not an action"
+            break
+        action, error = extract_json(response, strict=True)
         if error or not isinstance(action, dict):
-            outcome, detail = "formatting", "Expected a JSON action object"
+            outcome, detail = "formatting", f"Turn {turn}: expected one JSON action object ({error or 'parsed value is not an object'}); earlier actions remain in the transcript"
             break
         if set(action) == {"done"} and action["done"] is True:
             outcome, detail = "complete", "Model finished"

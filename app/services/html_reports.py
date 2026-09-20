@@ -27,6 +27,25 @@ def object_json(raw):
         return {}
 
 
+def interactive_turns(result):
+    """Display stored actions separately from the enclosing transcript JSON."""
+    meta = object_json(result.get("quality_metadata_json"))
+    if meta.get("metadata", {}).get("protocol") != "json-actions-v1":
+        return []
+    transcript = meta.get("diagnostics", {}).get("transcript", [])
+    if not isinstance(transcript, list):
+        return []
+    turns, number = [], 0
+    for t in transcript:
+        if not isinstance(t, dict) or t.get("role") not in {"assistant", "tool"} or "content" not in t:
+            continue
+        number += t["role"] == "assistant"
+        turns.append({"role": t["role"], "number": number,
+                      "content": t["content"] if isinstance(t["content"], str)
+                      else json.dumps(t["content"], ensure_ascii=False, indent=2)})
+    return turns
+
+
 def number(value):
     return value if type(value) in (int, float) and math.isfinite(value) else None
 
@@ -78,6 +97,7 @@ async def load_run(run_id):
     )
     groups = defaultdict(list)
     for result in run["results"]:
+        result["interactive_turns"] = interactive_turns(result)
         result["scored"] = bool(
             result["quality_scored"]
             if result.get("quality_scored") is not None

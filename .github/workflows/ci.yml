@@ -49,6 +49,12 @@ jobs:
       - name: Verify reliability tasks and database regression cases
         run: uv run python selftest_reliability.py
 
+      - name: Verify specialist answers, translations, and repository reviews
+        run: uv run python selftest_specialists.py
+
+      - name: Verify database JSON regressions and ceiling challenges
+        run: uv run python selftest_ceiling.py
+
       - name: Verify generated, interactive, and long-context evaluation
         run: uv run python selftest_quality.py
 
