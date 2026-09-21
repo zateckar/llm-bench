@@ -571,6 +571,22 @@
                                 <div>
                                     <p class="text-xs font-medium text-slate-500 mb-1">Evaluation</p>
                                     <p class="text-sm text-slate-300">{{ r.detail }}</p>
+                                    {% if r.evaluation %}
+                                    <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                                        <span class="text-slate-500">Criterion achievement:</span>
+                                        <span class="text-slate-300">{{ '%.1f%%'|format(r.evaluation.criterion_achievement * 100) if r.evaluation.criterion_achievement is not none else 'n/a' }}</span>
+                                        <span class="text-slate-500">Contract:</span>
+                                        <span class="text-slate-300">{{ '%.1f%%'|format(r.evaluation.contract_score * 100) if r.evaluation.contract_score is not none else 'n/a' }}</span>
+                                        <span class="text-slate-500">{{ r.evaluation.criterion_count }} criteria</span>
+                                    </div>
+                                    <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1 text-xs">
+                                        {% for criterion in r.evaluation.criteria %}
+                                        <div class="rounded px-2 py-1 {% if criterion.status == 'pass' %}bg-emerald-950/40 text-emerald-300{% elif criterion.status in ['fail', 'error'] %}bg-red-950/40 text-red-300{% else %}bg-slate-800 text-slate-400{% endif %}">
+                                            <span class="font-mono">{{ criterion.id }}</span> · {{ criterion.status|replace('_', ' ') }}{% if criterion.reason_code %} · {{ criterion.reason_code|replace('_', ' ') }}{% endif %}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
                                 </div>
                                 <div class="flex items-center gap-4 text-xs text-slate-500">
                                     <div class="flex items-center gap-1">

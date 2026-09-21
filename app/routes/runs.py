@@ -186,6 +186,11 @@ async def run_detail(request: Request, run_id: int):
 
     for r in results:
         r["interactive_turns"] = interactive_turns(r)
+        try:
+            metadata = json.loads(r.get("quality_metadata_json") or "{}")
+        except (TypeError, ValueError):
+            metadata = {}
+        r["evaluation"] = metadata.get("evaluation")
         cat = r["category"]
         if cat not in results_by_category:
             results_by_category[cat] = []

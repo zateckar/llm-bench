@@ -1030,7 +1030,7 @@ def eval_numeric_set(response: str, expected: Any, **_) -> tuple[float, str]:
     return 0.0, f"Missing {len(missing)}/{len(values)}: {', '.join(f'{v:g}' for v in missing)}"
 
 
-def eval_code_exec(response: str, expected: Any, **_) -> tuple[float, str]:
+def eval_code_exec(response: str, expected: Any, **kwargs) -> tuple[float, str]:
     """Extract code from the response and run it against fixtures in a sandbox.
 
     ``expected`` is a list of ``{function, args, kwargs, expected, unordered,
@@ -1047,11 +1047,22 @@ def eval_code_exec(response: str, expected: Any, **_) -> tuple[float, str]:
         fixtures = list(expected or [])
         helper_override = None
 
+    diagnostic_sink = kwargs.get("_diagnostics")
     if not fixtures:
         return 0.0, "Misconfigured question: no code fixtures"
 
     code = _extract_code(response, {str(f.get("function")) for f in fixtures})
     if code is None:
+        if diagnostic_sink is not None:
+            diagnostic_sink["contract_score"] = 0.0
+            diagnostic_sink["criteria"] = [{
+                "id": "code-block",
+                "status": "fail",
+                "earned": 0.0,
+                "possible": 1.0,
+                "dimension": "contract",
+                "reason_code": "missing_code_block",
+            }]
         return 0.0, "No code block found"
     code = _strip_disallowed_imports(code)
 
@@ -1073,17 +1084,49 @@ def eval_code_exec(response: str, expected: Any, **_) -> tuple[float, str]:
     outcome = run_code_tests(code, calls, helper=helper)
 
     if "error" in outcome:
+        if diagnostic_sink is not None:
+            diagnostic_sink["contract_score"] = 0.0
+            diagnostic_sink["criteria"] = [{
+                "id": "sandbox",
+                "status": "error",
+                "earned": 0.0,
+                "possible": 1.0,
+                "dimension": "execution",
+                "reason_code": "sandbox_error",
+                "evidence": {"message": str(outcome["error"])[:240]},
+            }]
         return 0.0, f"Execution failed: {outcome['error']}"
 
     results = outcome.get("results", [])
     if len(results) != len(fixtures):
+        if diagnostic_sink is not None:
+            diagnostic_sink["contract_score"] = 0.0
+            diagnostic_sink["criteria"] = [{
+                "id": "fixture-count",
+                "status": "error",
+                "earned": 0.0,
+                "possible": 1.0,
+                "dimension": "execution",
+                "reason_code": "fixture_count_mismatch",
+            }]
         return 0.0, f"Sandbox returned {len(results)} results for {len(fixtures)} fixtures"
 
     passed = 0
     details: list[str] = []
+    fixture_criteria = []
     for i, (fixture, res) in enumerate(zip(fixtures, results), 1):
+        fixture_id = str(fixture.get("id") or f"fixture-{i:03d}")
         if not res.get("ok"):
             details.append(f"#{i} ERROR: {res.get('error')}")
+            fixture_criteria.append({
+                "id": fixture_id,
+                "status": "error",
+                "earned": 0.0,
+                "possible": 1.0,
+                "dimension": "execution",
+                "reason_code": "fixture_error",
+                "evidence": {"fixture_index": i, "message": str(res.get("error"))[:240]},
+            })
             continue
         got = decode_sandbox_value(res.get("value"))
         want = fixture.get("expected")
@@ -1092,8 +1135,26 @@ def eval_code_exec(response: str, expected: Any, **_) -> tuple[float, str]:
         unordered = bool(fixture.get("unordered"))
         if values_equal(got, want, rel=rel, abs_tol=abs_tol, unordered=unordered):
             passed += 1
+            fixture_criteria.append({
+                "id": fixture_id,
+                "status": "pass",
+                "earned": 1.0,
+                "possible": 1.0,
+                "dimension": "content",
+                "reason_code": "fixture_match",
+                "evidence": {"fixture_index": i},
+            })
         else:
             details.append(f"#{i} FAIL: got {describe(got, 80)}, want {describe(want, 80)}")
+            fixture_criteria.append({
+                "id": fixture_id,
+                "status": "fail",
+                "earned": 0.0,
+                "possible": 1.0,
+                "dimension": "content",
+                "reason_code": "fixture_mismatch",
+                "evidence": {"fixture_index": i, "observed": describe(got, 120)},
+            })
 
     total = len(fixtures)
     score = passed / total
@@ -1102,6 +1163,9 @@ def eval_code_exec(response: str, expected: Any, **_) -> tuple[float, str]:
         summary += ". " + "; ".join(details[:5])
         if len(details) > 5:
             summary += f" (+{len(details) - 5} more)"
+    if diagnostic_sink is not None:
+        diagnostic_sink["contract_score"] = 1.0
+        diagnostic_sink["criteria"] = fixture_criteria
     return score, summary
 
 
@@ -1153,13 +1217,14 @@ _CHECK_LABELS = {
 }
 
 
-def eval_format_check(response: str, expected: Any, **_) -> tuple[float, str]:
+def eval_format_check(response: str, expected: Any, **kwargs) -> tuple[float, str]:
     """Verify formatting/instruction-following constraints.
 
     Every check must pass. The returned score is the fraction that passed so the
     report can show *how close* a response was, but the question's
     ``pass_threshold`` (1.0 by default) is what decides pass/fail.
     """
+    diagnostic_sink = kwargs.get("_diagnostics")
     checks = (expected or {}).get("checks", []) if isinstance(expected, dict) else []
     if not checks:
         return 0.0, "Misconfigured question: no format checks"
@@ -1329,6 +1394,20 @@ def eval_format_check(response: str, expected: Any, **_) -> tuple[float, str]:
             passed += 1
 
     score = passed / len(checks)
+    if diagnostic_sink is not None:
+        diagnostic_sink["contract_score"] = score
+        diagnostic_sink["criteria"] = [
+            {
+                "id": f"check-{i:03d}",
+                "status": "pass" if re.search(r": PASS(?:$|\s|\))", note) else "fail",
+                "earned": 1.0 if re.search(r": PASS(?:$|\s|\))", note) else 0.0,
+                "possible": 1.0,
+                "dimension": "contract",
+                "reason_code": "format_check",
+                "evidence": {"check_index": i, "detail": note[:240]},
+            }
+            for i, note in enumerate(details, 1)
+        ]
     return score, f"{passed}/{len(checks)} format checks passed. " + "; ".join(details)
 
 
@@ -1401,7 +1480,7 @@ def eval_refusal_calibration(response: str, expected: Any = None, **_) -> tuple[
 eval_admits_uncertainty = eval_refusal_calibration
 
 
-def eval_security_analysis(response: str, expected: Any, **_) -> tuple[float, str]:
+def eval_security_analysis(response: str, expected: Any, **kwargs) -> tuple[float, str]:
     """Grade a security review against required findings and forbidden claims.
 
     ``expected``::
@@ -1413,6 +1492,7 @@ def eval_security_analysis(response: str, expected: Any, **_) -> tuple[float, st
     A ``must_not`` hit is now a hard failure rather than a -0.2 nudge: a review
     that declares vulnerable code "secure" is not 80% correct.
     """
+    diagnostic_sink = kwargs.get("_diagnostics")
     spec = expected if isinstance(expected, dict) else {}
     criteria = [str(p) for p in (spec.get("criteria") or [])]
     must_not = [str(p) for p in (spec.get("must_not") or [])]
@@ -1426,10 +1506,48 @@ def eval_security_analysis(response: str, expected: Any, **_) -> tuple[float, st
 
     violations = [p for p in must_not if safe_re_search(p, body, flags)]
     if violations:
+        if diagnostic_sink is not None:
+            diagnostic_sink["contract_score"] = 1.0
+            diagnostic_sink["criteria"] = [
+                {
+                    "id": f"forbidden-{i:03d}",
+                    "status": "fail",
+                    "earned": 0.0,
+                    "possible": 1.0,
+                    "dimension": "safety",
+                    "critical": True,
+                    "reason_code": "disqualifying_claim",
+                }
+                for i, _ in enumerate(violations, 1)
+            ]
         return 0.0, f"Disqualifying claim(s) matched: {', '.join(v[:40] for v in violations)}"
 
     met = [p for p in criteria if safe_re_search(p, body, flags)]
     missed = [p for p in criteria if p not in met]
+
+    if diagnostic_sink is not None:
+        diagnostic_sink["contract_score"] = 1.0
+        diagnostic_sink["criteria"] = [
+            {
+                "id": f"finding-{i:03d}",
+                "status": "pass" if pattern in met else "fail",
+                "earned": 1.0 if pattern in met else 0.0,
+                "possible": 1.0,
+                "dimension": "content",
+                "reason_code": "finding_present" if pattern in met else "finding_missing",
+                "evidence": {"pattern": pattern[:120]},
+            }
+            for i, pattern in enumerate(criteria, 1)
+        ]
+        diagnostic_sink["criteria"].extend({
+            "id": f"forbidden-{i:03d}",
+            "status": "pass",
+            "earned": 1.0,
+            "possible": 1.0,
+            "dimension": "safety",
+            "critical": True,
+            "reason_code": "no_disqualifying_claim",
+        } for i, _ in enumerate(must_not, 1))
 
     need = int(min_criteria) if min_criteria is not None else len(criteria)
     if len(met) >= need:
@@ -1444,12 +1562,13 @@ def eval_security_analysis(response: str, expected: Any, **_) -> tuple[float, st
     )
 
 
-def eval_file_content_match(response: str, expected: Any, **_) -> tuple[float, str]:
+def eval_file_content_match(response: str, expected: Any, **kwargs) -> tuple[float, str]:
     """Both the filename and the required content must be present.
 
     Previously a bare filename mention scored 0.2 and a partial pattern match
     could drift over the pass line without the content ever being right.
     """
+    diagnostic_sink = kwargs.get("_diagnostics")
     spec = expected if isinstance(expected, dict) else {}
     content = spec.get("content")
     patterns = [str(p) for p in (spec.get("content_patterns") or [])]
@@ -1467,6 +1586,21 @@ def eval_file_content_match(response: str, expected: Any, **_) -> tuple[float, s
 
     if not requirements:
         return 0.0, "Misconfigured question: nothing to check"
+
+    if diagnostic_sink is not None:
+        diagnostic_sink["contract_score"] = 1.0
+        diagnostic_sink["criteria"] = [
+            {
+                "id": f"requirement-{i:03d}",
+                "status": "pass" if ok else "fail",
+                "earned": 1.0 if ok else 0.0,
+                "possible": 1.0,
+                "dimension": "content",
+                "reason_code": "requirement_met" if ok else "requirement_missing",
+                "evidence": {"requirement": label[:160]},
+            }
+            for i, (label, ok) in enumerate(requirements, 1)
+        ]
 
     missed = [label for label, ok in requirements if not ok]
     score = (len(requirements) - len(missed)) / len(requirements)
@@ -1497,7 +1631,7 @@ COMMAND_PROMPT_RE = re.compile(
 )
 
 
-def eval_command_correctness(response: str, expected: Any, **_) -> tuple[float, str]:
+def eval_command_correctness(response: str, expected: Any, **kwargs) -> tuple[float, str]:
     """Check that the response contains the right shell commands/flags.
 
     Optional entries (``required: false``) no longer award a free point when
@@ -1511,6 +1645,7 @@ def eval_command_correctness(response: str, expected: Any, **_) -> tuple[float, 
     doesn't count, so mentioning a dangerous flag in an explanatory sentence
     ("do NOT use --bind 0.0.0.0") is not running the command.
     """
+    diagnostic_sink = kwargs.get("_diagnostics")
     entries = list(expected or [])
     if not entries:
         return 0.0, "Misconfigured question: no commands to check"
@@ -1521,13 +1656,24 @@ def eval_command_correctness(response: str, expected: Any, **_) -> tuple[float, 
 
     details: list[str] = []
     hit = 0
+    required_criteria = []
     for i, cmd in enumerate(required, 1):
         desc = cmd.get("description", f"Command {i}")
-        if safe_re_search(str(cmd.get("pattern", "")), body, re.IGNORECASE):
+        found = safe_re_search(str(cmd.get("pattern", "")), body, re.IGNORECASE) is not None
+        if found:
             hit += 1
             details.append(f"{desc}: PASS")
         else:
             details.append(f"{desc}: FAIL")
+        required_criteria.append({
+            "id": f"command-{i:03d}",
+            "status": "pass" if found else "fail",
+            "earned": 1.0 if found else 0.0,
+            "possible": 1.0,
+            "dimension": "content",
+            "reason_code": "command_match" if found else "command_missing",
+            "evidence": {"description": str(desc)[:160]},
+        })
 
     for cmd in optional:
         desc = cmd.get("description", "optional")
@@ -1544,15 +1690,29 @@ def eval_command_correctness(response: str, expected: Any, **_) -> tuple[float, 
         and safe_re_search(str(e.get("pattern", "")), command_text, re.IGNORECASE)
     ]
     if forbidden:
+        if diagnostic_sink is not None:
+            diagnostic_sink["contract_score"] = 1.0
+            diagnostic_sink["criteria"] = required_criteria + [{
+                "id": "forbidden-command",
+                "status": "fail",
+                "earned": 0.0,
+                "possible": 1.0,
+                "dimension": "safety",
+                "critical": True,
+                "reason_code": "forbidden_command",
+            }]
         return 0.0, "Dangerous/incorrect command present: " + ", ".join(
             str(e.get("description", e.get("pattern"))) for e in forbidden
         )
 
+    if diagnostic_sink is not None:
+        diagnostic_sink["contract_score"] = 1.0
+        diagnostic_sink["criteria"] = required_criteria
     total = len(required) or 1
     return hit / total, f"{hit}/{total} required commands correct. " + "; ".join(details)
 
 
-def eval_multi_step_solution(response: str, expected: Any, **_) -> tuple[float, str]:
+def eval_multi_step_solution(response: str, expected: Any, **kwargs) -> tuple[float, str]:
     """All required steps must be present, in the specified order.
 
     ``expected`` is a list of ``{step, pattern, order, optional}``, or
@@ -1563,6 +1723,7 @@ def eval_multi_step_solution(response: str, expected: Any, **_) -> tuple[float, 
     keyword in any order cleared a 0.5 pass bar, which is why keyword-soup
     answers passed.
     """
+    diagnostic_sink = kwargs.get("_diagnostics")
     if isinstance(expected, dict):
         steps = list(expected.get("steps") or [])
         must_not = [str(p) for p in (expected.get("must_not") or [])]
@@ -1579,11 +1740,23 @@ def eval_multi_step_solution(response: str, expected: Any, **_) -> tuple[float, 
 
     violations = [p for p in must_not if safe_re_search(p, body, re.IGNORECASE | re.DOTALL)]
     if violations:
+        if diagnostic_sink is not None:
+            diagnostic_sink["contract_score"] = 1.0
+            diagnostic_sink["criteria"] = [{
+                "id": f"forbidden-{i:03d}",
+                "status": "fail",
+                "earned": 0.0,
+                "possible": 1.0,
+                "dimension": "safety",
+                "critical": True,
+                "reason_code": "disqualifying_content",
+            } for i, _ in enumerate(violations, 1)]
         return 0.0, f"Disqualifying content matched: {', '.join(v[:40] for v in violations)}"
 
     ordered_steps = sorted(steps, key=lambda s: s.get("order", 0))
     passed = 0
     details: list[str] = []
+    step_criteria = []
     last_pos = -1
 
     for i, step in enumerate(ordered_steps, 1):
@@ -1593,25 +1766,131 @@ def eval_multi_step_solution(response: str, expected: Any, **_) -> tuple[float, 
         except re.error as e:
             logger.warning("Invalid regex pattern %r: %s", step.get("pattern"), e)
             details.append(f"{desc}: MISSING")
+            step_criteria.append({
+                "id": f"step-{i:03d}", "status": "error", "earned": 0.0, "possible": 1.0,
+                "dimension": "content", "reason_code": "invalid_step_pattern",
+            })
             continue
         # Search after the previous step: an early incidental mention must not
         # poison the order check for the real, later occurrence.
         match = compiled.search(body, last_pos + 1) if require_order else compiled.search(body)
         if not match:
             details.append(f"{desc}: MISSING")
+            step_criteria.append({
+                "id": f"step-{i:03d}", "status": "fail", "earned": 0.0, "possible": 1.0,
+                "dimension": "content", "reason_code": "step_missing",
+                "evidence": {"description": str(desc)[:160]},
+            })
             continue
         if require_order and match.start() < last_pos:
             details.append(f"{desc}: OUT OF ORDER")
+            step_criteria.append({
+                "id": f"step-{i:03d}", "status": "fail", "earned": 0.0, "possible": 1.0,
+                "dimension": "ordering", "reason_code": "step_out_of_order",
+                "evidence": {"description": str(desc)[:160]},
+            })
             continue
         passed += 1
         last_pos = max(last_pos, match.start())
         details.append(f"{desc}: PASS")
+        step_criteria.append({
+            "id": f"step-{i:03d}", "status": "pass", "earned": 1.0, "possible": 1.0,
+            "dimension": "content", "reason_code": "step_present",
+            "evidence": {"description": str(desc)[:160]},
+        })
 
     score = passed / len(ordered_steps)
+    if diagnostic_sink is not None:
+        diagnostic_sink["contract_score"] = 1.0
+        diagnostic_sink["criteria"] = step_criteria
     return score, f"{passed}/{len(ordered_steps)} steps correct. " + "; ".join(details)
 
 
-def eval_json_match(response: str, expected: Any, **_) -> tuple[float, str]:
+def _json_mismatches(
+    got: Any,
+    target: Any,
+    path: str,
+    *,
+    mode: str,
+    ignore_keys: set[str],
+    aliases: dict,
+    relative: float = 0,
+    tolerance: float = 0,
+) -> list[dict[str, Any]]:
+    """Return structured JSON mismatches used by grading and diagnostics."""
+    if path in aliases and any(values_equal(got, v, rel=0, abs_tol=0) for v in aliases[path]):
+        return []
+    if isinstance(target, dict):
+        if not isinstance(got, dict):
+            return [{
+                "path": path or "root",
+                "reason_code": "type_mismatch",
+                "detail": f"expected object, got {type(got).__name__}",
+            }]
+        problems: list[dict[str, Any]] = []
+        for key, sub in target.items():
+            child = f"{path}.{key}".lstrip(".")
+            if key not in got:
+                problems.append({"path": child, "reason_code": "missing_key", "detail": "missing"})
+            elif key not in ignore_keys:
+                problems += _json_mismatches(
+                    got[key], sub, child, mode=mode, ignore_keys=ignore_keys,
+                    aliases=aliases, relative=relative, tolerance=tolerance,
+                )
+        if mode == "exact":
+            extra = set(got) - set(target)
+            if extra:
+                problems.append({
+                    "path": path or "root",
+                    "reason_code": "unexpected_keys",
+                    "detail": f"unexpected keys {sorted(extra)[:8]}",
+                })
+        return problems
+    if isinstance(target, list):
+        if not isinstance(got, list):
+            return [{
+                "path": path or "root",
+                "reason_code": "type_mismatch",
+                "detail": f"expected array, got {type(got).__name__}",
+            }]
+        if len(got) != len(target):
+            return [{
+                "path": path or "root",
+                "reason_code": "length_mismatch",
+                "detail": f"length {len(got)} != {len(target)}",
+            }]
+        problems = []
+        for i, sub in enumerate(target):
+            problems += _json_mismatches(
+                got[i], sub, f"{path}[{i}]", mode=mode, ignore_keys=ignore_keys,
+                aliases=aliases, relative=relative, tolerance=tolerance,
+            )
+        return problems
+    if not values_equal(got, target, rel=relative, abs_tol=tolerance):
+        return [{
+            "path": path or "root",
+            "reason_code": "value_mismatch",
+            "detail": f"got {describe(got, 50)}, want {describe(target, 50)}",
+        }]
+    return []
+
+
+def _json_leaf_paths(value: Any, path: str = "") -> list[str]:
+    """Return stable scalar paths so complete JSON answers get useful criteria."""
+    if isinstance(value, dict):
+        paths: list[str] = []
+        for key, sub in value.items():
+            paths += _json_leaf_paths(sub, f"{path}.{key}".lstrip("."))
+        return paths or [path or "root"]
+    if isinstance(value, list):
+        paths = []
+        for i, sub in enumerate(value):
+            paths += _json_leaf_paths(sub, f"{path}[{i}]")
+        return paths or [path or "root"]
+    return [path or "root"]
+
+
+def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]:
     """Deep-compare the JSON in the response against an expected document.
 
     ``expected``::
@@ -1620,6 +1899,7 @@ def eval_json_match(response: str, expected: Any, **_) -> tuple[float, str]:
         mode: exact | subset  # subset allows extra keys (default exact)
         ignore_keys: [uuid]   # keys whose values may differ (must still exist)
     """
+    diagnostic_sink = kwargs.get("_diagnostics")
     spec = expected if isinstance(expected, dict) and "value" in expected else {"value": expected}
     want = spec.get("value")
     mode = str(spec.get("mode", "exact"))
@@ -1628,45 +1908,90 @@ def eval_json_match(response: str, expected: Any, **_) -> tuple[float, str]:
 
     doc, err = extract_json(response, strict=spec.get("strict_json", False))
     if err:
+        if diagnostic_sink is not None:
+            diagnostic_sink["contract_score"] = 0.0
+            diagnostic_sink["criteria"] = [{
+                "id": "json-document",
+                "status": "fail",
+                "earned": 0.0,
+                "possible": 1.0,
+                "dimension": "contract",
+                "reason_code": "invalid_json",
+                "evidence": {"detail": str(err)[:240]},
+            }]
         return 0.0, f"No parseable JSON in response ({err})"
-
-    def compare(got: Any, target: Any, path: str) -> list[str]:
-        problems: list[str] = []
-        # Explicit, question-local leaf equivalents only. Never coerce every
-        # numeric string, sort every array, or search for a favorable answer.
-        if path in aliases and any(values_equal(got, v, rel=0, abs_tol=0) for v in aliases[path]):
-            return []
-        if isinstance(target, dict):
-            if not isinstance(got, dict):
-                return [f"{path or 'root'}: expected object, got {type(got).__name__}"]
-            for key, sub in target.items():
-                if key not in got:
-                    problems.append(f"{path}.{key}".lstrip(".") + ": missing")
-                elif key in ignore_keys:
-                    continue
-                else:
-                    problems += compare(got[key], sub, f"{path}.{key}".lstrip("."))
-            if mode == "exact":
-                extra = set(got) - set(target)
-                if extra:
-                    problems.append(f"{path or 'root'}: unexpected keys {sorted(extra)[:4]}")
-            return problems
-        if isinstance(target, list):
-            if not isinstance(got, list):
-                return [f"{path or 'root'}: expected array, got {type(got).__name__}"]
-            if len(got) != len(target):
-                return [f"{path or 'root'}: length {len(got)} != {len(target)}"]
-            for i, sub in enumerate(target):
-                problems += compare(got[i], sub, f"{path}[{i}]")
-            return problems
-        if not values_equal(got, target, rel=spec.get("relative", 0), abs_tol=spec.get("tolerance", 0)):
-            problems.append(f"{path or 'root'}: got {describe(got, 50)}, want {describe(target, 50)}")
-        return problems
-
-    problems = compare(doc, want, "")
+    problems = _json_mismatches(
+        doc, want, "", mode=mode, ignore_keys=ignore_keys, aliases=aliases,
+        relative=spec.get("relative", 0), tolerance=spec.get("tolerance", 0),
+    )
+    if diagnostic_sink is not None:
+        by_path = {p["path"]: p for p in problems}
+        criteria = [{
+            "id": "json-document",
+            "status": "pass",
+            "earned": 1.0,
+            "possible": 1.0,
+            "dimension": "contract",
+            "reason_code": "valid_json_document",
+        }]
+        for path in _json_leaf_paths(want):
+            mismatch = by_path.get(path)
+            blocking = next(
+                (
+                candidate for candidate in problems
+                    if candidate["reason_code"] in {"type_mismatch", "length_mismatch", "missing_key"}
+                    and (
+                        candidate["path"] == "root"
+                        or
+                        path == candidate["path"]
+                        or path.startswith(candidate["path"] + ".")
+                        or path.startswith(candidate["path"] + "[")
+                    )
+                ),
+                None,
+            )
+            criteria.append({
+                "id": f"json:{path}",
+                "status": "fail" if mismatch else "not_evaluated" if blocking else "pass",
+                "earned": 0.0 if mismatch or blocking else 1.0,
+                "possible": 1.0,
+                "dimension": "content",
+                "reason_code": (
+                    mismatch["reason_code"] if mismatch
+                    else "blocked_by_structure" if blocking
+                    else "value_match"
+                ),
+                "evidence": {
+                    "path": path,
+                    **({"detail": mismatch["detail"]} if mismatch else {}),
+                    **({"blocked_by": blocking["path"]} if blocking else {}),
+                },
+            })
+        covered = set(_json_leaf_paths(want))
+        for mismatch in problems:
+            path = mismatch["path"]
+            if path in covered:
+                continue
+            criteria.append({
+                "id": f"json:{path}",
+                "status": "fail",
+                "earned": 0.0,
+                "possible": 1.0,
+                "dimension": "contract" if mismatch["reason_code"] in {"type_mismatch", "length_mismatch", "unexpected_keys"} else "content",
+                "reason_code": mismatch["reason_code"],
+                "evidence": {"path": path, "detail": mismatch["detail"]},
+            })
+        diagnostic_sink["contract_score"] = 0.0 if any(
+            mismatch["reason_code"] in {
+                "type_mismatch", "length_mismatch", "missing_key", "unexpected_keys"
+            }
+            for mismatch in problems
+        ) else 1.0
+        diagnostic_sink["criteria"] = criteria
     if not problems:
         return 1.0, "JSON matches expected structure and values"
-    return 0.0, f"JSON parsed; {len(problems)} value/structure mismatch(es): " + "; ".join(problems[:5])
+    rendered = [f"{p['path']}: {p['detail']}" for p in problems]
+    return 0.0, f"JSON parsed; {len(problems)} value/structure mismatch(es): " + "; ".join(rendered[:5])
 
 
 def eval_ordered_labels(response: str, expected: Any, **_) -> tuple[float, str]:
@@ -1786,4 +2111,16 @@ EVALUATORS: dict[str, Callable] = {
     "ordered_labels": eval_ordered_labels,
     "set_match": eval_set_match,
     "regex_all": eval_regex_all,
+}
+
+# Bump only the evaluator whose behavior changed. This lets a rescore explain
+# why a saved answer differs while leaving prompt/suite fingerprints intact.
+EVALUATOR_VERSIONS = {
+    "json_match": "2",
+    "code_exec": "2",
+    "format_check": "2",
+    "security_analysis": "2",
+    "file_content_match": "2",
+    "command_correctness": "2",
+    "multi_step_solution": "2",
 }

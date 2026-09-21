@@ -363,7 +363,7 @@ def _run_benchmark_impl(
 ) -> None:
     from app.config import TESTS_DIR
     from app.services.url_guard import UnsafeURLError, validate_endpoint
-    from test_loader import SuiteError, load_all_tests
+    from test_loader import SuiteError, load_profile_tests
 
     workers = max(1, min(MAX_WORKERS, workers))
 
@@ -412,7 +412,15 @@ def _run_benchmark_impl(
         finally:
             db.close()
         quality_config = QualityConfig.from_dict(json.loads(raw_options) if raw_options else {})
-        questions: list[Question] = assemble_questions(load_all_tests(TESTS_DIR),quality_config)
+        questions: list[Question] = assemble_questions(
+            load_profile_tests(
+                quality_config.profile,
+                TESTS_DIR,
+                split=quality_config.split,
+                variants=quality_config.variants,
+            ),
+            quality_config,
+        )
     except SuiteError as e:
         fail(f"Test suite is invalid: {e}")
         return

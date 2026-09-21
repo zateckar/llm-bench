@@ -54,6 +54,7 @@ KNOWN_FIELDS = {
     "criteria", "must_not", "min_criteria", "keywords",
     "difficulty", "weight", "pass_threshold", "max_tokens",
     "source", "description",
+    "rubric",
 }
 
 
@@ -146,6 +147,32 @@ def load_all_tests(tests_dir: str | Path = "tests") -> list[Question]:
         raise SuiteError("\n".join(problems))
 
     return questions
+
+
+def load_profile_tests(
+    profile: str = "v6",
+    tests_dir: str | Path = "tests",
+    *,
+    split: str = "development",
+    variants: int = 2,
+) -> list[Question]:
+    """Load the frozen suite or an explicit hardening profile.
+
+    ``v6`` is the historical/default profile.  ``hardening`` appends the
+    deterministic H7 candidate bank and ``hardening-only`` loads that bank by
+    itself.  Keeping the profile choice explicit prevents an unfinished bank
+    from silently changing historical suite hashes.
+    """
+    if profile == "v6":
+        return load_all_tests(tests_dir)
+    if profile not in {"hardening", "hardening-only"}:
+        raise SuiteError(f"unknown quality profile: {profile!r}")
+    from hardening_cases import load_questions
+
+    hardening = load_questions(split=split, variants=variants)
+    if profile == "hardening-only":
+        return hardening
+    return load_all_tests(tests_dir) + hardening
 
 
 def _parse_question(item: Any, where: str) -> Question:
@@ -251,6 +278,77 @@ def _parse_question(item: Any, where: str) -> Question:
         if max_tokens <= 0:
             raise SuiteError(f"{where} ({test_id}): max_tokens must be positive")
 
+    rubric = item.get("rubric")
+    if rubric is not None:
+        if not isinstance(rubric, list) or not rubric:
+            raise SuiteError(f"{where} ({test_id}): rubric must be a non-empty list")
+        seen_rubric_ids: set[str] = set()
+        rubric_dependencies: dict[str, list[str]] = {}
+        for index, criterion in enumerate(rubric, 1):
+            label = f"rubric criterion #{index}"
+            if not isinstance(criterion, dict):
+                raise SuiteError(f"{where} ({test_id}): {label} must be a mapping")
+            criterion_id = str(criterion.get("id", "")).strip()
+            if not criterion_id:
+                raise SuiteError(f"{where} ({test_id}): {label} needs a non-empty id")
+            if criterion_id in seen_rubric_ids:
+                raise SuiteError(f"{where} ({test_id}): duplicate rubric id {criterion_id!r}")
+            seen_rubric_ids.add(criterion_id)
+            unknown_rubric = set(criterion) - {
+                "id", "dimension", "weight", "mandatory", "critical", "group", "depends_on"
+            }
+            if unknown_rubric:
+                raise SuiteError(
+                    f"{where} ({test_id}): {label} unknown field(s) {sorted(unknown_rubric)}"
+                )
+            if "weight" in criterion:
+                try:
+                    criterion_weight = float(criterion["weight"])
+                except (TypeError, ValueError):
+                    raise SuiteError(f"{where} ({test_id}): {label} weight must be a number")
+                if not (criterion_weight > 0):
+                    raise SuiteError(f"{where} ({test_id}): {label} weight must be positive")
+            for boolean_key in ("mandatory", "critical"):
+                if boolean_key in criterion and type(criterion[boolean_key]) is not bool:
+                    raise SuiteError(
+                        f"{where} ({test_id}): {label} {boolean_key} must be boolean"
+                    )
+            if "depends_on" in criterion:
+                deps = criterion["depends_on"]
+                if not isinstance(deps, list) or any(not str(dep).strip() for dep in deps):
+                    raise SuiteError(
+                        f"{where} ({test_id}): {label} depends_on must be a list of ids"
+                    )
+                rubric_dependencies[criterion_id] = [str(dep).strip() for dep in deps]
+            else:
+                rubric_dependencies[criterion_id] = []
+        unknown_dependencies = {
+            dependency
+            for dependencies in rubric_dependencies.values()
+            for dependency in dependencies
+            if dependency not in seen_rubric_ids
+        }
+        if unknown_dependencies:
+            raise SuiteError(
+                f"{where} ({test_id}): rubric depends_on unknown id(s) {sorted(unknown_dependencies)}"
+            )
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(criterion_id: str) -> None:
+            if criterion_id in visiting:
+                raise SuiteError(f"{where} ({test_id}): rubric dependency cycle at {criterion_id!r}")
+            if criterion_id in visited:
+                return
+            visiting.add(criterion_id)
+            for dependency in rubric_dependencies[criterion_id]:
+                visit(dependency)
+            visiting.remove(criterion_id)
+            visited.add(criterion_id)
+
+        for criterion_id in rubric_dependencies:
+            visit(criterion_id)
+
     return Question(
         id=test_id,
         category=str(category),
@@ -263,5 +361,6 @@ def _parse_question(item: Any, where: str) -> Question:
         weight=weight,
         source=item.get("source"),
         description=item.get("description"),
+        rubric=rubric,
         max_tokens=max_tokens,
     )

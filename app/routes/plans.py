@@ -35,6 +35,7 @@ def _admin_or_redirect(request: Request):
 _QUALITY_FIELDS = (
     "suite_seeds", "suite_split", "variants", "static_only",
     "quality_context_sizes", "input_price", "output_price", "quality_max_tokens",
+    "quality_profile",
 )
 _OPTION_FIELDS = (
     "category", "difficulty", "limit", "workers", "run_perf", "concurrency",
@@ -77,6 +78,7 @@ def _plan_spec_defaults() -> dict:
         "slo_ttft_ms": "", "slo_tps": "", "slo_errors": "", "req_per_user_h": "",
         "suite_seeds": "1729", "suite_split": "development", "variants": 1,
         "quality_max_tokens": DEFAULT_MAX_TOKENS,
+        "quality_profile": "v6",
         "static_only": False, "quality_context_sizes": "",
         "input_price": "", "output_price": "",
     }
@@ -159,6 +161,7 @@ def _run_row_to_spec(run: dict) -> dict:
                             or qconf.get("strengthen_code", True)),
         "quality_context_sizes": s(qconf.get("context_sizes")),
         "quality_max_tokens": qconf.get("max_output_tokens", DEFAULT_MAX_TOKENS),
+        "quality_profile": qconf.get("profile", "v6"),
         "input_price": s(qconf.get("input_price")),
         "output_price": s(qconf.get("output_price")),
     })

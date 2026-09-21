@@ -104,6 +104,7 @@ async def load_run(run_id):
             else result.get("request_ok", 1)
         )
         metadata = object_json(result.get("quality_metadata_json"))
+        result["evaluation"] = metadata.get("evaluation")
         result["outcome"] = metadata.get("outcome") or (
             "excluded" if not result["scored"] else "pass" if result["passed"] else "task_failure"
         )

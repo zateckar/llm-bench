@@ -116,6 +116,14 @@
                         <option value="development">Development</option><option value="evaluation">Evaluation holdout</option>
                     </select>
                 </label>
+                <label class="text-sm text-slate-300">Quality profile
+                    <select name="quality_profile" class="w-full bg-slate-800 rounded px-2 py-1">
+                        <option value="v6" selected>Frozen v6 anchor</option>
+                        <option value="hardening">v6 + hardening-v7 candidates</option>
+                        <option value="hardening-only">Hardening-v7 candidates only</option>
+                    </select>
+                    <span class="block text-xs text-slate-500 mt-1">Hardening profiles require fresh matched calibration; they do not alter historical v6 runs.</span>
+                </label>
                 <label class="text-sm text-slate-300">Variants per family and seed
                     <input name="variants" type="number" min="1" max="10" value="1" class="w-full bg-slate-800 rounded px-2 py-1">
                 </label>

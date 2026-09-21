@@ -220,6 +220,7 @@ def make_quality_config(
     static_only: str, suite_seeds: str, suite_split: str, variants: int,
     quality_context_sizes: str, input_price: str, output_price: str,
     quality_max_tokens: int = DEFAULT_MAX_TOKENS,
+    quality_profile: str = "v6",
 ) -> dict:
     """Build the QualityConfig for one run form, raising HTTP 422 on bad input."""
     from dataclasses import asdict
@@ -228,7 +229,8 @@ def make_quality_config(
     from quality_suite import QualityConfig, parse_ints
 
     try:
-        config = QualityConfig(generated=not bool(static_only), interactive=not bool(static_only),
+        config = QualityConfig(profile=quality_profile or "v6",
+            generated=not bool(static_only), interactive=not bool(static_only),
             strengthen_code=not bool(static_only), seeds=parse_ints(suite_seeds), split=suite_split, variants=variants,
             context_sizes=parse_ints(quality_context_sizes),
             max_output_tokens=quality_max_tokens,
@@ -327,6 +329,7 @@ async def admin_start_run(
     static_only: str = Form(""),
     quality_context_sizes: str = Form(""),
     quality_max_tokens: int = Form(DEFAULT_MAX_TOKENS),
+    quality_profile: str = Form("v6"),
     input_price: str = Form(""),
     output_price: str = Form(""),
     scheduled_at: str = Form(""),
@@ -343,6 +346,7 @@ async def admin_start_run(
         static_only=static_only, suite_seeds=suite_seeds, suite_split=suite_split,
         variants=variants, quality_context_sizes=quality_context_sizes,
         quality_max_tokens=quality_max_tokens,
+        quality_profile=quality_profile,
         input_price=input_price, output_price=output_price)
     run_options = make_run_options(
         category=category, difficulty=difficulty, limit=limit, workers=workers,

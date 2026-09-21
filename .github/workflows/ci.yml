@@ -43,6 +43,21 @@ jobs:
       - name: Self-test the evaluators
         run: uv run python selftest_evaluators.py
 
+      - name: Verify criterion-level evaluation diagnostics
+        run: uv run python selftest_granular.py
+
+      - name: Verify empirical difficulty calibration
+        run: uv run python selftest_calibration.py
+
+      - name: Verify category-wide hardening backlog
+        run: uv run python selftest_hardening.py
+
+      - name: Verify hardening profile release gate
+        run: uv run python selftest_hardening_release.py
+
+      - name: Verify historical review queue
+        run: uv run python selftest_review_queue.py
+
       - name: Verify challenge answers and reject near misses
         run: uv run python selftest_challenges.py
 

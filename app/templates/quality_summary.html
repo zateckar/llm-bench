@@ -1,4 +1,4 @@
-{% if quality is defined and quality and quality.schema_version == 1 %}
+{% if quality is defined and quality and quality.schema_version in [1, 2] %}
 {% set qs = quality.summary %}
 <section class="card p-5 space-y-4">
     <div class="flex justify-between items-center">
@@ -11,14 +11,22 @@
             {% if qs.category_balanced_ci95 %}<p class="text-xs text-slate-400">95% interval {{ '%.1f'|format(qs.category_balanced_ci95[0]*100) }}–{{ '%.1f'|format(qs.category_balanced_ci95[1]*100) }}%</p>{% endif %}
         </div>
         <div><p class="text-xs text-slate-400">Raw capability mean</p><p class="text-lg text-white">{{ '%.1f%%'|format(qs.raw_capability_mean*100) if qs.raw_capability_mean is not none else 'n/a' }}</p></div>
+        <div><p class="text-xs text-slate-400">Criterion achievement</p><p class="text-lg text-white">{{ '%.1f%%'|format(qs.criterion_achievement_mean*100) if qs.get('criterion_achievement_mean') is not none else 'n/a' }}</p><p class="text-xs text-slate-500">Diagnostic partial credit; full-pass headline unchanged</p></div>
+        <div><p class="text-xs text-slate-400">Contract compliance</p><p class="text-lg text-white">{{ '%.1f%%'|format(qs.contract_compliance_mean*100) if qs.get('contract_compliance_mean') is not none else 'n/a' }}</p></div>
         <div><p class="text-xs text-slate-400">Creative-writing compliance</p><p class="text-lg text-white">{{ '%.1f%%'|format(qs.compliance_score*100) if qs.compliance_score is not none else 'n/a' }}</p><p class="text-xs text-slate-500">Artistic quality is not measured</p></div>
         <div><p class="text-xs text-slate-400">Quality-call cost estimate</p><p class="text-lg text-white">{{ '$%.6f'|format(qs.estimated_cost_usd) if qs.estimated_cost_usd is not none else 'Not configured' }}</p></div>
     </div>
-    <p class="text-xs text-slate-400">Seeds {{ quality.quality_config.seeds|join(', ') }} · {{ quality.quality_config.split }} · {{ quality.quality_config.variants }} variant(s) per family</p>
+    <p class="text-xs text-slate-400">Profile {{ quality.quality_config.get('profile', 'v6') }} · Seeds {{ quality.quality_config.seeds|join(', ') }} · {{ quality.quality_config.split }} · {{ quality.quality_config.variants }} variant(s) per family</p>
     {% if qs.get('stretch', {}).get('count', 0) %}
     <div class="rounded border border-slate-700 p-3 space-y-2">
         <p class="text-sm text-white">Stretch-v6 subset: {{ '%.1f%%'|format(qs.stretch.category_balanced*100) }} category/family-balanced capability; {{ qs.stretch.passes }}/{{ qs.stretch.count }} full passes across {{ qs.stretch.families }} families.</p>
         <p class="text-xs text-slate-400">Separate from anchors and ceiling-v5. Variants share a family; empirical difficulty requires fresh matched runs.</p>
+    </div>
+    {% endif %}
+    {% if qs.get('hardening', {}).get('count', 0) %}
+    <div class="rounded border border-amber-700/50 p-3 space-y-2">
+        <p class="text-sm text-white">Hardening-v7 subset: {{ '%.1f%%'|format(qs.hardening.category_balanced*100) }} category/family-balanced capability; {{ qs.hardening.passes }}/{{ qs.hardening.count }} full passes across {{ qs.hardening.families }} families.</p>
+        <p class="text-xs text-amber-300">Candidate profile; fresh matched calibration is required before release.</p>
     </div>
     {% endif %}
     {% if qs.get('challenge', {}).get('count', 0) %}

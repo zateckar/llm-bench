@@ -119,6 +119,13 @@
                     <label class="text-sm text-slate-300">Quality output tokens
                         <input type="number" x-model.number="run.quality_max_tokens" min="1024" max="{{ max_max_tokens }}" class="bg-slate-800 rounded px-2 py-1">
                     </label>
+                    <label class="text-sm text-slate-300">Quality profile
+                        <select x-model="run.quality_profile" class="bg-slate-800 rounded px-2 py-1">
+                            <option value="v6">Frozen v6 anchor</option>
+                            <option value="hardening">v6 + hardening-v7 candidates</option>
+                            <option value="hardening-only">Hardening-v7 candidates only</option>
+                        </select>
+                    </label>
                     <label class="flex items-center gap-2 text-sm text-slate-300">
                         <input type="checkbox" x-model="run.run_perf" class="rounded bg-slate-800 border-slate-600 text-blue-500">
                         Performance suite

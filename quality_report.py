@@ -18,11 +18,15 @@ def result_record(result):
         "id": q.id,
         "fingerprint": fingerprint(q),
         "category": q.category,
+        "pass_threshold": q.pass_threshold,
+        "difficulty": q.difficulty,
+        "weight": q.effective_weight,
         "family": q.metadata.get("family", q.id),
         "scope": q.metadata.get(
             "scope", question_scope(q)
         ),
         "metadata": q.metadata,
+        "rubric": q.rubric,
         "score": result.score,
         "passed": result.passed and result.is_scored,
         "scored": result.is_scored,
@@ -39,6 +43,7 @@ def result_record(result):
         "metrics": asdict(result.metrics),
         "cached": result.cached,
         "diagnostics": result.diagnostics,
+        "evaluation": result.evaluation.to_dict() if result.evaluation else None,
     }
 
 
@@ -82,7 +87,19 @@ def summarize(rows, input_price=None, output_price=None):
                  or r["id"].startswith("H5-")]
     stretch = [r for r in capability if r["metadata"].get("cohort") == "stretch-v6"
                or r["id"].startswith("S6-")]
+    hardening = [r for r in capability if r["metadata"].get("cohort") == "hardening-v7"
+                 or r["id"].startswith("H7-")]
     groups = clusters(capability)
+    criterion_rows = [
+        r["evaluation"]["criterion_achievement"]
+        for r in usable
+        if r.get("evaluation") and r["evaluation"].get("criterion_achievement") is not None
+    ]
+    contract_rows = [
+        r["evaluation"]["contract_score"]
+        for r in usable
+        if r.get("evaluation") and r["evaluation"].get("contract_score") is not None
+    ]
     cost_rows = [r for r in rows if not r.get("cached")]
     prompt = sum(r["tokens"]["prompt_tokens"] for r in cost_rows)
     completion = sum(r["tokens"]["completion_tokens"] for r in cost_rows)
@@ -134,6 +151,9 @@ def summarize(rows, input_price=None, output_price=None):
         "raw_capability_mean": statistics.mean(r["score"] for r in capability)
         if capability
         else None,
+        "criterion_achievement_mean": statistics.mean(criterion_rows) if criterion_rows else None,
+        "contract_compliance_mean": statistics.mean(contract_rows) if contract_rows else None,
+        "evaluation_coverage": len(criterion_rows) / len(usable) if usable else None,
         "category_balanced": balanced(groups),
         "category_balanced_ci95": bootstrap(groups),
         "category_balanced_pass_rate": balanced(clusters(capability, "passed")),
@@ -177,6 +197,14 @@ def summarize(rows, input_price=None, output_price=None):
             "full_pass_rate": balanced(clusters(stretch, "passed")),
             "passes": sum(r["passed"] for r in stretch),
         },
+        "hardening": {
+            "cohort": "hardening-v7",
+            "count": len(hardening),
+            "families": sum(len(v) for v in clusters(hardening).values()),
+            "category_balanced": balanced(clusters(hardening)),
+            "full_pass_rate": balanced(clusters(hardening, "passed")),
+            "passes": sum(r["passed"] for r in hardening),
+        },
         "estimated_cost_usd": cost,
         "input_price_per_million": input_price,
         "output_price_per_million": output_price,
@@ -208,12 +236,14 @@ def summarize(rows, input_price=None, output_price=None):
 def make_report(results, config, client_config, selected_hash=None):
     rows = [result_record(r) for r in results]
     return {
-        "schema_version": 1,
+        "schema_version": 2,
+        "evaluation_schema_version": 1,
         "suite_hash": selected_hash or suite_hash([r.question for r in results]),
         "model": client_config.model,
         "quality_config": asdict(config),
         "protocol": {
             "revision": REVISION,
+            "quality_profile": config.profile,
             "temperature": client_config.temperature,
             "model_seed": client_config.seed,
             "default_max_tokens": client_config.max_tokens,
@@ -225,7 +255,7 @@ def make_report(results, config, client_config, selected_hash=None):
 
 
 def paired_comparison(left, right):
-    if left.get("schema_version") != 1 or right.get("schema_version") != 1:
+    if left.get("schema_version") not in {1, 2} or right.get("schema_version") not in {1, 2}:
         return {"compatible": False, "reason": "Missing or unsupported quality report version"}
     if left.get("protocol") != right.get("protocol"):
         return {
@@ -257,6 +287,10 @@ def paired_comparison(left, right):
         "balanced_difference": balanced(groups),
         "ci95": bootstrap(groups),
         "same_suite": left.get("suite_hash") == right.get("suite_hash"),
+        "criterion_detail_available": all(
+            r.get("evaluation") is not None
+            for r in pairs
+        ),
     }
 
 
@@ -277,6 +311,9 @@ def markdown(report):
             else " (insufficient families for an interval)"
         ),
         f"- Raw capability mean: {pct(s['raw_capability_mean'])}",
+        f"- Criterion achievement mean: {pct(s.get('criterion_achievement_mean'))}; "
+        f"contract compliance mean: {pct(s.get('contract_compliance_mean'))} "
+        f"(coverage {pct(s.get('evaluation_coverage'))}).",
         f"- Category/family-balanced full-pass rate: {pct(s.get('category_balanced_pass_rate'))}",
         f"- Legacy prose-pattern diagnostics: {s.get('heuristic_count', 0)} items, excluded from capability.",
         f"- Output-limit failure rate: {pct(s.get('truncation_rate'))}; these remain scored failures.",
@@ -311,6 +348,14 @@ def markdown(report):
             f"{c['passes']}/{c['count']} full passes across {c['families']} families.",
             "Reported separately from anchors and ceiling-v5. Variants share a family; "
             "empirical difficulty requires fresh matched runs.",
+            "",
+        ]
+    if s.get("hardening", {}).get("count"):
+        c = s["hardening"]
+        lines += [
+            f"Hardening-v7 subset: **{pct(c['category_balanced'])}** balanced capability; "
+            f"{c['passes']}/{c['count']} full passes across {c['families']} families.",
+            "Candidate profile only; release requires independent verification and a matched pilot.",
             "",
         ]
     if s["interactive"]["tasks"]:

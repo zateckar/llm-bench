@@ -57,7 +57,7 @@ from perf import (
     run_context_sweep,
     run_perf_suite,
 )
-from test_loader import SuiteError, load_all_tests
+from test_loader import SuiteError, load_profile_tests
 from quality_suite import (
     DEFAULT_MAX_OUTPUT_TOKENS, QualityConfig, assemble_questions, parse_ints, suite_hash,
 )
@@ -634,6 +634,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--quality-max-tokens", type=int, default=DEFAULT_MAX_OUTPUT_TOKENS,
                         help="uniform noninteractive quality output cap, including reasoning "
                              f"(default {DEFAULT_MAX_OUTPUT_TOKENS})")
+    parser.add_argument(
+        "--quality-profile", choices=["v6", "hardening", "hardening-only"], default="v6",
+        help="quality question profile; v6 is frozen, hardening adds the H7 candidate bank",
+    )
     parser.add_argument("--input-price", type=float, help="USD per million input tokens for cost estimates")
     parser.add_argument("--output-price", type=float, help="USD per million output tokens for cost estimates")
     parser.add_argument(
@@ -748,7 +752,8 @@ def _parse_context_sizes(raw: str) -> tuple[int, ...]:
 def main() -> None:
     args = parse_args()
     try:
-        quality_config = QualityConfig(generated=not args.static_only, interactive=not args.static_only,
+        quality_config = QualityConfig(profile=args.quality_profile,
+            generated=not args.static_only, interactive=not args.static_only,
             strengthen_code=not args.static_only,seeds=parse_ints(args.suite_seeds),split=args.suite_split,
             variants=args.variants,context_sizes=parse_ints(args.quality_context_sizes),
             input_price=args.input_price,output_price=args.output_price,
@@ -772,7 +777,15 @@ def main() -> None:
 
     if not args.perf_only:
         try:
-            questions = assemble_questions(load_all_tests(TESTS_DIR),quality_config)
+            questions = assemble_questions(
+                load_profile_tests(
+                    quality_config.profile,
+                    TESTS_DIR,
+                    split=quality_config.split,
+                    variants=quality_config.variants,
+                ),
+                quality_config,
+            )
         except SuiteError as e:
             print("ERROR: the test suite is invalid:\n" + str(e))
             sys.exit(2)

@@ -3,14 +3,40 @@
 import argparse
 from contextlib import closing
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 import json
 import hashlib
 from pathlib import Path
 import sqlite3
 import statistics
+import subprocess
+
+
+def _repository_revision() -> dict[str, object]:
+    """Capture source identity without exposing repository contents."""
+    try:
+        revision = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).resolve().parent,
+        ).stdout.strip()
+        dirty = bool(subprocess.run(
+            ["git", "status", "--porcelain"],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).resolve().parent,
+        ).stdout.strip())
+        return {"revision": revision, "dirty": dirty}
+    except (OSError, subprocess.SubprocessError):
+        return {"revision": None, "dirty": None}
 
 
 def audit_database(path, run_ids=None, replay=False):
+    audit_started_at = datetime.now(timezone.utc).isoformat()
+    source = _repository_revision()
     questions = {}
     if replay:
         from test_loader import load_all_tests
@@ -21,21 +47,46 @@ def audit_database(path, run_ids=None, replay=False):
         db.row_factory = sqlite3.Row
         db.execute("BEGIN")  # One consistent snapshot even while another run is writing.
         runs = db.execute(
-            "SELECT r.id,m.name,r.status,r.test_suite_hash,r.quality_json "
+            "SELECT r.id,m.name,r.status,r.test_suite_hash,r.quality_json,"
+            "r.total_questions,r.workers,r.quality_config_json,r.run_options_json "
             "FROM test_runs r JOIN models m ON m.id=r.model_id ORDER BY r.id"
         ).fetchall()
         report = []
         for run in runs:
             if run_ids and run["id"] not in run_ids:
                 continue
+            try:
+                parsed_saved = json.loads(run["quality_json"] or "{}")
+                saved = parsed_saved if isinstance(parsed_saved, dict) else {}
+            except (TypeError, ValueError):
+                saved = {}
+            saved_rows = {
+                item.get("id"): item
+                for item in (saved.get("results") or [])
+                if isinstance(item, dict) and item.get("id")
+            }
+            try:
+                parsed_quality_config = json.loads(run["quality_config_json"] or "{}")
+                quality_config = parsed_quality_config if isinstance(parsed_quality_config, dict) else {}
+            except (TypeError, ValueError):
+                quality_config = {}
+            try:
+                parsed_run_options = json.loads(run["run_options_json"] or "{}")
+                run_options = parsed_run_options if isinstance(parsed_run_options, dict) else {}
+            except (TypeError, ValueError):
+                run_options = {}
             rows = db.execute(
-                "SELECT test_id,category,score,passed,detail,request_ok,quality_scored,"
+                "SELECT test_id,category,score,passed,pass_threshold,detail,request_ok,quality_scored,"
                 "quality_metadata_json,prompt,response,evaluator FROM test_results WHERE run_id=? ORDER BY test_id",
                 (run["id"],),
             ).fetchall()
             items, categories = [], defaultdict(list)
             for row in rows:
-                meta = json.loads(row["quality_metadata_json"] or "{}")
+                try:
+                    parsed_meta = json.loads(row["quality_metadata_json"] or "{}")
+                    meta = parsed_meta if isinstance(parsed_meta, dict) else {}
+                except (TypeError, ValueError):
+                    meta = {}
                 scored = meta.get("scored", bool(row["quality_scored"])
                                   if row["quality_scored"] is not None else bool(row["request_ok"]))
                 item = {
@@ -47,6 +98,11 @@ def audit_database(path, run_ids=None, replay=False):
                     "outcome": meta.get("outcome", "legacy_unknown"),
                     "detail": row["detail"],
                     "scope": meta.get("scope", "legacy_unknown"),
+                    "evaluator": row["evaluator"],
+                    "criterion_achievement": (meta.get("evaluation") or {}).get("criterion_achievement"),
+                    "evaluation_schema_version": (meta.get("evaluation") or {}).get("schema_version"),
+                    "evaluator_version": (meta.get("evaluation") or {}).get("evaluator_version"),
+                    "failed_criteria": (meta.get("evaluation") or {}).get("failed_criteria"),
                 }
                 if row["evaluator"] == "json_match":
                     from evaluators import extract_json, strip_think_blocks
@@ -96,11 +152,11 @@ def audit_database(path, run_ids=None, replay=False):
                             "passed": result.passed,
                             "detail": result.detail,
                             "outcome": result.outcome,
+                            "evaluation": result.evaluation.to_dict() if result.evaluation else None,
                         }
                 if scored:
                     categories[row["category"]].append(item)
             usable = [r for r in items if r["scored"]]
-            saved = json.loads(run["quality_json"] or "{}")
             replay_summary = None
             if replay and saved.get("results"):
                 from quality_report import summarize
@@ -113,6 +169,41 @@ def audit_database(path, run_ids=None, replay=False):
                         updated.update(by_id[original["id"]]["replay"])
                     corrected.append(updated)
                 replay_summary = summarize(corrected)
+            duplicate_ids = sorted(
+                ident for ident, count in Counter(r["id"] for r in items).items() if count > 1
+            )
+            saved_ids = [item.get("id") for item in (saved.get("results") or []) if isinstance(item, dict)]
+            duplicate_saved_ids = sorted(
+                ident for ident, count in Counter(saved_ids).items() if ident and count > 1
+            )
+            threshold_disagreements = []
+            for row in rows:
+                if row["score"] is None or row["pass_threshold"] is None:
+                    continue
+                expected_pass = bool(row["request_ok"] and float(row["score"]) >= float(row["pass_threshold"]) - 1e-9)
+                if expected_pass != bool(row["passed"]):
+                    threshold_disagreements.append(row["test_id"])
+            metadata_score_disagreements = [
+                row["test_id"]
+                for row in rows
+                if row["test_id"] in saved_rows
+                and isinstance(saved_rows[row["test_id"]].get("score"), (int, float))
+                and row["score"] is not None
+                and abs(float(saved_rows[row["test_id"]]["score"]) - float(row["score"])) > 1e-9
+            ]
+            consistency = {
+                "question_count_matches": run["total_questions"] in (None, 0, len(items)),
+                "saved_count_matches": not saved.get("results") or len(saved.get("results", [])) == len(items),
+                "duplicate_result_ids": duplicate_ids,
+                "duplicate_saved_ids": duplicate_saved_ids,
+                "score_bounds_violations": [
+                    r["id"] for r in items if not isinstance(r["score"], (int, float)) or not 0 <= r["score"] <= 1
+                ],
+                "threshold_disagreements": threshold_disagreements,
+                "metadata_score_disagreements": metadata_score_disagreements,
+                "missing_saved_ids": sorted(set(saved_ids) - {r["id"] for r in items}),
+                "unrecorded_result_ids": sorted({r["id"] for r in items} - set(saved_ids)) if saved.get("results") else [],
+            }
             report.append(
                 {
                     "run_id": run["id"],
@@ -120,6 +211,10 @@ def audit_database(path, run_ids=None, replay=False):
                     "status": run["status"],
                     "suite_hash": run["test_suite_hash"],
                     "protocol": saved.get("protocol"),
+                    "quality_config": saved.get("quality_config") or quality_config,
+                    "run_options": run_options,
+                    "total_questions_configured": run["total_questions"],
+                    "workers": run["workers"],
                     "saved_summary": saved.get("summary"),
                     "replay_summary": replay_summary,
                     "count": len(items),
@@ -127,6 +222,15 @@ def audit_database(path, run_ids=None, replay=False):
                     "mean": statistics.mean(r["score"] for r in usable) if usable else None,
                     "passes": sum(r["passed"] for r in usable),
                     "outcomes": dict(Counter(r["outcome"] for r in items)),
+                    "evaluators": dict(Counter(r["evaluator"] for r in items)),
+                    "criterion_diagnostics": {
+                        "available": sum(r["criterion_achievement"] is not None for r in items),
+                        "mean_achievement": statistics.mean(
+                            r["criterion_achievement"] for r in items
+                            if r["criterion_achievement"] is not None
+                        ) if any(r["criterion_achievement"] is not None for r in items) else None,
+                    },
+                    "consistency": consistency,
                     "categories": {
                         k: {
                             "count": len(v),
@@ -167,7 +271,10 @@ def audit_database(path, run_ids=None, replay=False):
             for id, items in sorted(by_id.items())
         }
     return {
-        "schema_version": 2,
+        "schema_version": 3,
+        "audit_version": "2026-09-21.1",
+        "snapshot_started_at": audit_started_at,
+        "source": source,
         "note": "Historical grades are unchanged. Optional replay uses current graders only for "
         "unchanged static prompts; it cannot recover truncated output or evaluate revised prompts. "
         "Endpoint aliases do not verify model identity. "

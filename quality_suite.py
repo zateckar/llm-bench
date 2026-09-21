@@ -53,8 +53,11 @@ class QualityConfig:
     input_price: float | None = None
     output_price: float | None = None
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
+    profile: str = "v6"
 
     def __post_init__(self):
+        if self.profile not in {"v6", "hardening", "hardening-only"}:
+            raise ValueError("profile must be v6, hardening, or hardening-only")
         if type(self.max_output_tokens) is not int or not (
             MIN_MAX_OUTPUT_TOKENS <= self.max_output_tokens <= MAX_MAX_OUTPUT_TOKENS
         ):
@@ -109,7 +112,10 @@ def fingerprint(q):
     # max_tokens is a run knob, not part of the question: raising the output cap
     # must not fork the suite hash and split runs into incomparable cohorts.
     # The response cache keys on it separately (benchmark.question_fingerprint).
-    fields = {k: v for k, v in asdict(q).items() if k != "max_tokens"}
+    fields = {
+        k: v for k, v in asdict(q).items()
+        if k != "max_tokens" and not (k == "rubric" and v is None)
+    }
     return hashlib.sha256(
         json.dumps(fields, sort_keys=True, ensure_ascii=True).encode()
     ).hexdigest()
@@ -330,6 +336,22 @@ def long_context_question(config, seed, variant, size):
     return q
 
 
+def _question_family(q: Question) -> str:
+    """Return a stable family key across split, seed, and variant suffixes."""
+    declared = q.metadata.get("family") if isinstance(q.metadata, dict) else None
+    if declared:
+        return str(declared)
+    if q.id.startswith("H7-"):
+        stem = q.id[3:]
+        for marker in ("-development-", "-evaluation-"):
+            if marker in stem:
+                return "H7-" + stem.split(marker, 1)[0]
+        return q.id.rsplit("-v", 1)[0]
+    if q.id.startswith(("H5-", "S6-")):
+        return q.id.rsplit("-v", 1)[0].rsplit("-", 1)[0]
+    return q.id
+
+
 def assemble_questions(base, config):
     from independent_oracles import CODE, code_cases
     from interactive_tasks import make_tasks
@@ -339,9 +361,10 @@ def assemble_questions(base, config):
             q,
             metadata={
                 **q.metadata,
-                "family": q.id.rsplit("-", 1)[0] if q.id.startswith(("H5-", "S6-")) else q.id,
+                "family": _question_family(q),
                 "scope": question_scope(q),
-                "cohort": "stretch-v6" if q.id.startswith("S6-") else
+                "cohort": "hardening-v7" if q.id.startswith("H7-") else
+                "stretch-v6" if q.id.startswith("S6-") else
                 "ceiling-v5" if q.id.startswith("H5-") else "anchor",
             },
         )
@@ -368,11 +391,11 @@ def assemble_questions(base, config):
                 )
     for seed in config.seeds:
         for variant in range(config.variants):
-            if config.generated:
+            if config.generated and config.profile != "hardening-only":
                 questions.extend(generate_reasoning(config, seed, variant))
             if config.interactive:
                 questions.extend(make_tasks(config, seed, variant))
-            for size in config.context_sizes:
+            for size in config.context_sizes if config.profile != "hardening-only" else ():
                 questions.append(long_context_question(config, seed, variant, size))
     # Every model receives the same declared cap, including baseline anchors.
     # Keep truncations as failures; a larger budget cannot recover past answers.

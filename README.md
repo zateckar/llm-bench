@@ -122,6 +122,7 @@ Useful options:
 | `--suite-seeds 19,23` | reproducible question seeds; distinct from the model's decoding seed |
 | `--suite-split evaluation` | use the evaluation generator stream (default `development`) |
 | `--variants 3` | variants per generated family and seed (1–10) |
+| `--quality-profile hardening` | append the independently verified hardening-v7 candidate profile; `hardening-only` runs candidates without v6 anchors |
 | `--static-only` | disable generated reasoning, interactive tasks, and extra code fixtures |
 | `--quality-max-tokens 65536` | uniform quality output cap including reasoning; 1,024–262,144. Reasoning models spend most of it inside `<think>`, so keep real headroom: a cap that bites scores itself, not the model. Changing it does not change the suite hash. |
 | `--quality-context-sizes 8192,32768,131072` | add answer-accuracy tests at these reference context sizes |
@@ -208,11 +209,60 @@ uv run python selftest_challenges.py
 uv run python selftest_quality.py
 ```
 
+**`selftest_granular.py`** checks the versioned criterion-level diagnostics used by
+new quality reports. Structured JSON answers expose individual paths, code answers
+expose fixture-level results, formatting checks expose one criterion per check, and
+legacy evaluators retain an explicit single-criterion fallback. Full-task pass/fail
+and the existing capability headline are unchanged; criterion achievement is a
+diagnostic partial measure:
+
+```bash
+uv run python selftest_granular.py
+```
+
+**`difficulty_calibration.py`** reads saved completed reports in a read-only
+transaction and identifies saturated categories, under-covered families, and
+coverage gaps. It never changes difficulty labels or historical scores:
+
+```bash
+uv run python difficulty_calibration.py data/bench.db --runs 54 55 56 57 58 \
+  --output data/difficulty-calibration-2026-09-21.json
+```
+
+**Hardening-v7** is an explicit profile, separate from the frozen v6 default.
+It contains two deterministic candidate families in each of the 29 categories,
+two development instances per family (116 candidate cases), and simulator-backed
+interactive races and permission replanning. Every static case has an independent
+derivation, executable code fixtures where applicable, and adversarial mutation
+checks. The profile is not selected for release until a matched pilot is available.
+
+```bash
+uv run python selftest_hardening.py
+uv run python selftest_hardening_release.py
+uv run python hardening_release.py \
+  --split development --variants 2 \
+  --output data/hardening-release-gate-2026-09-21.json
+uv run python benchmark.py --quality-profile hardening-only \
+  --suite-split evaluation --variants 2 --no-cache
+```
+
+The release gate uses a provisional 20–80% full-pass selection band, requires
+three matched reports and coverage of all 29 categories, and keeps runtime
+failures separate from content difficulty. A run without supplied pilot reports
+is recorded as `pending_model_pilot`; it does not change the default suite.
+
 **`selftest_reports.py`** verifies HTML downloads, offline assets, authentication, comparison metrics, legacy/partial runs, excluded answers, skipped context measurements, and escaping of untrusted content using a temporary database:
 
 ```bash
 uv run python selftest_reports.py
 ```
+
+**`review_queue.py`** turns an audit artifact into an answer-free, deterministic
+queue containing every scored capability non-pass and runtime failure, plus a
+small success sample for each populated category/evaluator group. It preserves
+replay coverage and marks the queue as requiring human disposition; it never
+changes a historical grade. The current review is documented in
+[`QUALITY_REVIEW_2026-09-21.md`](QUALITY_REVIEW_2026-09-21.md).
 
 ### Evaluation methodology & known limitations
 
@@ -251,6 +301,11 @@ Questions live in `tests/*.yaml`, one file per category:
   evaluator: numeric_match
   expected: 17.0
   # pass_threshold: 1.0             # lower it only where partial credit is meaningful
+  # rubric:                         # optional named diagnostic criteria
+  #   - id: final-value
+  #     dimension: content
+  #     weight: 1
+  #     critical: true
 ```
 
 Available evaluators:
@@ -274,7 +329,29 @@ Available evaluators:
 | `multi_step_solution` | all required steps, in order |
 | `file_content_match` | both the filename and the required content |
 
+New questions may add a `rubric` list with stable criterion IDs, dimensions,
+weights, mandatory/critical gates, and dependencies. Evaluators use matching IDs
+when they can expose field or fixture evidence; legacy evaluators retain one
+explicit task criterion until upgraded. Rubrics explain partial achievement and
+never lower the question's full-pass threshold.
+
 Run `validate_suite.py --strict` after editing; it catches the classes of fixture bug that would otherwise show up as a model failure.
+
+The empirical calibration and hardening tools keep the next difficulty revision
+separate from the frozen suite. Re-run calibration on matched completed runs,
+then build the candidate-family backlog:
+
+```bash
+uv run python difficulty_calibration.py data/bench.db --runs 54 55 56 57 58 \
+  --output data/difficulty-calibration-2026-09-21.json
+uv run python difficulty_hardening.py \
+  --calibration data/difficulty-calibration-2026-09-21.json \
+  --output data/difficulty-hardening-backlog-2026-09-21.json
+```
+
+The backlog contains two independently reviewable family specifications for
+each objective category. It is not benchmark content until an independent
+oracle, adversarial mutations, and a matched pilot validate each family.
 
 ---
 
@@ -333,6 +410,7 @@ takes to update the questions — repeat the two commands above.
 - **Degenerate repetition** is detected while the answer streams: if the fraction of distinct word 8-grams in the last 4,000 characters falls below 0.30, the generation is abandoned and scored zero as `repetition`. It arms only past 8,000 characters, so short structured output cannot trip it. Reported separately from truncation because the two imply different fixes — a truncation may mean the output budget was too small, a loop never does. Calibrated on a 404-question run: every one of the 326 answers that finished scored above 0.85, so the threshold sits more than 3x below the closest legitimate answer. Quality runs only; the performance suite measures decode rate on deliberately repetitive prompts and never has a generation cut short.
 - **Cost estimates** require both user-supplied rates and include fresh quality-call usage only. They exclude unknown billing, unreported failed-request usage, performance-suite usage, and provider cache discounts. Interactive task latency is the sum of its model-call latencies; call counts and excess calls are separate metrics.
 - **Average score** is the mean per-question score; **weighted** applies the difficulty weights (easy 1.0, medium 1.5, hard 2.0, expert 3.0).
+- **Criterion achievement** is a diagnostic weighted mean of the content/task requirements the evaluator can identify (JSON paths, code fixtures, or one explicit legacy task criterion). Contract and availability checks are excluded from that mean and shown separately as **contract compliance** when measurable. It explains near misses and does not turn a failed full task into a pass.
 - **Passed** counts only questions that reached their own threshold. It is not the same as "scored above 50%".
 - **Request errors** are transport failures. They are excluded from every percentage — a 502 from the endpoint is not evidence about the model — and are listed separately so they can be re-run.
 - **Latency from the question run** includes server-side queueing when more than one worker was used. Compare across runs only at the same worker count, or use the performance suite, which always measures single-stream latency at concurrency 1 before sweeping upward.

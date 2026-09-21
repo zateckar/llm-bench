@@ -18,6 +18,113 @@ DIFFICULTY_WEIGHTS = {
     "expert": 3.0,
 }
 DEFAULT_DIFFICULTY = "medium"
+EVALUATION_SCHEMA_VERSION = 1
+
+
+@dataclass
+class CriterionResult:
+    """One auditable requirement inside a question evaluation.
+
+    Criteria are deliberately small and explicit.  A criterion can explain a
+    partial result without changing the question's strict ``passed`` verdict.
+    ``evidence`` is a short machine-readable pointer (for example a JSON path
+    or fixture id); it should not contain an answer key that was not already
+    part of the saved benchmark record.
+    """
+
+    criterion_id: str
+    status: str = "not_evaluated"  # pass | fail | not_evaluated | error
+    earned: float = 0.0
+    possible: float = 1.0
+    dimension: str = "content"
+    mandatory: bool = True
+    critical: bool = False
+    group: str | None = None
+    depends_on: list[str] = field(default_factory=list)
+    reason_code: str = ""
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.status not in {"pass", "fail", "not_evaluated", "error"}:
+            raise ValueError(f"unknown criterion status: {self.status!r}")
+        self.earned = max(0.0, float(self.earned))
+        self.possible = max(0.0, float(self.possible))
+        if self.possible and self.earned > self.possible:
+            self.earned = self.possible
+
+    @property
+    def achievement(self) -> float | None:
+        if not self.possible or self.status in {"not_evaluated", "error"}:
+            return None
+        return self.earned / self.possible
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.criterion_id,
+            "status": self.status,
+            "earned": self.earned,
+            "possible": self.possible,
+            "achievement": self.achievement,
+            "dimension": self.dimension,
+            "mandatory": self.mandatory,
+            "critical": self.critical,
+            "group": self.group,
+            "depends_on": self.depends_on,
+            "reason_code": self.reason_code,
+            "evidence": self.evidence,
+        }
+
+
+@dataclass
+class EvaluationResult:
+    """Versioned, criterion-level evaluation attached to a model result."""
+
+    evaluator: str
+    score: float = 0.0
+    full_pass: bool = False
+    outcome: str = ""
+    criteria: list[CriterionResult] = field(default_factory=list)
+    contract_score: float | None = None
+    evaluator_version: str = "1"
+    schema_version: int = EVALUATION_SCHEMA_VERSION
+
+    @property
+    def criterion_achievement(self) -> float | None:
+        # Contract, availability, and efficiency checks are reported separately. Keeping them
+        # out of content achievement prevents a valid JSON envelope with an
+        # invalid schema from looking like a fully correct task.
+        scored = [
+            c for c in self.criteria
+            if c.achievement is not None
+            and c.dimension not in {"contract", "availability", "efficiency"}
+        ]
+        if not scored:
+            return None
+        possible = sum(c.possible for c in scored)
+        return sum(c.earned for c in scored) / possible if possible else None
+
+    @property
+    def criterion_count(self) -> int:
+        return len(self.criteria)
+
+    @property
+    def failed_criteria(self) -> int:
+        return sum(c.status in {"fail", "error"} for c in self.criteria)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "evaluator": self.evaluator,
+            "evaluator_version": self.evaluator_version,
+            "score": self.score,
+            "full_pass": self.full_pass,
+            "outcome": self.outcome,
+            "criterion_achievement": self.criterion_achievement,
+            "contract_score": self.contract_score,
+            "criterion_count": self.criterion_count,
+            "failed_criteria": self.failed_criteria,
+            "criteria": [c.to_dict() for c in self.criteria],
+        }
 
 
 @dataclass
@@ -43,6 +150,9 @@ class Question:
     metadata: dict = field(default_factory=dict)
     # Local simulation definition, never included in the model's prompt.
     interaction: dict | None = None
+    # Optional criterion contract for new questions. Legacy questions keep the
+    # evaluator-defined fallback until they opt into named requirements.
+    rubric: list[dict[str, Any]] | None = None
 
     @property
     def effective_weight(self) -> float:
@@ -123,6 +233,7 @@ class Result:
     cached: bool = False
     outcome: str = ""
     diagnostics: dict = field(default_factory=dict)
+    evaluation: EvaluationResult | None = None
 
     @property
     def is_scored(self) -> bool:
@@ -132,7 +243,11 @@ class Result:
 
     @property
     def passed(self) -> bool:
-        return self.is_scored and self.score >= self.question.pass_threshold - SCORE_EPSILON
+        if not self.is_scored:
+            return False
+        if self.evaluation is not None:
+            return self.evaluation.full_pass
+        return self.score >= self.question.pass_threshold - SCORE_EPSILON
 
     @property
     def is_transport_error(self) -> bool:
