@@ -1,7 +1,8 @@
-# Rigorous v11 design and critical review
+# Rigorous v13 design and critical review
 
 Reviewed on 2026-10-03. This document describes the current protocol.
-Historical scores are retained and are not relabelled as v11 results.
+Historical scores are retained and are not relabelled as v13 results. The v10/v11/v12
+review records below describe earlier passes; the v13 review records the current changes.
 
 ## Question storage and one runtime suite
 
@@ -13,8 +14,8 @@ literal text and short arrays remain compact. The initial split preserved the
 v9 question fingerprint exactly; subsequent v10 changes deliberately revise it.
 
 [quality_suite.py](quality_suite.py) still assembles one fixed bank: 171 static
-questions, 92 generated questions, 20 interactive tasks and eight exact-length
-context questions, totalling 291 across 30 categories. Splitting source files
+questions, 108 generated questions, 20 interactive tasks and eight exact-length
+context questions, totalling 307 across 30 categories. Splitting source files
 does not introduce selectable banks, profiles or run settings. The recursive
 loader rejects duplicate IDs, duplicate YAML keys, ambiguous evaluation
 declarations, malformed fields and nonfinite weights.
@@ -215,6 +216,233 @@ extra-key failures remain scored for every noninteractive JSON question. Queue
 checks, Ruff and Git whitespace checks passed. No unresolved defect was found
 in the completed review passes; these checks do not prove absence of all bugs.
 
+## V12 research, question audit and repeated review
+
+The review revisited [BBEH's task design](https://github.com/google-deepmind/bbeh),
+[IFEval's strict and loose evaluator](https://github.com/google-research/google-research/blob/master/instruction_following_eval/evaluation_lib.py),
+[IFBench's verifiable constraints](https://github.com/allenai/IFBench),
+[EvalPlus's boundary-test approach](https://github.com/evalplus/evalplus),
+[LiveBench's ground-truth methods](https://github.com/LiveBench/LiveBench), and
+[tau2's state/action evaluation](https://github.com/sierra-research/tau2-bench).
+The resulting local tasks are original. The design inference is to make models
+satisfy interacting semantic requirements and completeness checks, while keeping
+each requirement independently inspectable. Strict whole-task success remains
+the headline; per-requirement achievement is a diagnostic with equal total weight
+for each top-level requested field. This suite's output contracts differ from
+public benchmarks' answer normalization, so their scores are not interchangeable.
+
+The audit retained established reasoning, policy, translation and code anchors
+with their independent oracle checks. It found three useful extensions: reasoning
+about concurrent histories with failed operations, knowledge that changes after
+public information, and constraints spanning an entire writing response. Formal
+writing remains a separate compliance measure. Specialist fixtures still test
+closed-world policies and candidate translations; their scope does not expand
+merely because all fields are objectively graded.
+
+| New or strengthened requirement | What must agree | Independent verification |
+|---|---|---|
+| Concurrent bounded FIFO histories, four instances | Real-time precedence, FIFO state, capacity, failed puts, empty takes, every valid order, every minimum deletion repair and canonical witnesses | Generator prunes topological/queue transitions; oracle enumerates full permutations, checks times separately and interprets queue results from emitted prompts |
+| Nested public knowledge, four instances | Simultaneous announcement filtering, recomputed observations, nested knowledge, mutual versus common knowledge and canonical shortest counterexamples | Generator propagates truth sets and searches paths; oracle evaluates individual worlds with explicit relations and all-pairs min-plus distances |
+| Three writing anchors | Distinct supplied percentages; global word uniqueness with prescribed starts/ends and word counts; no internal blank lines | Correct responses plus repetition, case/punctuation and blank-line near misses |
+
+Each new family has seeds 19 and 23 and two variants. Queue pairs retain the same
+IDs, times and values and change exactly one recorded result. One member is valid;
+the other requires more than one deletion and has multiple minimum repairs.
+Every knowledge instance has two informative announcements, a nested announcement,
+different mutual/common-knowledge answers and a counterexample of at least two
+observation links. Authoring deliberately selects these contrasts; these four
+instances are not a random sample of all concurrent or epistemic problems.
+Contracts are identical within families and do not reveal empty answer arrays.
+The suite is now v12, while existing generated families retain the v11 generation
+version so an evaluator change does not unnecessarily change their inputs.
+
+Further grading defects found and fixed:
+
+1. Global removal of reasoning tags rewrote valid code literals. Only complete
+   leading reasoning envelopes are removed. An unfinished leading scratchpad has
+   no established final answer. JSON strings, code and quoted tags remain data;
+   orphan closing tags are no longer treated as an implicit reasoning channel.
+2. Tolerant unordered comparison greedily consumed the first matching value.
+   Because tolerance is not transitive, that could reject a valid permutation.
+   A complete bipartite matching now finds a consistent assignment. Set members
+   retain their internal sequence order unless the fixture explicitly allows it.
+3. Arbitrary objects could impersonate an expected value using __repr__. Opaque
+   objects now fail structural fixtures. Actual supported scalar/container values
+   still cross the subprocess boundary with typed encodings.
+4. A failing child process could supply plausible JSON on stdout. Nonzero exits
+   always fail; SystemExit and other BaseException failures in submitted programs
+   are captured as program failures. Launch failures are explicit unscored
+   evaluator errors. The subprocess is still not an adversarial security boundary.
+5. Complete one-line Python definitions were rejected by a two-line heuristic.
+   Complete raw Python is now parsed before the best-effort prose extraction.
+6. JSON nesting behavior differed across interpreters and recursion failures could
+   become unscored evaluator errors. A portable 256-level limit, respecting quoted
+   strings and escapes, makes excessive nesting a scored format failure.
+7. Repeated copies of one supplied percentage counted as two statistics.
+   Distinct-match checks implement the revised explicit contract. Internal blank
+   lines have their own criterion, supplementing the position and line-count
+   checks, and global word uniqueness is now verified across lines.
+8. Forbidden Markdown fences failed grading but could be labelled task failures
+   because outcome attribution reparsed with different fence settings. Attribution
+   now uses the same settings and identifies these as format failures.
+
+Client review and effect on results:
+
+1. A substring test for stream matched upstream and disabled streaming after an
+   unrelated permanent error. Negotiation now requires an explicit unsupported
+   field or a structured error identifying that field. Unrelated field validation
+   failures retain the endpoint's negotiated capabilities.
+2. A measured one-attempt rejection could change the settings of later samples.
+   Capability fallback now also requires remaining retry budget. Timed requests
+   preserve the warmup settings; a backend rejection stays visible as a failure.
+3. Completion data after a finish reason could overwrite length with stop, hiding
+   truncation. Completion choices after termination now fail the request. Trailing
+   usage events remain valid, and HTTP framing is still drained for socket reuse.
+4. Non-string finish metadata and Boolean/float choice indices could reach grading;
+   usage-only or DONE-only streams could count as successful performance requests.
+   These now fail endpoint validation. Empty content on a genuine completion choice
+   remains a quality missing-answer outcome.
+
+Client revision is chat-client-v3; performance revision is performance-v5.
+Changed evaluator versions are recorded in quality reports, preventing paired
+comparison with a different grading protocol. The fixed temperature, seed and
+token budget remain the experimental decoding policy. Connection reuse and
+available-byte reads reduce client overhead and first-event buffering, following
+the [urllib3 response API](https://urllib3.readthedocs.io/en/stable/reference/urllib3.response.html)
+and [SSE framing specification](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation).
+They cannot remove provider buffering, network latency or shared-server contention.
+Reported throughput covers delivered completions over full measured wall time;
+it cannot infer model-side prefill/decode speed. A single run also cannot establish
+that quality worker concurrency has no effect on an endpoint. Timeout checks still
+occur between received chunks, so an idle read can overrun the stream deadline.
+No paid or live model endpoint was called during this review.
+
+Review proceeded through task/contract checks, client and grader regressions,
+independent oracles and corruption controls, then full CLI/web/report integration.
+Final verification: 299 questions passed strict validation with zero errors or
+warnings; 173 regression tests passed; all 120 evaluator assertions and 1,133
+challenge checks passed. The corruption suites rejected 7,486 altered answers,
+including 994 for the new families. Queue checks, Ruff and Git whitespace checks
+passed. After the final metadata/fence-attribution corrections, all 55 affected
+regressions passed. CI includes the independent v12 oracles. No unresolved
+correctness defect was found in the completed review passes.
+Fresh matched model runs are needed to measure difficulty, ranking changes and
+repeatability. Passing these checks cannot prove the absence of every defect.
+
+## V13 research, question audit and repeated critical review
+
+The current pass researched additional public third-party benchmarks, rather than
+relying on BBEH, IFEval or EvalPlus again. Primary sources and the decisions taken:
+
+| Source inspected | Evaluation insight | Local decision |
+|---|---|---|
+| [FEVER dataset and annotation format](https://fever.ai/dataset/fever.html) | Supported, refuted and insufficient-information claims have different meanings; evidence can have alternative sufficient sets. | Require all inclusion-minimal consistent supporting/refuting sets. Separate unknown from an inconsistent dossier and never grant evidence credit through vacuous entailment. |
+| [HoVer task and scoring description](https://hover-nlp.github.io/) | Joint claim/evidence success requires evidence from the necessary documents; retrieval dumping does not establish correct reasoning. | Use multihop implications, alternative routes and distractors. Exhaustive minimality, complete set lists and concrete countermodels reject incomplete proofs and source dumping. |
+| [BFCL task taxonomy and executable evaluation](https://gorilla.cs.berkeley.edu/blogs/8_berkeley_function_calling_leaderboard.html) | Function selection, argument structure, relevance and execution require distinct checks. | Add strict typed calls, nonexistent tools, failed references, error precedence, retry caches and persistent effects. Validate judgments and state independently; no real API is invoked. |
+| [ComplexBench scoring dependencies](https://github.com/thu-coai/ComplexBench) | Composed instructions have dependency relations between evaluation points. | Retain the existing transitive dependency gates. Receipt version/balance credit now requires the corresponding correct result status; a wrong outcome cannot earn credit from meaningless receipt fields. |
+| [BigCodeBench task and execution protocol](https://github.com/bigcode-project/bigcodebench) | Practical composed programs should be graded by execution; reproducibility depends on the recorded execution/generation setup. | Strengthen existing code fixtures across integer magnitude, arbitrary identifiers and nested JSON payloads, checked by two algorithms and real subprocess execution. This does not claim BigCodeBench's library or branch coverage. |
+| [MuSR paper](https://arxiv.org/abs/2310.16049) | Narrative reasoning can combine natural language with structured reasoning instances. | Considered for future narrative tasks. This pass retains explicitly specified finite semantics; it does not equate logical evidence exercises with MuSR's soft narrative reasoning or invent a judge for ambiguous prose. |
+
+No third-party questions were copied and no third-party score is claimed. The
+research produced eight new original instances: two families, seeds 19/23 and
+two variants. The canonical bank has 307 questions across the same 30 categories.
+
+The whole-bank audit covered prompt/answer consistency, scalar and container
+types, scoring relaxations, rubric coverage, answer derivations and plausible
+near misses. Every noninteractive JSON answer leaf has a reachable rubric
+criterion. The only scalar aliases are the already explicit numeric/v-prefixed
+version alternatives in TU2-01; no new permissive grading was introduced.
+The suite continues to require full success on every mandatory condition.
+
+| Question group reviewed | Difficulty/evaluation assessment and action |
+|---|---|
+| Logic, arithmetic, scientific and financial exercises | Retain bounded exact derivations, completeness and optimization requirements. Existing separate arithmetic/search oracles and answer corruptions are rerun. More prompt length alone would not establish harder reasoning. |
+| Truthfulness and evidence | Add minimal supports/refutations, all contradiction cores, all minimum deletion repairs and repaired-world witnesses. Distinguish absent evidence, contradictory evidence and entailment. Deduplicate repaired worlds; counts are not probabilities or votes over repairs. |
+| Reading, retrieval, summarization, knowledge and long context | Retain revision precedence, bitemporal joins, indirect selection and distributed evidence. Existing prompt-derived context checks confirm exact lengths and answers. No extra filler was added as a proxy for difficulty. |
+| Advanced coding, generation and review | Add six transformed fixtures to each of the eight advanced-coding anchors, 48 total. Tests expose float rounding of timestamps/amounts, assumptions about single-character IDs and loss of nested/falsey payloads. Keep boundary/generated weights balanced and every fixture mandatory. |
+| Tool and agent tasks | Add 22-call traces with strict integer types, failed and future references, error ordering, stale versions, failed-key reuse, exact cached receipts and replay counts. Existing live text-protocol simulations retain final-state and authorization checks. |
+| Specialist policies, security, translation and ethical tasks | Retain closed-world contracts and multiple interacting obligations/conditions; rerun independent arithmetic/state and semantic candidate checks. These tasks do not establish professional advice or unconstrained translation fluency. |
+| Instruction following and writing | Retain explicit compositional stages and formal writing criteria; fix contradictory criterion diagnostics. Writing remains a separate compliance measure and is not treated as artistic quality. |
+
+Within each seed, the evidence pair changes one assertion and the tool pair one
+amount argument. Evidence variants contrast a consistent dossier with one that
+requires a repair; the inconsistent version admits multiple minimum repairs.
+Tool variants contrast an exact retry with an idempotency conflict while leaving
+the eventual account state unchanged, so correct final balances alone cannot
+pass the task. Output contracts are identical within each family and do not
+reveal empty evidence lists or the existence of witnesses.
+
+Evidence partial achievement balances each claim's judgments, proof/refutation
+sets and witnesses separately, regardless of how many sources a proof contains.
+Claim IDs are mandatory envelope checks and do not create free content points.
+Tool results receive equal diagnostic credit per call, irrespective of whether
+the result is a short error or a longer receipt. Balance/state, cache contents
+and actual commit counts remain separate requirements. Failed status dependencies
+block receipt-field credit and remain in the achievement denominator.
+
+Two preexisting grader defects were reproduced and corrected:
+
+1. **Format diagnostics parsed display prose.** A failing constraint whose label
+   or regex description contained `: PASS)` could emit a passed criterion, even
+   while its score was zero. Diagnostics now use the actual Boolean check result;
+   labels cannot alter criterion status, credit or contract score.
+2. **Huge numeric outputs could escape scoring.** An otherwise valid Python
+   integer larger than binary64 compared with a float fixture raised an overflow
+   and became an unscored evaluator error. Overflow comparisons now use exact
+   rational arithmetic. Ordinary wrong outputs remain scored failures; integer
+   counts retain exact comparison and explicit numeric tolerances still apply.
+
+The final contract review also found that the generic JSON number comparison
+would accept `1.0` where the new typed tasks explicitly require an integer
+literal. JSON evaluation now supports opt-in `integer_paths`, validated against
+exact integer answer leaves. Those paths cannot be ignored or given non-integer
+aliases. The new count/receipt tasks use these contracts; other tasks retain
+their stated numeric-equivalence policy. All 108 numerically equal float
+substitutions in the actual new answers are scored type failures, and invalid
+authoring paths/aliases are rejected.
+
+The suite revision is rigorous-v13; code/format evaluator versions are both 5
+and JSON evaluator version is 7.
+Other evaluator versions, client and performance protocols are unchanged by this
+pass. Existing generated prompts retain their generation version; changed code
+fixtures, new questions and rubrics are included in fingerprints. Historical
+results remain historical and fresh results cannot be paired across incompatible
+protocols.
+
+Review iterations:
+
+1. Establish the existing baseline, inspect all answer/criterion contracts and
+   research the primary sources. The baseline's 173 regression tests passed.
+2. Derive new answers from the emitted prompts with independent set-based truth
+   tables and a SQLite tool interpreter. Check consistent/inconsistent contrasts,
+   every minimal support and repair, error precedence and cache replay behavior.
+3. Reject every single-leaf mutation, omission, extra fact and structural near
+   miss in the new answers; verify exact family contracts and diagnostic weights.
+   Regression checks cover misleading prose labels and enormous numeric outputs.
+4. Recheck code transformations with both established algorithms, run reference
+   programs in real subprocesses, then rerun authoring validation, the complete
+   regression/corruption suites, queue integration, lint and whitespace checks.
+5. Inspect the final typed contracts, add exact integer syntax checks and reject
+   same-value float substitutions. Rerun every affected evaluator and integration
+   regression after that correction.
+
+The executable v13 checks are [selftest_evidence.py](selftest_evidence.py), also
+included in CI. No live or paid model endpoint is called by these checks. Fresh
+matched model runs are still required to establish empirical difficulty, model
+separation and reliability; structural difficulty and grader validation are not
+a measured model-score improvement.
+
+Final v13 verification: all 307 questions passed strict validation with zero
+errors or warnings; 182 regression tests, 120 evaluator assertions and 1,133
+challenge checks passed. Corruption controls rejected 10,398 altered answers,
+including 2,804 new answer mutations and 108 numerically equal float substitutions.
+Controlled float-rounding shortcuts pass the old interval/version examples but
+fail the expanded canonical fixtures. Queue integration, Ruff and Git whitespace
+checks passed. All 256 noninteractive JSON answer keys passed the complete scoring
+and rubric contracts. Two independent suite assemblies produced fingerprint
+`24cfdc40a4414da6`. No known unresolved correctness issue remains from these
+review passes; these checks do not prove absence of every possible defect.
+
 ## Interpretation and limits
 
 Primary quality remains strict task success, balanced first by family and then by
@@ -235,6 +463,8 @@ containment is not a security boundary against determined adversarial Python;
 production execution of untrusted code still requires container/VM isolation.
 
 Reproduce the authoring and evaluation checks with the commands in the
-[README](README.md#verification). The dedicated new oracle and regression suite is
-[selftest_frontier.py](selftest_frontier.py) and
-[selftest_adversarial.py](selftest_adversarial.py).
+[README](README.md#verification). The independent task oracles include
+[selftest_frontier.py](selftest_frontier.py),
+[selftest_adversarial.py](selftest_adversarial.py),
+[selftest_compositional.py](selftest_compositional.py) and
+[selftest_evidence.py](selftest_evidence.py).

@@ -2,7 +2,7 @@
   category: Creative Writing
   prompt: Write four lines about a small mystery. Each line has exactly 5 whitespace-separated words. Start the
     lines with I, You, We, They respectively and end them with key, bell, bridge, lantern respectively. No title,
-    blank lines, or commentary. Only constraint compliance is scored, not artistic quality.
+    blank lines, or commentary. Do not repeat any word across the four lines, ignoring case and surrounding punctuation. Only constraint compliance is scored, not artistic quality.
   evaluator: format_check
   expected:
     checks:
@@ -10,6 +10,9 @@
       value: 4
     - type: every_line_word_count
       value: 5
+    - type: unique_words
+    - type: not_regex
+      value: '\n\s*\n'
     - type: regex
       value: \A(?:[^\n]*\n){0}I\b[^\n]*\bkey[.!?]?(?:\n|$)
     - type: regex

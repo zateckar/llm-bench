@@ -25,11 +25,14 @@ Scoring rules this module deliberately enforces
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import math
 import re
+import unicodedata
 from typing import Any, Callable
+from fractions import Fraction
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,7 @@ logger = logging.getLogger(__name__)
 # held to an absolute 1e-9 budget.
 DEFAULT_REL_TOLERANCE = 1e-6
 DEFAULT_ABS_TOLERANCE = 1e-9
+JSON_NESTING_LIMIT = 256
 
 
 def safe_re_search(pattern: str, string: str, flags: int = 0) -> re.Match | None:
@@ -114,16 +118,28 @@ def _numbers_equal(a: float, b: float, rel: float, abs_tol: float) -> bool:
     return abs(a - b) <= max(abs_tol, rel * abs(b))
 
 
-def _multiset_equal(got: list, want: list, rel: float, abs_tol: float) -> bool:
-    remaining = list(want)
-    for item in got:
-        for i, candidate in enumerate(remaining):
-            if values_equal(item, candidate, rel=rel, abs_tol=abs_tol, unordered=True):
-                del remaining[i]
-                break
-        else:
+def _multiset_equal(got: list, want: list, rel: float, abs_tol: float, *, nested_unordered=True) -> bool:
+    # Tolerant equality is not transitive. Greedily consuming the first match
+    # can reject a valid permutation when another item has only that match.
+    edges = [[j for j, candidate in enumerate(want)
+              if values_equal(item, candidate, rel=rel, abs_tol=abs_tol, unordered=nested_unordered)]
+             for item in got]
+    matched = {}
+
+    def assign(i, seen):
+        for j in edges[i]:
+            if j in seen:
+                continue
+            seen.add(j)
+            if j not in matched or assign(matched[j], seen):
+                matched[j] = i
+                return True
+        return False
+
+    for i in range(len(got)):
+        if not assign(i, set()):
             return False
-    return not remaining
+    return len(matched) == len(want)
 
 
 def values_equal(
@@ -152,13 +168,22 @@ def values_equal(
             # Python compares mixed int/float values without rounding the int
             # through binary64 first; preserve that behavior for exact fixtures.
             return got == want
-        return _numbers_equal(float(got), float(want), rel, abs_tol)
+        try:
+            return _numbers_equal(float(got), float(want), rel, abs_tol)
+        except OverflowError:
+            # Python integers have no binary64 bound. A valid but enormous
+            # output must be a scored mismatch, not an unscored grader error.
+            if any(isinstance(v, float) and not math.isfinite(v) for v in (got, want)):
+                return False
+            observed, target = Fraction(got), Fraction(want)
+            return abs(observed - target) <= max(Fraction(abs_tol), Fraction(rel) * abs(target))
     if isinstance(got, str) and isinstance(want, str):
         return got == want
     if isinstance(got, SetVal) or isinstance(want, SetVal):
         if not isinstance(got, list) or not isinstance(want, list):
             return False
-        return len(got) == len(want) and _multiset_equal(list(got), list(want), rel, abs_tol)
+        return len(got) == len(want) and _multiset_equal(
+            list(got), list(want), rel, abs_tol, nested_unordered=unordered)
     if isinstance(got, list) and isinstance(want, list):
         if len(got) != len(want):
             return False
@@ -176,7 +201,9 @@ def values_equal(
             for k in want
         )
     if isinstance(got, Opaque):
-        return got.repr_str == repr(want)
+        # A user-defined __repr__ is not a structural value and can impersonate
+        # any answer. Unsupported objects cannot satisfy a JSON-native fixture.
+        return False
     return got == want
 
 
@@ -216,30 +243,15 @@ def strip_think_blocks(response: str) -> str:
     A model that muses "maybe the answer is 42" inside <think> and then answers 7
     must score as 7. Same for the final-answer extraction in numeric_match.
     """
-    cleaned = re.sub(
-        r"<(think|thinking|reasoning|scratchpad)>.*?</\1>",
-        " ",
-        response,
-        flags=re.DOTALL | re.IGNORECASE,
-    )
-    # Some endpoints strip the opening tag and return only the closing one; in
-    # that case everything up to the last closing tag is scratchpad.
-    tail = re.search(
-        r"</(?:think|thinking|reasoning|scratchpad)>(?!.*</(?:think|thinking|reasoning|scratchpad)>)",
-        cleaned,
-        flags=re.DOTALL | re.IGNORECASE,
-    )
-    if tail:
-        cleaned = cleaned[tail.end():]
-    # An unterminated opening tag is a malformed tag, not a scratchpad marker:
-    # drop the tag itself but keep the text after it, so a model that wraps its
-    # final answer in a typo'd tag is still graded on the answer.
-    cleaned = re.sub(
-        r"<(?:think|thinking|reasoning|scratchpad)>", " ", cleaned,
-        flags=re.IGNORECASE,
-    )
-    # A response that is nothing but scratchpad means there is no answer to
-    # score; it must come back empty, not fall through to grading the musing.
+    # Only a leading scratchpad is a reasoning envelope. Tags in JSON strings,
+    # code or quoted text are answer data and must never be silently rewritten.
+    cleaned = response
+    while opening := re.match(r"\s*<(think|thinking|reasoning|scratchpad)>", cleaned, re.I):
+        closing = re.search(rf"</{opening[1]}>", cleaned[opening.end():], re.I)
+        if closing is None:
+            # An unfinished scratchpad contains no established final answer.
+            return ""
+        cleaned = cleaned[opening.end() + closing.end():]
     return cleaned
 
 
@@ -455,6 +467,25 @@ def extract_final_number(text: str) -> tuple[float | None, str]:
 
 
 def _load_json(text):
+    # An explicit portable bound prevents interpreter-specific recursion errors
+    # from turning malformed model answers into unscored evaluator failures.
+    depth, quoted, escaped = 0, False, False
+    for char in text:
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+        elif char == '"':
+            quoted = True
+        elif char in "[{":
+            depth += 1
+            if depth > JSON_NESTING_LIMIT:
+                raise ValueError("JSON exceeds nesting limit")
+        elif char in "]}":
+            depth -= 1
     def pairs(items):
         obj = {}
         for key, value in items:
@@ -472,7 +503,10 @@ def _load_json(text):
             invalid(value)
         return result
 
-    return json.loads(text, object_pairs_hook=pairs, parse_constant=invalid, parse_float=finite_float)
+    try:
+        return json.loads(text, object_pairs_hook=pairs, parse_constant=invalid, parse_float=finite_float)
+    except RecursionError as error:
+        raise ValueError("JSON exceeds parser nesting limit") from error
 
 
 def extract_json(response: str, *, strict: bool = False, allow_fence: bool = True) -> tuple[Any, str | None]:
@@ -746,6 +780,15 @@ def _extract_code(response: str, fixture_names: set[str] | None = None) -> str |
         # Concatenate every block: models frequently split a class and its
         # helpers across fences, and a trailing "usage" block is harmless.
         return "\n\n".join(blocks)
+    # A complete raw Python program can contain a single-line definition.
+    # Parse it first so prose with a stray 'def' is not treated as valid code.
+    try:
+        parsed = ast.parse(body.strip())
+    except (SyntaxError, ValueError, RecursionError):
+        pass
+    else:
+        if any(isinstance(node, (ast.FunctionDef, ast.ClassDef)) for node in parsed.body):
+            return body.strip()
     lines = body.strip().split("\n")
     code_lines = []
     in_code = False
@@ -1060,6 +1103,9 @@ def eval_code_exec(response: str, expected: Any, **kwargs) -> tuple[float, str]:
     ]
     outcome = run_code_tests(code, calls, helper=helper)
 
+    if outcome.get("infrastructure_error"):
+        raise RuntimeError("Code evaluator infrastructure failed: " + str(outcome.get("error")))
+
     if "error" in outcome:
         if diagnostic_sink is not None:
             diagnostic_sink["contract_score"] = 0.0
@@ -1211,6 +1257,7 @@ def eval_format_check(response: str, expected: Any, **kwargs) -> tuple[float, st
     passed = 0
     details: list[str] = []
 
+    outcomes = []
     for check in checks:
         ctype = check.get("type")
         value = check.get("value")
@@ -1221,6 +1268,7 @@ def eval_format_check(response: str, expected: Any, **kwargs) -> tuple[float, st
         if ctype == "json":
             ok, note = _check_json(body, check)
             details.append(note)
+            outcomes.append(ok)
             if ok:
                 passed += 1
             continue
@@ -1276,7 +1324,8 @@ def eval_format_check(response: str, expected: Any, **kwargs) -> tuple[float, st
             note = f"{'Regex' if ctype == 'regex' else 'Regex absent'} [{desc}]: {'PASS' if ok else 'FAIL'}"
         elif ctype == "count_occurrences":
             pattern = compile_or_none(str(check.get("pattern", value)), re.IGNORECASE)
-            n = len(pattern.findall(text)) if pattern else -1
+            matches = [match.group(0).casefold() for match in pattern.finditer(text)] if pattern else []
+            n = (len(set(matches)) if check.get("distinct", False) else len(matches)) if pattern else -1
             if "min_count" in check or "max_count" in check:
                 lower, upper = check.get("min_count", 0), check.get("max_count")
                 ok = n >= lower and (upper is None or n <= upper)
@@ -1341,7 +1390,15 @@ def eval_format_check(response: str, expected: Any, **kwargs) -> tuple[float, st
             ok = len(lines) == len(set(lines))
             note = f"Lines unique: {'PASS' if ok else 'FAIL'}"
         elif ctype == "unique_words":
-            words = [w.lower().strip(".,!?;:\"'") for w in re.findall(r"[^\s]+", text)]
+            words = []
+            for raw_word in text.split():
+                word = raw_word.casefold()
+                start, end = 0, len(word)
+                while start < end and unicodedata.category(word[start]).startswith("P"):
+                    start += 1
+                while end > start and unicodedata.category(word[end - 1]).startswith("P"):
+                    end -= 1
+                words.append(word[start:end])
             ok = len(words) == len(set(words))
             note = f"Words unique: {'PASS' if ok else 'FAIL'}"
         elif ctype == "only_words":
@@ -1372,6 +1429,7 @@ def eval_format_check(response: str, expected: Any, **kwargs) -> tuple[float, st
             note = f"Unknown check type '{ctype}': FAIL"
 
         details.append(note)
+        outcomes.append(ok)
         if ok:
             passed += 1
 
@@ -1381,14 +1439,14 @@ def eval_format_check(response: str, expected: Any, **kwargs) -> tuple[float, st
         diagnostic_sink["criteria"] = [
             {
                 "id": f"check-{i:03d}",
-                "status": "pass" if re.search(r": PASS(?:$|\s|\))", note) else "fail",
-                "earned": 1.0 if re.search(r": PASS(?:$|\s|\))", note) else 0.0,
+                "status": "pass" if ok else "fail",
+                "earned": 1.0 if ok else 0.0,
                 "possible": 1.0,
                 "dimension": "contract",
                 "reason_code": "format_check",
                 "evidence": {"check_index": i, "detail": note[:240]},
             }
-            for i, note in enumerate(details, 1)
+            for i, (note, ok) in enumerate(zip(details, outcomes), 1)
         ]
     return score, f"{passed}/{len(checks)} format checks passed. " + "; ".join(details)
 
@@ -1796,10 +1854,15 @@ def _json_mismatches(
     mode: str,
     ignore_keys: set[str],
     aliases: dict,
+    integer_paths: set[str] | None = None,
     relative: float = 0,
     tolerance: float = 0,
 ) -> list[dict[str, Any]]:
     """Return structured JSON mismatches used by grading and diagnostics."""
+    if path in (integer_paths or ()) and type(got) is not int:
+        return [{"path": path or "root", "at_root": not path,
+                 "reason_code": "type_mismatch",
+                 "detail": f"expected integer, got {type(got).__name__}"}]
     if path in aliases and any(values_equal(got, v, rel=0, abs_tol=0) for v in aliases[path]):
         return []
     if isinstance(target, dict):
@@ -1819,6 +1882,7 @@ def _json_mismatches(
                 problems += _json_mismatches(
                     got[key], sub, child, mode=mode, ignore_keys=ignore_keys,
                     aliases=aliases, relative=relative, tolerance=tolerance,
+                    integer_paths=integer_paths,
                 )
         if mode == "exact":
             extra = set(got) - set(target)
@@ -1855,6 +1919,7 @@ def _json_mismatches(
                 problems += _json_mismatches(
                     got[i], sub, child, mode=mode, ignore_keys=ignore_keys,
                     aliases=aliases, relative=relative, tolerance=tolerance,
+                    integer_paths=integer_paths,
                 )
         return problems
     def scalar_kind(value):
@@ -1905,6 +1970,7 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
         value: {...}          # the document to match
         mode: exact | subset  # subset allows extra keys (default exact)
         ignore_keys: [uuid]   # keys whose values may differ (must still exist)
+        integer_paths: [count]  # opt-in integer literals; 1.0 does not satisfy count
     """
     diagnostic_sink = kwargs.get("_diagnostics")
     spec = expected if isinstance(expected, dict) and "value" in expected else {"value": expected}
@@ -1930,6 +1996,7 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
     problems = _json_mismatches(
         doc, want, "", mode=mode, ignore_keys=ignore_keys, aliases=aliases,
         relative=spec.get("relative", 0), tolerance=spec.get("tolerance", 0),
+        integer_paths=set(spec.get("integer_paths", [])),
     )
     if diagnostic_sink is not None:
         by_path = {p["path"]: p for p in problems if not p.get("at_root")}
@@ -2120,16 +2187,25 @@ EVALUATORS: dict[str, Callable] = {
     "regex_all": eval_regex_all,
 }
 
-# Bump only the evaluator whose behavior changed. This lets a rescore explain
-# why a saved answer differs while leaving prompt/suite fingerprints intact.
+# The v12 reasoning-envelope change affects every text evaluator. Versions also
+# cover the JSON, code and format corrections described in BENCHMARK_DESIGN.md.
 EVALUATOR_VERSIONS = {
     "interactive_state": "2",
-    "json_match": "5",
-    "code_exec": "3",
-    "format_check": "3",
-    "contains_keywords": "2",
-    "security_analysis": "2",
-    "file_content_match": "2",
-    "command_correctness": "2",
-    "multi_step_solution": "2",
+    "exact_match": "2",
+    "mcq": "2",
+    "numeric_match": "2",
+    "numeric_set": "2",
+    "admits_uncertainty": "2",
+    "refusal_calibration": "2",
+    "ordered_labels": "2",
+    "set_match": "2",
+    "regex_all": "2",
+    "json_match": "7",
+    "code_exec": "5",
+    "format_check": "5",
+    "contains_keywords": "3",
+    "security_analysis": "3",
+    "file_content_match": "3",
+    "command_correctness": "3",
+    "multi_step_solution": "3",
 }

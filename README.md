@@ -25,27 +25,31 @@ The default runs both phases. Reports contain Markdown and a companion JSON file
 
 ## Quality
 
-**Rigorous v11 contains 291 tasks across 30 categories:** 171 revised static anchors, 92 original generated instances, 20 interactive simulations, and eight long-context accuracy checks at 8,192 and 32,768 cl100k_base reference tokens. The static bank has one question per file under [tests/questions](tests/questions); [quality_suite.py](quality_suite.py) assembles the complete suite deterministically. Question seeds 19 and 23 and two variants per generated family are fixed. New tasks require adaptive minimax decisions, adversarial network failure and repair, transaction consistency, and minimal grounded evidence proofs.
+**Rigorous v13 contains 307 tasks across 30 categories:** 171 revised static anchors, 108 original generated instances, 20 interactive simulations, and eight long-context accuracy checks at 8,192 and 32,768 cl100k_base reference tokens. The static bank has one question per file under [tests/questions](tests/questions); [quality_suite.py](quality_suite.py) assembles the complete suite deterministically. Question seeds 19 and 23 and two variants per generated family are fixed. New tasks require all minimal sufficient evidence, contradiction cores, minimum repairs and countermodels, plus typed tool traces with error precedence, references and idempotent retries. Paired variants change one assertion or call argument. All eight advanced-coding anchors now include large-number, Unicode-identifier or nested-payload transformations. Established generated prompts retain their generation version.
 
 Every task requires a full pass. The headline is **strict task success**, averaged first within each family, then within each category, then across capability categories. This prevents many similar variants from dominating. Partial criterion achievement and its coverage are separate diagnostics. Three creative-writing items measure formal compliance separately; they do not measure artistic quality.
 
-JSON checks compare every required value, type and key. Code executes as submitted against boundary and generated-combination fixtures; forbidden imports and changes to protected input state fail. Interactive actions run in local simulations with final-state and authorization gates. Missing requirements, blocked rubric dependencies and fixture exceptions earn no credit. Correct array members retain diagnostic credit when cardinality is wrong; the full-pass contract still fails. Relevant records, revisions and distractors are distributed across the long-context inputs.
+JSON checks compare every required value, type and key. New count/receipt contracts require integer literals; general number contracts continue to accept numerically equal integer/float values. Code executes as submitted against boundary and generated-combination fixtures; forbidden imports and changes to protected input state fail. Interactive actions run in local simulations with final-state and authorization gates. Missing requirements, blocked rubric dependencies and fixture exceptions earn no credit. Correct array members retain diagnostic credit when cardinality is wrong; the full-pass contract still fails. Relevant records, revisions and distractors are distributed across the long-context inputs.
 
 All quality calls use temperature 0, model seed 0 and a 65,536-token output cap, including reasoning. This fixed cap preserves headroom for reasoning models. Quality runs allow the full budget without a heuristic repetition cutoff. Truncation and missing final answers stay scored failures. Endpoint failures, unsupported context, evaluator errors and cancellation remain explicit unscored outcomes with coverage and zero-to-one sensitivity bounds. Unstarted tasks remain in the planned denominator after an outage.
 
 Saved reports record suite fingerprints, individual criteria, evaluator versions, client versions, timeout/retry policy and quality worker count. Paired comparisons require compatible protocols and identical question fingerprints. Invalid evaluator scores or diagnostics become unscored evaluator errors; missing required rubric criteria retain zero diagnostic credit. Family bootstrap intervals are unavailable when any category lacks multiple independent families; they do not estimate repeated-run variability.
 
-There are no profiles, filters, partial reruns, seed/split controls, output-budget controls, custom context grids or response-cache options. Historical scores are retained as historical data and do not become v11 scores.
+There are no profiles, filters, partial reruns, seed/split controls, output-budget controls, custom context grids or response-cache options. Historical scores are retained as historical data and do not become v13 scores.
 
-The current design uses ideas from [LiveBench](https://livebench.ai/livebench.pdf), [IFEval](https://arxiv.org/abs/2311.07911), [EvalPlus](https://evalplus.github.io/) and [RULER](https://arxiv.org/abs/2404.06654). It is an original local suite, not an implementation of those benchmarks.
+The new research draws on [FEVER](https://fever.ai/dataset/fever.html), [HoVer](https://hover-nlp.github.io/), [BFCL](https://gorilla.cs.berkeley.edu/blogs/8_berkeley_function_calling_leaderboard.html), [ComplexBench](https://github.com/thu-coai/ComplexBench) and [BigCodeBench](https://github.com/bigcode-project/bigcodebench), alongside the earlier LiveBench and RULER methods. Tasks are original local exercises; third-party datasets and benchmark scores are not reproduced.
 
-Fresh matched model runs are needed to establish empirical difficulty and model separation. Public question banks can be contaminated. The [v11 design and critical review](BENCHMARK_DESIGN.md) records the new tasks, primary research sources, client effects, fixed grading defects and verification methods. These bounded code functions and text-protocol simulations do not measure complete repository work, native tool APIs or unrestricted real-world agents.
+Fresh matched model runs are needed to establish empirical difficulty and model separation. Public question banks can be contaminated. The [v13 design and critical review](BENCHMARK_DESIGN.md) records the new tasks, primary research sources, client effects, fixed grading defects and verification methods. These bounded code functions and text-protocol simulations do not measure complete repository work, native tool APIs or unrestricted real-world agents.
+
+Only complete leading reasoning envelopes are removed before grading. Unfinished scratchpads have no final answer; literal tags within JSON and code remain data. JSON has a portable 256-level nesting limit. Code fixtures reject arbitrary objects that merely print like correct values, preserve ordered members inside sets, and distinguish interpreter-launch failures from submitted-program failures.
 
 ## Performance
 
 One workload uses a **1,024-token reference input** and asks for integers 1 through 80 with a **256-token output limit**. Each request has a unique leading identifier to reduce prefix reuse. Input tokenization happens before timing. Temperature and model seed are 0.
 
 Streaming is negotiated before measurement. Every connection is warmed and reused. Timed requests have **one attempt**. Load levels are powers of two up to the configured maximum, including the maximum itself: maximum 6 tests 1, 2, 4 and 6. Each level measures at least 24 requests or four rounds per worker, whichever is larger.
+
+Negotiation requires an explicit unsupported-field error and available retry budget. One-attempt calls preserve the negotiated settings. Completion choices after a terminal finish reason, invalid finish metadata and streams containing only usage or DONE are endpoint errors; trailing usage after a finish reason remains valid.
 
 Reports show end-to-end latency and first-delivered-token p50/p95, request errors, failed-request latency, aggregate output tokens per second and successful requests per second. Rates divide successful output/completions by the full measured wall time, including failed requests, ramp-up and drain. Progress updates and prompt construction stay outside that interval.
 
@@ -69,7 +73,7 @@ Python application and development dependencies are locked in [uv.lock](uv.lock)
 
 ```sh
 uv run python validate_suite.py --strict
-uv run python -m unittest selftest_client selftest_adversarial selftest_frontier selftest_granular selftest_rigorous selftest_quality selftest_perf selftest_run_options selftest_benchmark_runner selftest_reports selftest_ceiling selftest_stretch selftest_specialists
+uv run python -m unittest selftest_client selftest_adversarial selftest_frontier selftest_granular selftest_rigorous selftest_quality selftest_perf selftest_run_options selftest_benchmark_runner selftest_reports selftest_ceiling selftest_stretch selftest_specialists selftest_compositional selftest_evidence
 uv run python selftest_evaluators.py
 uv run python selftest_challenges.py
 uv run python selftest_run_queue.py

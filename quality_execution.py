@@ -252,7 +252,8 @@ def score_response(q, response, tokens, metrics, cached=False):
     elif (
         q.evaluator == "json_match"
         and extract_json(
-            response, strict=isinstance(q.expected, dict) and q.expected.get("strict_json", False)
+            response, strict=isinstance(q.expected, dict) and q.expected.get("strict_json", False),
+            allow_fence=not isinstance(q.expected, dict) or q.expected.get("allow_fence", True),
         )[1]
     ):
         result.outcome = "formatting"

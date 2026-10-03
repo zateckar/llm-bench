@@ -24,7 +24,7 @@ import urllib3
 from models import RequestMetrics, TokenUsage
 
 logger = logging.getLogger(__name__)
-CLIENT_PROTOCOL_VERSION = "chat-client-v2"
+CLIENT_PROTOCOL_VERSION = "chat-client-v3"
 
 # Rough characters-per-token used only for prompt-size estimates in the perf
 # suite when the server does not report prompt_tokens.
@@ -99,7 +99,7 @@ class ClientConfig:
     max_retries: int = 3
     retry_delay: float = 2.0
     # Ask for usage in the final streaming chunk. Some gateways reject the
-    # field, so the client drops it and retries once if that happens.
+    # field, so the client drops it when explicitly rejected and retry budget remains.
     request_stream_usage: bool = True
     # Off for both canonical protocols: heuristic early exits alter accuracy
     # and throughput. Retained for explicit noncanonical client use.
@@ -192,10 +192,11 @@ class ChatClient:
                 # text that only exists there.
                 last_error = str(e)
                 if (
-                    e.status == 400
+                    e.status in (400, 422)
                     and want_stream
                     and self._stream_usage_supported
-                    and "stream_options" in e.body.lower()
+                    and attempt < attempts_allowed - 1
+                    and _rejects_feature(e.body, "stream_options")
                 ):
                     # A gateway complaining about stream_options: drop it and
                     # retry immediately without consuming a backoff cycle. The
@@ -204,7 +205,9 @@ class ChatClient:
                     logger.info("Endpoint rejected stream_options; disabling it")
                     self._stream_usage_supported = False
                     continue
-                if e.status in (400, 404, 501) and want_stream and "stream" in e.body.lower():
+                if (e.status in (400, 404, 422, 501) and want_stream
+                    and attempt < attempts_allowed - 1
+                    and _rejects_feature(e.body, "stream")):
                     # Only an endpoint actually complaining about streaming
                     # should turn streaming off for good; an unrelated 400 is
                     # just a request error.
@@ -341,6 +344,7 @@ class ChatClient:
         usage = _parse_usage({})
         terminated = False
         done_sent = False
+        saw_choice = False
 
         try:
             # Decode complete SSE lines, preserving UTF-8 across TCP fragments.
@@ -361,6 +365,9 @@ class ChatClient:
                     raise _ProtocolError("Malformed JSON in completion stream") from error
 
                 choices = _validated_choices(event)
+                if choices and terminated:
+                    raise _ProtocolError("Completion choice after terminal finish reason")
+                saw_choice |= bool(choices)
 
                 usage_raw = event.get("usage")
                 if usage_raw:
@@ -381,7 +388,9 @@ class ChatClient:
                     if choice.get("finish_reason"):
                         self._last_finish_reason = choice["finish_reason"]
                         terminated = True
-                    delta = choice.get("delta") or {}
+                    delta = choice.get("delta", {})
+                    if delta is None:
+                        delta = {}
                     if not isinstance(delta, dict):
                         raise _ProtocolError("Completion delta must be an object")
                     piece = _content_text(delta.get("content"))
@@ -432,6 +441,8 @@ class ChatClient:
         finally:
             resp.close()
 
+        if not saw_choice:
+            raise _ProtocolError("Completion stream contained no completion choice")
         if not terminated and not looped:
             raise _ProtocolError("Completion stream ended without a finish reason or [DONE]")
         text = "".join(chunks).strip()
@@ -568,11 +579,38 @@ def _validated_choices(data, *, blocking=False):
     if not isinstance(choices, list) or len(choices) > 1 or (blocking and not choices):
         raise _ProtocolError("Expected one completion choice (or a streaming usage event)")
     for choice in choices:
-        if not isinstance(choice, dict) or choice.get("index", 0) != 0:
+        if (not isinstance(choice, dict) or type(choice.get("index", 0)) is not int
+            or choice.get("index", 0) != 0):
             raise _ProtocolError("Unexpected completion choice index")
+        finish = choice.get("finish_reason")
+        if finish is not None and (not isinstance(finish, str) or not finish.strip()):
+            raise _ProtocolError("Completion finish reason must be a nonempty string or null")
         if blocking and not isinstance(choice.get("message"), dict):
             raise _ProtocolError("Completion message must be an object")
     return choices
+
+
+def _rejects_feature(body, feature):
+    """Negotiate only an explicitly unsupported field, never incidental mentions.
+
+    In particular, 'upstream' and a stream_options validation error do not mean
+    that streaming is unavailable. One-attempt measured calls never negotiate.
+    """
+    try:
+        error = json.loads(body).get("error")
+    except (ValueError, AttributeError):
+        error = None
+    if isinstance(error, dict) and error.get("param") == feature:
+        code = error.get("code")
+        if isinstance(code, str) and code in {"unsupported_parameter", "unknown_parameter", "unsupported_value"}:
+            return True
+    name = r"stream(?:ing)?" if feature == "stream" else re.escape(feature)
+    label = rf"\b{name}\b"
+    separator = r"[\s\"'`:=_-]*"
+    before = rf"\b(?:unsupported|unknown|unrecognized|unexpected)\s+(?:(?:field|parameter|argument)\b)?{separator}{label}"
+    after = rf"{label}{separator}(?:(?:is|are)\s+)?(?:not\s+(?:supported|implemented|allowed|permitted)|unsupported|disabled)\b"
+    negative = rf"\b(?:does\s+not|doesn't|cannot)\s+support\s+{separator}{label}"
+    return bool(re.search(f"{before}|{after}|{negative}", body, re.IGNORECASE))
 
 
 def _parse_usage(usage_raw: dict) -> TokenUsage:

@@ -233,4 +233,34 @@ def code_cases(rng, count=24):
     cases["AC2-05"].append([[1, -1] * 999 + [2, 3], 5])
     cases["AC2-06"].append([[[str(i), i, i + 1, i % 3] for i in range(16)]])
     cases["AC2-08"].append(["*a" * 30 + "b", "a" * 70 + "c"])
+    # Transform small public cases across magnitude, identifier and payload
+    # regimes. This exposes float rounding, single-character IDs, truthiness
+    # tombstones and accidental assumptions about the tiny generation range.
+    shift, scale = 2**60, 10**24 + 7
+    for n, edges, start, end, departure in list(cases["AC2-01"][:6]):
+        cases["AC2-01"].append([n, [[a, b, d * 7, o * 7 + shift, c * 7 + shift]
+                                   for a, b, d, o, c in edges], start, end, departure * 7 + shift])
+    for (intervals,) in list(cases["AC2-02"][:6]):
+        cases["AC2-02"].append([[[a * 3 + shift, b * 3 + shift] for a, b in intervals]])
+    for nodes, edges in list(cases["AC2-03"][:6]):
+        mapping = {node: f"node/Ω/{len(nodes) - i:02d}" for i, node in enumerate(nodes)}
+        cases["AC2-03"].append([[mapping[n] for n in nodes][::-1],
+                                   [[mapping[a], mapping[b]] for a, b in edges] * 2])
+    for events, queries in list(cases["AC2-04"][:6]):
+        def payload(value):
+            return None if value is None else {"literal": value, "nested": [False, 0, "", []]}
+        cases["AC2-04"].append([[["key/é/" + k, t + shift, payload(v)] for k, t, v in events],
+                                   [["key/é/" + k, t + shift] for k, t in queries]])
+    for nums, target in list(cases["AC2-05"][:6]):
+        cases["AC2-05"].append([[number * scale for number in nums], target * scale])
+    for (jobs,) in list(cases["AC2-06"][:6]):
+        cases["AC2-06"].append([[["job/β/" + ident, start + shift, end + shift, profit * scale]
+                                    for ident, start, end, profit in reversed(jobs)]])
+    for (events,) in list(cases["AC2-07"][:6]):
+        def account(name):
+            return name if name == "BANK" else "account/α/" + name
+        cases["AC2-07"].append([[["tx/" + ident, account(src), account(dst), amount * scale]
+                                    for ident, src, dst, amount in events]])
+    for pattern, text in list(cases["AC2-08"][:6]):
+        cases["AC2-08"].append(["Ω:" + pattern, "Ω:" + text])
     return cases

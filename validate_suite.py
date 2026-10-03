@@ -192,6 +192,8 @@ def check_format_check(report: Report, where: str, expected: object) -> None:
         if ctype in ("regex", "not_regex", "every_line_matches"):
             check_regex(report, where, check.get("value"), f"{label} ({ctype})")
         elif ctype == "count_occurrences":
+            if "distinct" in check and type(check["distinct"]) is not bool:
+                report.error(where, f"{label} distinct must be boolean")
             check_regex(
                 report, where, check.get("pattern", check.get("value")), f"{label} (pattern)"
             )
@@ -444,6 +446,16 @@ def check_json_match(report: Report, where: str, expected: object) -> None:
                 leaves[path] = value
 
         visit(expected.get("value"))
+        integer_paths = expected.get("integer_paths", [])
+        if (not isinstance(integer_paths, list) or any(not isinstance(p, str) for p in integer_paths)
+                or len(set(integer_paths)) != len(integer_paths)):
+            report.error(where, "json_match integer_paths must be a list of unique exact scalar paths")
+            integer_paths = []
+        for path in integer_paths:
+            if path not in leaves or type(leaves[path]) is not int:
+                report.error(where, f"json_match integer path {path!r} must name an integer answer leaf")
+            if isinstance(ignore, list) and any(key in ignore for key in re.findall(r"[^.\[\]]+", path)):
+                report.error(where, f"json_match integer path {path!r} cannot be ignored")
         for path, values in aliases.items():
             if not isinstance(path, str) or path not in leaves:
                 report.error(where, f"json_match alias path {path!r} is not an exact scalar leaf")
@@ -458,6 +470,8 @@ def check_json_match(report: Report, where: str, expected: object) -> None:
                 report.error(
                     where, f"json_match aliases for {path!r} must be a nonempty scalar list"
                 )
+            elif path in integer_paths and any(type(v) is not int for v in values):
+                report.error(where, f"json_match aliases for integer path {path!r} must be integers")
 
 
 def check_regex_all(report: Report, where: str, expected: object) -> None:

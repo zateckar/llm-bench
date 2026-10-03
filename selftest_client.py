@@ -84,6 +84,54 @@ class ClientTests(unittest.TestCase):
         self.assertTrue(metrics.ok)
         self.assertEqual(text, "answer")
 
+    def test_terminal_and_choice_contract_cannot_be_overwritten(self):
+        malformed = [
+            [b"[DONE]"],
+            [{"choices": [], "usage": {"completion_tokens": 100}}, b"[DONE]"],
+            [event("partial", finish="length"), event("rest", finish="stop")],
+            [event("ok", finish="stop"), event("extra")],
+            [event("ok", finish={"type": "stop"})],
+            [event("ok", finish=False), b"[DONE]"],
+            [{"choices": [{"index": False, "delta": {"content": "ok"}}]}, b"[DONE]"],
+            [{"choices": [{"index": 0.0, "delta": {"content": "ok"}}]}, b"[DONE]"],
+            [{"choices": [{"delta": [], "finish_reason": "stop"}]}],
+        ]
+        for events in malformed:
+            with self.subTest(events=events):
+                _, _, metrics = self.complete(Response(events))
+                self.assertFalse(metrics.ok, events)
+
+    def test_unrelated_rejections_do_not_change_streaming(self):
+        for body in ("upstream model unavailable", "stream_options include_usage must be boolean",
+                     "unsupported seed in streaming request", "stream is enabled but model not supported",
+                     '{"error":{"param":"stream","code":["unknown"]}}'):
+            client = ChatClient(replace(CONFIG, max_retries=3, retry_delay=0))
+            try:
+                with patch.object(client.session, "post", return_value=Response(status=400, text=body)) as post:
+                    _, _, metrics = client.complete("input")
+                self.assertFalse(metrics.ok)
+                self.assertEqual(post.call_count, 1)
+                self.assertTrue(client.streaming_supported)
+                self.assertTrue(client._stream_usage_supported)
+            finally:
+                client.session.close()
+
+    def test_explicit_stream_rejection_negotiates_only_with_retry_budget(self):
+        for body in ("Streaming is not supported", "Unsupported parameter: 'stream'",
+                     '{"error":{"param":"stream","code":"unsupported_parameter"}}'):
+            for attempts in (1, 2):
+                client = ChatClient(replace(CONFIG, max_retries=attempts))
+                responses = [Response(status=400, text=body),
+                             Response(data={"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]})]
+                try:
+                    with patch.object(client.session, "post", side_effect=responses) as post:
+                        _, _, metrics = client.complete("input")
+                    self.assertEqual(metrics.ok, attempts == 2, body)
+                    self.assertEqual(post.call_count, attempts)
+                    self.assertEqual(client.streaming_supported, attempts == 1)
+                finally:
+                    client.session.close()
+
     def test_multiline_sse_and_comments(self):
         response = Response(raw=[b": heartbeat", b"", b'data: {"choices":',
                                 b'data: [{"delta":{"content":"ok"},"finish_reason":"stop"}]}',

@@ -181,10 +181,10 @@ CASES: list[Case] = [
     ),
     Case(
         "numeric_match",
-        "an unterminated <think> tag must not swallow the final answer",
+        "an unterminated scratchpad must not be promoted to a final answer",
         "<think>Let me compute. The answer is 42.",
         42.0,
-        PASS,
+        FAIL,
     ),
     # ---------------- contains_keywords ----------------
     Case(

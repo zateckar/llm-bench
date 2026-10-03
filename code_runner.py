@@ -194,14 +194,15 @@ def main():
     results = []
     try:
         exec(compile(code, "<solution>", "exec"), namespace)
-    except Exception as e:
+    except BaseException as e:
         print(json.dumps({"error": "solution failed to load: %s: %s" % (type(e).__name__, e)}))
         return
     try:
         if helper:
             exec(compile(helper, "<harness>", "exec"), namespace)
-    except Exception as e:
-        print(json.dumps({"error": "harness failed to load: %s: %s" % (type(e).__name__, e)}))
+    except BaseException as e:
+        print(json.dumps({"error": "harness failed to load: %s: %s" % (type(e).__name__, e),
+                          "infrastructure_error": True}))
         return
 
     for t in tests:
@@ -227,7 +228,7 @@ def main():
             results.append({"ok": False, "error": "timeout: %s" % e})
         except RecursionError:
             results.append({"ok": False, "error": "RecursionError (unbounded recursion)"})
-        except Exception as e:
+        except BaseException as e:
             results.append({"ok": False, "error": "%s: %s" % (type(e).__name__, e)})
 
     print(json.dumps({"results": results}))
@@ -301,9 +302,9 @@ def run_code_tests(
     except subprocess.TimeoutExpired:
         return {"error": f"timeout after {timeout}s"}
     except Exception as e:  # noqa: BLE001
-        return {"error": f"subprocess failed: {e}"}
+        return {"error": f"subprocess failed: {e}", "infrastructure_error": True}
 
-    if proc.returncode != 0 and not proc.stdout.strip():
+    if proc.returncode != 0:
         msg = proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else "non-zero exit"
         return {"error": f"sandbox crashed: {msg}"}
 

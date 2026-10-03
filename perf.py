@@ -14,7 +14,7 @@ import uuid
 from llm_client import ChatClient, client_protocol
 from models import ConcurrencyPoint, LatencyStats, PerfReport, RequestMetrics
 
-REVISION = "performance-v4"
+REVISION = "performance-v5"
 DEFAULT_MAX_CONCURRENCY = 8
 MAX_CONCURRENCY = 32
 MIN_SAMPLES = 24

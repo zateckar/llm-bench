@@ -4,11 +4,11 @@
     Write a persuasive argument against giving young children accounts on online networks. It must:
     - be between 90 and 120 words,
     - be exactly 3 paragraphs separated by blank lines,
-    - include at least 2 statistics or percentages (for example '80%' or '4 out of 5'),
+    - include at least 2 distinct percentages from the supplied fictional sample,
     - never use the words 'social' or 'media'.
     Reply with ONLY the argument.
 
-    Use the following fictional sample figures: 20%, 35%, and 60%. The figures are illustrative, not real research; include the literal word hypothetical to describe the sample. No external sources are required. Only formal compliance is scored.
+    Use the following fictional sample figures: 20%, 35%, and 60%. Repeating one figure does not count as two distinct percentages. The figures are illustrative, not real research; include the literal word hypothetical to describe the sample. No external sources are required. Only formal compliance is scored.
   evaluator: format_check
   expected:
     checks:
@@ -21,6 +21,7 @@
     - type: count_occurrences
       pattern: (?<!\d)(?:20|35|60)%
       min_count: 2
+      distinct: true
     - type: not_regex
       value: (?i)\b(social|media)\b
       description: '''social'' and ''media'' absent'

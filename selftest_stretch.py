@@ -13,7 +13,7 @@ from evaluators import eval_format_check, eval_json_match
 from models import Result
 from quality_report import make_report, markdown, result_record, summarize
 from llm_client import ClientConfig
-from quality_suite import load_questions
+from quality_suite import REVISION, load_questions
 from selftest_specialists import corruptions
 import stretch_cases as author
 from test_loader import _parse_question, load_all_tests
@@ -448,7 +448,7 @@ class StretchTests(unittest.TestCase):
         self.assertEqual(len(new), 30)
         self.assertEqual(len({q.metadata["family"] for q in new}), 10)
         self.assertTrue(
-            all(q.metadata["cohort"] == "rigorous-v11" and q.max_tokens == 65536 for q in new)
+            all(q.metadata["cohort"] == REVISION and q.max_tokens == 65536 for q in new)
         )
         rows = [result_record(Result(q, "", 1 if i % 3 else 0, "test")) for i, q in enumerate(new)]
         summary = summarize(rows)

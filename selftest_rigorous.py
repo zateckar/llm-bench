@@ -1,4 +1,4 @@
-"""Oracle, contract and adversarial regression tests for rigorous-v11."""
+"""Oracle, contract and adversarial regression tests for the fixed rigorous suite."""
 
 from copy import deepcopy
 from dataclasses import replace
@@ -9,7 +9,7 @@ from llm_client import ClientConfig
 from models import Question, RequestMetrics, TokenUsage
 from quality_execution import score_response
 from quality_report import make_report, paired_comparison, result_record, summarize
-from quality_suite import load_questions, fingerprint
+from quality_suite import REVISION, load_questions, fingerprint
 from rigorous_cases import CODE_REFERENCES, balanced_rubric, load_new_questions, schema
 from validate_suite import Report, validate_question
 
@@ -21,11 +21,11 @@ def score(q, answer, metrics=None):
 class RigorousTests(unittest.TestCase):
     def test_fixed_suite_covers_every_category(self):
         qs = load_questions()
-        self.assertEqual(len(qs), 291)
+        self.assertEqual(len(qs), 307)
         self.assertEqual(len({q.category for q in qs}), 30)
         self.assertEqual(len({q.id for q in qs}), len(qs))
         self.assertFalse(any(q.id.startswith("H7-") for q in qs))
-        self.assertTrue(all(q.metadata.get("cohort") == "rigorous-v11" for q in qs))
+        self.assertTrue(all(q.metadata.get("cohort") == REVISION for q in qs))
         validation = Report()
         for q in qs:
             if not q.interaction:

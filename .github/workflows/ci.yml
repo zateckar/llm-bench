@@ -80,6 +80,12 @@ jobs:
           uv run python selftest_adversarial.py
           uv run python selftest_client.py
 
+      - name: Verify v12 concurrency and nested knowledge with independent oracles
+        run: uv run python selftest_compositional.py
+
+      - name: Verify v13 evidence sufficiency, tool traces and grading regressions
+        run: uv run python selftest_evidence.py
+
       - name: Verify portable HTML reports and comparisons
         run: uv run python selftest_reports.py
 

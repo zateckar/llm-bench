@@ -1,11 +1,11 @@
 # Fixed rigorous question suite
 
-The canonical run bank is assembled by [quality_suite.py](../quality_suite.py). Every quality run uses the same 291 questions; the test browser displays that complete bank.
+The canonical run bank is assembled by [quality_suite.py](../quality_suite.py). Every quality run uses the same 307 questions; the test browser displays that complete bank.
 
 | Component | Count |
 |---|---:|
 | Static questions: one file per question in questions/ | 171 |
-| Generated reasoning/code: 23 families × 2 seeds × 2 variants | 92 |
+| Generated reasoning/code: 27 families × 2 seeds × 2 variants | 108 |
 | Interactive simulations: 5 families × 2 seeds × 2 variants | 20 |
 | Long-context: 2 families × 2 seeds × 8k/32k sizes | 8 |
 
@@ -16,6 +16,10 @@ Specialist translation tasks review semantic fidelity in CS↔EN, DE↔EN and CS
 New v10 tasks add robust portfolio ranking, observational versus interventional and counterfactual probabilities, SQL NULL and join cardinality, weighted minimal policy repair, vector-clock conflict frontiers, and Unicode/casefold revision handling. Every new family has independently derived oracle checks in [selftest_frontier.py](../selftest_frontier.py).
 
 V11 adds adaptive minimax policies versus fixed sensor subsets, worst-case graph failure and one-edge repair, conflict versus view serializability and commit safety, and all minimal evidence supports with contradiction-aware retraction. [selftest_adversarial.py](../selftest_adversarial.py) checks their answers with separate algorithms and rejects 942 corrupted answers. Canonical static JSON tasks explicitly reject prose and Markdown fences. Their full-pass criteria and requirement-balanced diagnostic weights remain separate.
+
+V12 adds bounded concurrent FIFO histories with all valid permutations, real-time precedence and all minimum deletion repairs, and finite epistemic models with simultaneous public announcements, nested knowledge, common-knowledge reachability and shortest counterexamples. Queue variants for each seed change exactly one recorded result. Every knowledge instance separates mutual from common knowledge and needs a counterexample of at least two links. [selftest_compositional.py](../selftest_compositional.py) derives answers from the emitted prompts using independent permutation and relation/distance algorithms and tests answer corruptions.
+
+V13 adds finite evidence dossiers with complete minimal supports/refutations, contradiction cores, minimum deletion repairs and canonical countermodels, and typed tool traces with reference validation, error precedence, stale versions and cached retries. Evidence labels distinguish uncertainty from inconsistency; repaired-world counts deduplicate worlds rather than voting over repairs. Each tool call receives equal diagnostic weight, and receipt fields depend on its correct status. Counts, balances and versions have explicit integer-literal contracts using validated exact `integer_paths`; Boolean/float/string substitutes fail. [selftest_evidence.py](../selftest_evidence.py) recomputes answers from the emitted prompts using set-based truth tables and an independent SQLite interpreter. Six transformed fixtures in each advanced-coding anchor check large exact integers, Unicode identifiers and nested values; both existing code oracles agree and the reference programs run against them in real subprocesses.
 
 Generated tasks include selective-report conditioning, bounded constraint search, minimal inconsistent sets, temporal policies, revised multihop evidence, reliability decisions, string parsers, dependency layers and transactional state. Fixed authoring seeds are 19 and 23, with two variants. Family identifiers group related instances for balanced scoring.
 
