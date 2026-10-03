@@ -1,0 +1,59 @@
+- id: AC2-04
+  category: Advanced Coding
+  prompt: |
+    Implement versioned_read(events, queries). Each event is [key,timestamp,value],
+        with a string key, integer timestamp, and JSON value. Events may arrive out of
+        timestamp order. A null value is a deletion tombstone. For each [key,time] query,
+        choose the event for that key with greatest timestamp <= time; when timestamps
+        tie, choose the LAST occurrence in the input events. Return its value, or None
+        if absent or tombstoned. A tombstone must not reveal an older value. Queries are
+        independent and output order matches query order. Support 2000 events/queries.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: versioned_read
+    args: [[], [[x, 0]]]
+    expected: [null]
+    relative: 0
+    tolerance: 0
+  - function: versioned_read
+    args: [[[k, 5, late], [k, 1, early], [k, 3, null]], [[k, 0], [k, 1], [k, 3], [k, 4], [k, 5]]]
+    expected: [null, early, null, null, late]
+    relative: 0
+    tolerance: 0
+  - function: versioned_read
+    args: [[[x, 2, a], [x, 2, null], [x, 1, old]], [[x, 2], [x, 1]]]
+    expected: [null, old]
+    relative: 0
+    tolerance: 0
+  - function: versioned_read
+    args: [[[a, -1, false], [b, 0, 0], [a, 2, []]], [[a, -1], [b, 0], [a, 2], [c, 99]]]
+    expected: [false, 0, [], null]
+    relative: 0
+    tolerance: 0
+  - function: versioned_read
+    args: [[[k, 3, a], [k, 3, b], [k, 3, c]], [[k, 3], [k, 2], [k, 9]]]
+    expected: [c, null, c]
+    relative: 0
+    tolerance: 0
+  - function: versioned_read
+    args: [[[a, 1, {x: [1, 2]}]], [[a, 1]]]
+    expected:
+    - x: [1, 2]
+    relative: 0
+    tolerance: 0
+  - function: versioned_read
+    args: [[], []]
+    expected: []
+    relative: 0
+    tolerance: 0
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Event-time reads with late data, tie resolution, and tombstones
+  max_tokens: 4096
+  metadata:
+    family: R8A-AC2-04
+    cohort: rigorous-v9
+    original_anchor_id: AC2-04

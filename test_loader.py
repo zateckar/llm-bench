@@ -28,6 +28,7 @@ suite bug.
 from __future__ import annotations
 
 import hashlib
+import math
 from pathlib import Path
 from typing import Any
 
@@ -44,17 +45,51 @@ from models import DIFFICULTY_WEIGHTS, Question
 # the questions.
 _YAML_LOADER = getattr(yaml, "CSafeLoader", None) if yaml else None
 
-# Evaluators whose scores carry meaningful partial credit get a lower default
-# bar; everything else must be fully correct. Individual questions may still
-# override this with an explicit `pass_threshold`.
+if yaml:
+
+    class UniqueKeyLoader(_YAML_LOADER or yaml.SafeLoader):
+        """Reject ambiguous YAML instead of silently replacing answer keys."""
+
+        def construct_mapping(self, node, deep=False):
+            self.flatten_mapping(node)
+            keys = set()
+            for key_node, _ in node.value:
+                key = self.construct_object(key_node, deep=deep)
+                try:
+                    duplicate = key in keys
+                    keys.add(key)
+                except TypeError as error:
+                    raise SuiteError("YAML mapping keys must be scalar") from error
+                if duplicate:
+                    raise SuiteError(
+                        f"Duplicate YAML key {key!r} at line {key_node.start_mark.line + 1}"
+                    )
+            return super().construct_mapping(node, deep=deep)
+
+
+# Full correctness is the default pass bar. Partial credit is diagnostic;
+# individual authoring fixtures may override this threshold explicitly.
 DEFAULT_PASS_THRESHOLD = 1.0
 
 KNOWN_FIELDS = {
-    "id", "category", "prompt", "evaluator", "expected", "system_prompt",
-    "criteria", "must_not", "min_criteria", "keywords",
-    "difficulty", "weight", "pass_threshold", "max_tokens",
-    "source", "description",
+    "id",
+    "category",
+    "prompt",
+    "evaluator",
+    "expected",
+    "system_prompt",
+    "criteria",
+    "must_not",
+    "min_criteria",
+    "keywords",
+    "difficulty",
+    "weight",
+    "pass_threshold",
+    "max_tokens",
+    "source",
+    "description",
     "rubric",
+    "metadata",
 }
 
 
@@ -68,8 +103,8 @@ def compute_test_suite_hash(tests_dir: str | Path = "tests") -> str:
     if not tests_path.exists():
         return ""
     hasher = hashlib.sha256()
-    for yaml_file in sorted(tests_path.glob("*.yaml")):
-        hasher.update(yaml_file.name.encode("utf-8"))
+    for yaml_file in sorted(tests_path.rglob("*.yaml")):
+        hasher.update(yaml_file.relative_to(tests_path).as_posix().encode("utf-8"))
         hasher.update(yaml_file.read_text(encoding="utf-8").encode("utf-8"))
     return hasher.hexdigest()[:16]
 
@@ -84,12 +119,13 @@ def load_yaml_tests(yaml_path: str | Path) -> list[Question]:
         raise FileNotFoundError(f"Test file not found: {path}")
 
     with open(path, "r", encoding="utf-8") as f:
-        data = yaml.load(f, Loader=_YAML_LOADER or yaml.SafeLoader)
+        try:
+            data = yaml.load(f, Loader=UniqueKeyLoader)
+        except (yaml.YAMLError, SuiteError) as error:
+            raise SuiteError(f"{path}: {error}") from error
 
     if not isinstance(data, list):
-        raise SuiteError(
-            f"{path.name}: expected a list of tests, got {type(data).__name__}"
-        )
+        raise SuiteError(f"{path.name}: expected a list of tests, got {type(data).__name__}")
 
     questions: list[Question] = []
     problems: list[str] = []
@@ -115,10 +151,7 @@ def load_yaml_tests(yaml_path: str | Path) -> list[Question]:
 
 def load_category(category_name: str, tests_dir: str | Path = "tests") -> list[Question]:
     """Load all questions belonging to a specific category."""
-    return [
-        q for q in load_all_tests(tests_dir)
-        if q.category.lower() == category_name.lower()
-    ]
+    return [q for q in load_all_tests(tests_dir) if q.category.lower() == category_name.lower()]
 
 
 def load_all_tests(tests_dir: str | Path = "tests") -> list[Question]:
@@ -131,7 +164,7 @@ def load_all_tests(tests_dir: str | Path = "tests") -> list[Question]:
     seen: dict[str, str] = {}
     problems: list[str] = []
 
-    for yaml_file in sorted(tests_path.glob("*.yaml")):
+    for yaml_file in sorted(tests_path.rglob("*.yaml")):
         file_questions = load_yaml_tests(yaml_file)
         for q in file_questions:
             if q.id in seen:
@@ -147,32 +180,6 @@ def load_all_tests(tests_dir: str | Path = "tests") -> list[Question]:
         raise SuiteError("\n".join(problems))
 
     return questions
-
-
-def load_profile_tests(
-    profile: str = "v6",
-    tests_dir: str | Path = "tests",
-    *,
-    split: str = "development",
-    variants: int = 2,
-) -> list[Question]:
-    """Load the frozen suite or an explicit hardening profile.
-
-    ``v6`` is the historical/default profile.  ``hardening`` appends the
-    deterministic H7 candidate bank and ``hardening-only`` loads that bank by
-    itself.  Keeping the profile choice explicit prevents an unfinished bank
-    from silently changing historical suite hashes.
-    """
-    if profile == "v6":
-        return load_all_tests(tests_dir)
-    if profile not in {"hardening", "hardening-only"}:
-        raise SuiteError(f"unknown quality profile: {profile!r}")
-    from hardening_cases import load_questions
-
-    hardening = load_questions(split=split, variants=variants)
-    if profile == "hardening-only":
-        return hardening
-    return load_all_tests(tests_dir) + hardening
 
 
 def _parse_question(item: Any, where: str) -> Question:
@@ -192,25 +199,20 @@ def _parse_question(item: Any, where: str) -> Question:
     test_id = str(raw_id).strip()
 
     prompt = item.get("prompt")
-    if not prompt or not str(prompt).strip():
+    if not isinstance(prompt, str) or not prompt.strip():
         raise SuiteError(f"{where} ({test_id}): missing 'prompt'")
 
     category = item.get("category")
-    if not category:
+    if not isinstance(category, str) or not category.strip():
         raise SuiteError(f"{where} ({test_id}): missing 'category'")
 
+    if sum(key in item for key in ("evaluator", "criteria", "keywords")) != 1:
+        raise SuiteError(f"{where} ({test_id}): choose exactly one evaluation declaration")
     if "criteria" in item:
-        if "evaluator" in item:
-            raise SuiteError(
-                f"{where} ({test_id}): use either 'criteria' shorthand or an explicit "
-                "'evaluator', not both"
-            )
         evaluator = "security_analysis"
         criteria = item.get("criteria")
         if not isinstance(criteria, list) or not criteria:
-            raise SuiteError(
-                f"{where} ({test_id}): 'criteria' must be a non-empty list"
-            )
+            raise SuiteError(f"{where} ({test_id}): 'criteria' must be a non-empty list")
         expected: Any = {
             "criteria": criteria,
             "must_not": item.get("must_not", []),
@@ -228,14 +230,10 @@ def _parse_question(item: Any, where: str) -> Question:
         evaluator = "contains_keywords"
         keywords = item.get("keywords")
         if not isinstance(keywords, list) or not keywords:
-            raise SuiteError(
-                f"{where} ({test_id}): 'keywords' must be a non-empty list"
-            )
+            raise SuiteError(f"{where} ({test_id}): 'keywords' must be a non-empty list")
         expected = keywords
     else:
-        raise SuiteError(
-            f"{where} ({test_id}): no 'evaluator', 'criteria' or 'keywords' field"
-        )
+        raise SuiteError(f"{where} ({test_id}): no 'evaluator', 'criteria' or 'keywords' field")
 
     if evaluator not in EVALUATORS:
         raise SuiteError(
@@ -256,27 +254,32 @@ def _parse_question(item: Any, where: str) -> Question:
     except (TypeError, ValueError):
         raise SuiteError(f"{where} ({test_id}): pass_threshold must be a number")
     if not 0.0 < threshold <= 1.0:
-        raise SuiteError(
-            f"{where} ({test_id}): pass_threshold must be in (0, 1], got {threshold}"
-        )
+        raise SuiteError(f"{where} ({test_id}): pass_threshold must be in (0, 1], got {threshold}")
 
     weight = item.get("weight")
     if weight is not None:
         try:
+            if isinstance(weight, bool):
+                raise ValueError()
             weight = float(weight)
         except (TypeError, ValueError):
             raise SuiteError(f"{where} ({test_id}): weight must be a number")
-        if weight <= 0:
+        if not math.isfinite(weight) or weight <= 0:
             raise SuiteError(f"{where} ({test_id}): weight must be positive")
 
     max_tokens = item.get("max_tokens")
     if max_tokens is not None:
         try:
+            if isinstance(max_tokens, bool) or str(int(max_tokens)) != str(max_tokens).strip():
+                raise ValueError()
             max_tokens = int(max_tokens)
         except (TypeError, ValueError):
             raise SuiteError(f"{where} ({test_id}): max_tokens must be an integer")
         if max_tokens <= 0:
             raise SuiteError(f"{where} ({test_id}): max_tokens must be positive")
+
+    if not isinstance(item.get("metadata", {}), dict):
+        raise SuiteError(f"{where} ({test_id}): metadata must be a mapping")
 
     rubric = item.get("rubric")
     if rubric is not None:
@@ -295,7 +298,13 @@ def _parse_question(item: Any, where: str) -> Question:
                 raise SuiteError(f"{where} ({test_id}): duplicate rubric id {criterion_id!r}")
             seen_rubric_ids.add(criterion_id)
             unknown_rubric = set(criterion) - {
-                "id", "dimension", "weight", "mandatory", "critical", "group", "depends_on"
+                "id",
+                "dimension",
+                "weight",
+                "mandatory",
+                "critical",
+                "group",
+                "depends_on",
             }
             if unknown_rubric:
                 raise SuiteError(
@@ -303,16 +312,16 @@ def _parse_question(item: Any, where: str) -> Question:
                 )
             if "weight" in criterion:
                 try:
+                    if isinstance(criterion["weight"], bool):
+                        raise ValueError()
                     criterion_weight = float(criterion["weight"])
                 except (TypeError, ValueError):
                     raise SuiteError(f"{where} ({test_id}): {label} weight must be a number")
-                if not (criterion_weight > 0):
+                if not math.isfinite(criterion_weight) or not (criterion_weight > 0):
                     raise SuiteError(f"{where} ({test_id}): {label} weight must be positive")
             for boolean_key in ("mandatory", "critical"):
                 if boolean_key in criterion and type(criterion[boolean_key]) is not bool:
-                    raise SuiteError(
-                        f"{where} ({test_id}): {label} {boolean_key} must be boolean"
-                    )
+                    raise SuiteError(f"{where} ({test_id}): {label} {boolean_key} must be boolean")
             if "depends_on" in criterion:
                 deps = criterion["depends_on"]
                 if not isinstance(deps, list) or any(not str(dep).strip() for dep in deps):
@@ -337,7 +346,9 @@ def _parse_question(item: Any, where: str) -> Question:
 
         def visit(criterion_id: str) -> None:
             if criterion_id in visiting:
-                raise SuiteError(f"{where} ({test_id}): rubric dependency cycle at {criterion_id!r}")
+                raise SuiteError(
+                    f"{where} ({test_id}): rubric dependency cycle at {criterion_id!r}"
+                )
             if criterion_id in visited:
                 return
             visiting.add(criterion_id)
@@ -363,4 +374,5 @@ def _parse_question(item: Any, where: str) -> Question:
         description=item.get("description"),
         rubric=rubric,
         max_tokens=max_tokens,
+        metadata=dict(item.get("metadata") or {}),
     )

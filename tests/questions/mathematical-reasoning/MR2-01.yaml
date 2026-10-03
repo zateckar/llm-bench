@@ -1,0 +1,29 @@
+- id: MR2-01
+  category: Mathematical Reasoning
+  prompt: |-
+    Consider eight-digit base-4 numbers (digits 0,1,2,3), with no leading zero
+    and no equal adjacent digits. Count those whose digit sum is 12, and among
+    those count the numbers divisible by 7 (interpreting the number in base 4).
+    Return JSON {"sum_12": ..., "also_divisible_by_7": ...} with integer counts.
+
+    Explicit JSON output contract (types only): {"sum_12": "number", "also_divisible_by_7": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      sum_12: 1129
+      also_divisible_by_7: 137
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Digit constraints jointly with modular arithmetic
+  max_tokens: 8192
+  metadata:
+    family: R8A-MR2-01
+    cohort: rigorous-v9
+    original_anchor_id: MR2-01
+  rubric:
+  - {id: 'json:sum_12', weight: 1.0, group: sum_12, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:also_divisible_by_7', weight: 1.0, group: also_divisible_by_7, mandatory: true, critical: false,
+    dimension: content}

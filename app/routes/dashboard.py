@@ -1,5 +1,7 @@
 """Dashboard route."""
 
+import json
+
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
@@ -65,7 +67,7 @@ async def dashboard(request: Request):
         last_run_categories = await fetch_all(
             """SELECT category,
                       COUNT(*) as total,
-                      SUM(request_ok) as scored,
+                      SUM(COALESCE(quality_scored, request_ok)) as scored,
                       SUM(passed) as passed,
                       AVG(CASE WHEN request_ok = 1 THEN score END) as avg_score
                FROM test_results WHERE run_id = ?
@@ -73,8 +75,20 @@ async def dashboard(request: Request):
             (last_run_id,),
         )
 
+    if recent_runs:
+        try:
+            quality = json.loads(recent_runs[0].get("quality_json") or "{}")
+        except (TypeError, ValueError):
+            quality = {}
+        if quality and quality.get("schema_version") == 3:
+            for category in last_run_categories:
+                summary = quality["summary"]["categories"].get(category["category"])
+                if summary:
+                    category["avg_score"] = summary["score"]
+
     return templates.TemplateResponse(
-        request, "dashboard.html",
+        request,
+        "dashboard.html",
         {
             "active_runs": active_runs,
             "recent_runs": recent_runs,

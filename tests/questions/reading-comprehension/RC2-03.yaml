@@ -1,0 +1,33 @@
+- id: RC2-03
+  category: Reading Comprehension
+  prompt: |-
+    Use only this fictional retention policy: standard records are deleted once
+    older than 30 days. Premium records instead use 90 days. A hold overrides
+    both and prevents deletion regardless of age. "Older than" is strict.
+    Records (id,age,premium,hold): (a,40,false,false),(b,40,true,false),
+    (c,95,true,false),(d,120,false,true),(e,30,false,false),(f,91,false,false).
+    Return JSON {"delete": sorted IDs eligible now, "retain": all other IDs sorted}.
+
+    Explicit JSON output contract (types only): {"delete": {"array_items": "string"}, "retain": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      delete: [a, c, f]
+      retain: [b, d, e]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: hard
+  source: challenge-v2
+  description: Policy exceptions and strict boundary interpretation
+  metadata:
+    family: R8A-RC2-03
+    cohort: rigorous-v9
+    original_anchor_id: RC2-03
+  rubric:
+  - {id: 'json:delete[0]', weight: 0.3333333333333333, group: delete, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:delete[1]', weight: 0.3333333333333333, group: delete, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:delete[2]', weight: 0.3333333333333333, group: delete, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:retain[0]', weight: 0.3333333333333333, group: retain, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:retain[1]', weight: 0.3333333333333333, group: retain, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:retain[2]', weight: 0.3333333333333333, group: retain, mandatory: true, critical: false, dimension: content}

@@ -1,0 +1,1361 @@
+- id: H5-CG-jsonl-01
+  category: Code Generation
+  prompt: |
+    Implement reconcile_jsonl(text, cutoff) in Python. Parse NDJSON in memory.
+    cutoff is a valid offset-aware datetime.fromisoformat string. Use zero-based physical
+    line numbers (str.splitlines); ignore blank lines. Invalid nonblank lines go into
+    invalid_lines. A valid row has EXACT keys id,version,at,deleted,amount: nonempty string
+    id, nonnegative int version (bool forbidden), bool deleted, offset-aware fromisoformat
+    string at, and finite Decimal-parseable STRING amount. Duplicate JSON keys are invalid.
+    Reject missing/extra keys, wrong types, nonfinite amounts or invalid datetimes even
+    on future rows. Inputs never contain finite amounts with absolute value above 10**14
+    or more than three decimal places. Ignore valid rows after cutoff. Select one row per id by greatest instant,
+    then version, then physical line number. Compare instants across offsets. A selected
+    tombstone suppresses the id; never resurrect older rows. For live rows round amount
+    *100 to integer cents using ROUND_HALF_UP (away from zero on ties). Return
+    {'live':[{'id':id,'cents':integer} sorted by id], 'invalid_lines':[ascending indices],
+    'total_cents':sum of live cents}. Do not use floats or mutate inputs. No file/network I/O.
+  evaluator: code_exec
+  expected:
+  - function: reconcile_jsonl
+    args: ['', '2026-01-02T00:00:00+00:00']
+    expected:
+      live: []
+      invalid_lines: []
+      total_cents: 0
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |2+
+
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live: []
+      invalid_lines: []
+      total_cents: 0
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args: [not-json, '2026-01-02T00:00:00+00:00']
+    expected:
+      live: []
+      invalid_lines: [0]
+      total_cents: 0
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args: ['{"id":"a","id":"b"}', '2026-01-02T00:00:00+00:00']
+    expected:
+      live: []
+      invalid_lines: [0]
+      total_cents: 0
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args: ['[]', '2026-01-02T00:00:00+00:00']
+    expected:
+      live: []
+      invalid_lines: [0]
+      total_cents: 0
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args: ['{"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "1.005"}',
+      '2026-01-02T00:00:00+00:00']
+    expected:
+      live:
+      - id: a
+        cents: 101
+      invalid_lines: []
+      total_cents: 101
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args: ['{"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-1.005"}',
+      '2026-01-02T00:00:00+00:00']
+    expected:
+      live:
+      - id: a
+        cents: -101
+      invalid_lines: []
+      total_cents: -101
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args: ['{"id": "a", "version": true, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "1.005"}',
+      '2026-01-02T00:00:00+00:00']
+    expected:
+      live: []
+      invalid_lines: [0]
+      total_cents: 0
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args: ['{"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "NaN"}', '2026-01-02T00:00:00+00:00']
+    expected:
+      live: []
+      invalid_lines: [0]
+      total_cents: 0
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args: ['{"id": "a", "version": 1, "at": "2026-01-01", "deleted": false, "amount": "1.005"}', '2026-01-02T00:00:00+00:00']
+    expected:
+      live: []
+      invalid_lines: [0]
+      total_cents: 0
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args: ['{"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "1.005", "extra":
+        1}', '2026-01-02T00:00:00+00:00']
+    expected:
+      live: []
+      invalid_lines: [0]
+      total_cents: 0
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "1.005"}
+      {"id": "a", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "1.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live: []
+      invalid_lines: []
+      total_cents: 0
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "a", "version": 1, "at": "2026-01-02T01:00:00+02:00", "deleted": false, "amount": "3.33"}
+      {"id": "a", "version": 1, "at": "2026-01-01T23:30:00+00:00", "deleted": false, "amount": "4.44"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: 444
+      invalid_lines: []
+      total_cents: 444
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "c", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-21.005"}
+      {"id": "b", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "49.005"}
+      {"id": "d", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-47.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-22.005"}
+      {"id": "a", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-33.005"}
+      {"id": "b", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "30.005"}
+      {"id": "c", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "24.005"}
+      {"id": "a", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-41.005"}
+      {"id": "b", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-34.005"}
+      {"id": "a", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-43.005"}
+      {"id": "c", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-48.005"}
+      {broken
+      {"id": "c", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "7.005"}
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "5.005"}
+      {"id": "d", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-36.005"}
+
+      {"id": "b", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-28.005"}
+      {"id": "b", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-25.005"}
+      {"id": "a", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-2.005"}
+      {"id": "d", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "34.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: b
+        cents: 3001
+      invalid_lines: [11]
+      total_cents: 3001
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "d", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-41.005"}
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-1.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-32.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-34.005"}
+      {"id": "b", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-5.005"}
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-2.005"}
+      {"id": "b", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "6.005"}
+      {broken
+      {"id": "c", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "32.005"}
+      {"id": "d", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-50.005"}
+      {"id": "c", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-18.005"}
+      {"id": "c", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "38.005"}
+      {"id": "b", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "3.005"}
+
+      {"id": "b", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-3.005"}
+      {"id": "c", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-11.005"}
+      {"id": "c", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-34.005"}
+      {"id": "c", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-23.005"}
+      {"id": "a", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "16.005"}
+      {"id": "c", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-14.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: b
+        cents: -301
+      - id: c
+        cents: -1101
+      - id: d
+        cents: -201
+      invalid_lines: [7]
+      total_cents: -1603
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "d", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "27.005"}
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "49.005"}
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-40.005"}
+      {"id": "a", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-1.005"}
+      {"id": "a", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "30.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-27.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "3.005"}
+      {"id": "b", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-47.005"}
+      {"id": "a", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-34.005"}
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "17.005"}
+      {"id": "a", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-38.005"}
+      {"id": "a", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "5.005"}
+
+      {broken
+      {"id": "d", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "50.005"}
+      {"id": "b", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "39.005"}
+      {"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "15.005"}
+      {"id": "b", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "42.005"}
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "28.005"}
+      {"id": "b", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-28.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: 501
+      - id: b
+        cents: -2801
+      invalid_lines: [13]
+      total_cents: -2300
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "b", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "50.005"}
+
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "20.005"}
+      {"id": "a", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "32.005"}
+      {"id": "b", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-17.005"}
+      {"id": "d", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "29.005"}
+      {"id": "d", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "24.005"}
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-24.005"}
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "33.005"}
+      {"id": "b", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-7.005"}
+      {"id": "a", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-27.005"}
+      {"id": "a", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "12.005"}
+      {"id": "b", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-49.005"}
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "21.005"}
+      {"id": "c", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "26.005"}
+      {"id": "b", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "7.005"}
+      {"id": "d", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-23.005"}
+      {"id": "a", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-6.005"}
+      {broken
+      {"id": "b", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-21.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: -601
+      - id: b
+        cents: -701
+      - id: c
+        cents: 2601
+      invalid_lines: [18]
+      total_cents: 1299
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "a", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-12.005"}
+      {"id": "c", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-8.005"}
+      {"id": "c", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "42.005"}
+      {"id": "a", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-41.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-46.005"}
+      {broken
+      {"id": "a", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-49.005"}
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "39.005"}
+      {"id": "a", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "45.005"}
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "18.005"}
+      {"id": "b", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-46.005"}
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "15.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-21.005"}
+      {"id": "c", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "6.005"}
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "42.005"}
+      {"id": "a", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "31.005"}
+      {"id": "d", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-34.005"}
+
+      {"id": "a", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "39.005"}
+      {"id": "a", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "44.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: 3101
+      - id: c
+        cents: 4201
+      invalid_lines: [5]
+      total_cents: 7302
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "42.005"}
+      {"id": "d", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-33.005"}
+      {"id": "d", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "19.005"}
+      {"id": "d", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-12.005"}
+
+      {"id": "a", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-50.005"}
+      {broken
+      {"id": "b", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "25.005"}
+      {"id": "c", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-17.005"}
+      {"id": "a", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "40.005"}
+      {"id": "c", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "14.005"}
+      {"id": "d", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "3.005"}
+      {"id": "c", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-39.005"}
+      {"id": "c", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "20.005"}
+      {"id": "b", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-32.005"}
+      {"id": "c", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-38.005"}
+      {"id": "b", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "20.005"}
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "43.005"}
+      {"id": "c", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "50.005"}
+      {"id": "d", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-11.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: c
+        cents: 4201
+      - id: d
+        cents: 4301
+      invalid_lines: [6]
+      total_cents: 8502
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "32.005"}
+      {"id": "b", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-42.005"}
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "31.005"}
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-39.005"}
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "0.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-13.005"}
+      {"id": "a", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-27.005"}
+      {"id": "b", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "4.005"}
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-15.005"}
+      {"id": "b", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-21.005"}
+
+      {"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-9.005"}
+      {broken
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "35.005"}
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "19.005"}
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-36.005"}
+      {"id": "b", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "44.005"}
+      {"id": "d", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-36.005"}
+      {"id": "a", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-22.005"}
+      {"id": "b", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-46.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: c
+        cents: -1501
+      - id: d
+        cents: -1301
+      invalid_lines: [12]
+      total_cents: -2802
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {broken
+      {"id": "a", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "39.005"}
+      {"id": "b", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "6.005"}
+      {"id": "c", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-30.005"}
+      {"id": "b", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "12.005"}
+      {"id": "a", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-10.005"}
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "39.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "4.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "0.005"}
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-1.005"}
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "25.005"}
+      {"id": "d", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-10.005"}
+      {"id": "c", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "45.005"}
+      {"id": "c", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "1.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-17.005"}
+      {"id": "d", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "20.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-22.005"}
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-19.005"}
+
+      {"id": "c", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "49.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: 3901
+      - id: b
+        cents: 601
+      - id: c
+        cents: -1901
+      invalid_lines: [0]
+      total_cents: 2601
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {broken
+      {"id": "d", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "16.005"}
+      {"id": "a", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-43.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-4.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "39.005"}
+      {"id": "b", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-42.005"}
+      {"id": "c", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "8.005"}
+      {"id": "c", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "24.005"}
+      {"id": "d", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "34.005"}
+      {"id": "d", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-11.005"}
+      {"id": "d", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-25.005"}
+      {"id": "b", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "48.005"}
+      {"id": "b", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "12.005"}
+      {"id": "a", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "0.005"}
+
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "13.005"}
+      {"id": "a", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-48.005"}
+      {"id": "c", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "11.005"}
+      {"id": "b", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "49.005"}
+      {"id": "d", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "18.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: c
+        cents: 1301
+      - id: d
+        cents: -2501
+      invalid_lines: [0]
+      total_cents: -1200
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "c", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-5.005"}
+      {"id": "d", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-23.005"}
+      {broken
+      {"id": "d", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "32.005"}
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-46.005"}
+
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-42.005"}
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "6.005"}
+      {"id": "d", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-7.005"}
+      {"id": "a", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-6.005"}
+      {"id": "c", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-50.005"}
+      {"id": "b", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-36.005"}
+      {"id": "c", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-31.005"}
+      {"id": "d", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "40.005"}
+      {"id": "b", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "28.005"}
+      {"id": "c", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-18.005"}
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "44.005"}
+      {"id": "c", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "9.005"}
+      {"id": "d", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "41.005"}
+      {"id": "a", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "18.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: c
+        cents: -501
+      - id: d
+        cents: -701
+      invalid_lines: [2]
+      total_cents: -1202
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "d", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "19.005"}
+      {"id": "b", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-28.005"}
+      {"id": "b", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-25.005"}
+      {"id": "a", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "39.005"}
+      {broken
+      {"id": "a", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-32.005"}
+      {"id": "b", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-32.005"}
+      {"id": "c", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "36.005"}
+      {"id": "a", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "8.005"}
+      {"id": "b", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "2.005"}
+      {"id": "d", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-13.005"}
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-4.005"}
+      {"id": "c", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-33.005"}
+      {"id": "b", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "48.005"}
+      {"id": "a", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-42.005"}
+
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-21.005"}
+      {"id": "d", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "9.005"}
+      {"id": "a", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "22.005"}
+      {"id": "a", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-27.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: -3201
+      - id: b
+        cents: -2501
+      - id: d
+        cents: 1901
+      invalid_lines: [4]
+      total_cents: -3801
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-11.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-34.005"}
+      {"id": "c", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-5.005"}
+      {"id": "b", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "49.005"}
+      {"id": "c", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-50.005"}
+      {"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "27.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-2.005"}
+      {"id": "b", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "29.005"}
+      {broken
+      {"id": "a", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "29.005"}
+      {"id": "d", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-4.005"}
+      {"id": "c", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-27.005"}
+      {"id": "c", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "46.005"}
+
+      {"id": "d", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-17.005"}
+      {"id": "a", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "17.005"}
+      {"id": "d", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "25.005"}
+      {"id": "b", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-36.005"}
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "27.005"}
+      {"id": "b", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "33.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: 2701
+      - id: b
+        cents: 3301
+      invalid_lines: [8]
+      total_cents: 6002
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |2-
+
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "19.005"}
+      {"id": "a", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "2.005"}
+      {"id": "c", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "38.005"}
+      {"id": "a", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-9.005"}
+      {"id": "c", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "48.005"}
+      {"id": "d", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-5.005"}
+      {"id": "c", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "12.005"}
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-49.005"}
+      {"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-32.005"}
+      {"id": "d", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-2.005"}
+      {"id": "d", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "49.005"}
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-49.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "33.005"}
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-21.005"}
+      {broken
+      {"id": "b", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "45.005"}
+      {"id": "a", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "39.005"}
+      {"id": "c", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "0.005"}
+      {"id": "c", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "17.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: d
+        cents: 4901
+      invalid_lines: [15]
+      total_cents: 4901
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "c", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "18.005"}
+      {"id": "a", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-20.005"}
+      {"id": "a", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "47.005"}
+      {"id": "a", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "24.005"}
+      {"id": "c", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-27.005"}
+
+      {"id": "c", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "25.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-28.005"}
+      {"id": "c", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-36.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "13.005"}
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "14.005"}
+      {broken
+      {"id": "d", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-13.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "11.005"}
+      {"id": "b", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-3.005"}
+      {"id": "a", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "45.005"}
+      {"id": "a", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-16.005"}
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-2.005"}
+      {"id": "b", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "48.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "10.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: 4701
+      - id: b
+        cents: 4801
+      - id: c
+        cents: -2701
+      - id: d
+        cents: 1001
+      invalid_lines: [11]
+      total_cents: 7802
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "b", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-35.005"}
+      {"id": "a", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-26.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-31.005"}
+      {"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-22.005"}
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "40.005"}
+      {"id": "b", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "42.005"}
+      {"id": "c", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-45.005"}
+      {"id": "d", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "27.005"}
+      {"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "6.005"}
+      {"id": "d", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-35.005"}
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-1.005"}
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-25.005"}
+      {"id": "c", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-17.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-42.005"}
+      {broken
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "25.005"}
+      {"id": "c", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "41.005"}
+      {"id": "b", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "17.005"}
+
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-49.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: 601
+      invalid_lines: [14]
+      total_cents: 601
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "c", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-27.005"}
+      {"id": "b", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-32.005"}
+      {"id": "b", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-41.005"}
+      {"id": "c", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "25.005"}
+      {"id": "a", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "27.005"}
+      {"id": "c", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "36.005"}
+      {"id": "a", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "39.005"}
+      {"id": "c", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "3.005"}
+      {"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "24.005"}
+      {broken
+      {"id": "c", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "46.005"}
+      {"id": "c", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "24.005"}
+      {"id": "d", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-18.005"}
+      {"id": "b", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "6.005"}
+
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "8.005"}
+      {"id": "c", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "22.005"}
+      {"id": "b", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-42.005"}
+      {"id": "d", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "40.005"}
+      {"id": "a", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "24.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: c
+        cents: 2501
+      invalid_lines: [9]
+      total_cents: 2501
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "a", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "50.005"}
+      {"id": "a", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "14.005"}
+      {"id": "b", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "26.005"}
+      {"id": "b", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-3.005"}
+      {"id": "d", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "35.005"}
+      {"id": "b", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-13.005"}
+      {"id": "b", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "14.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "47.005"}
+
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "7.005"}
+      {"id": "c", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "32.005"}
+      {"id": "a", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "0.005"}
+      {"id": "c", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-23.005"}
+      {"id": "d", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-13.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "47.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-16.005"}
+      {"id": "b", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "28.005"}
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-4.005"}
+      {broken
+      {"id": "b", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-21.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: c
+        cents: 3201
+      - id: d
+        cents: 701
+      invalid_lines: [18]
+      total_cents: 3902
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "a", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "34.005"}
+      {"id": "a", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-24.005"}
+      {"id": "c", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "10.005"}
+      {"id": "c", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-8.005"}
+      {"id": "c", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "15.005"}
+      {"id": "a", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-44.005"}
+      {"id": "a", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "44.005"}
+
+      {"id": "b", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "42.005"}
+      {"id": "c", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "23.005"}
+      {"id": "c", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-21.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-47.005"}
+      {"id": "b", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "9.005"}
+      {broken
+      {"id": "b", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "27.005"}
+      {"id": "c", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "27.005"}
+      {"id": "b", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-12.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-36.005"}
+      {"id": "b", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "43.005"}
+      {"id": "c", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "31.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: -4401
+      - id: b
+        cents: 4201
+      invalid_lines: [13]
+      total_cents: -200
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "c", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "37.005"}
+      {"id": "c", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "20.005"}
+
+      {"id": "b", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-4.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "20.005"}
+      {"id": "d", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-6.005"}
+      {"id": "a", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "11.005"}
+      {"id": "b", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-22.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "27.005"}
+      {"id": "a", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-36.005"}
+      {"id": "a", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "30.005"}
+      {"id": "b", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "9.005"}
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-22.005"}
+      {"id": "d", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-9.005"}
+      {broken
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "31.005"}
+      {"id": "d", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "44.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-27.005"}
+      {"id": "a", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "3.005"}
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "48.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: -3601
+      - id: d
+        cents: -601
+      invalid_lines: [14]
+      total_cents: -4202
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-44.005"}
+      {broken
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "0.005"}
+      {"id": "b", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-3.005"}
+      {"id": "b", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-24.005"}
+      {"id": "a", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "14.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "8.005"}
+      {"id": "d", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "28.005"}
+      {"id": "c", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "29.005"}
+      {"id": "b", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "43.005"}
+
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-48.005"}
+      {"id": "c", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-15.005"}
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "24.005"}
+      {"id": "b", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "28.005"}
+      {"id": "a", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "42.005"}
+      {"id": "b", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-14.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-28.005"}
+      {"id": "a", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "2.005"}
+      {"id": "b", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "37.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: 201
+      - id: b
+        cents: -301
+      invalid_lines: [1]
+      total_cents: -100
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-25.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "5.005"}
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "3.005"}
+      {"id": "c", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "38.005"}
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-46.005"}
+      {"id": "d", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-11.005"}
+      {"id": "a", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "34.005"}
+      {"id": "c", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "40.005"}
+      {"id": "a", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-15.005"}
+      {"id": "d", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-16.005"}
+      {"id": "d", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-2.005"}
+      {broken
+      {"id": "c", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "49.005"}
+      {"id": "b", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "4.005"}
+      {"id": "b", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-16.005"}
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-3.005"}
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-29.005"}
+      {"id": "d", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "44.005"}
+
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "1.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: b
+        cents: 401
+      - id: c
+        cents: 4001
+      - id: d
+        cents: 301
+      invalid_lines: [11]
+      total_cents: 4703
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-23.005"}
+      {"id": "d", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "32.005"}
+      {"id": "b", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-23.005"}
+      {"id": "a", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "17.005"}
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-17.005"}
+      {"id": "a", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-9.005"}
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-42.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "23.005"}
+      {"id": "b", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-46.005"}
+      {"id": "b", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "45.005"}
+      {"id": "b", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-5.005"}
+      {"id": "c", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-14.005"}
+      {"id": "d", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "33.005"}
+      {"id": "a", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "34.005"}
+      {"id": "b", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-14.005"}
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-44.005"}
+      {"id": "a", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-35.005"}
+
+      {broken
+      {"id": "c", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-50.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: 1701
+      - id: b
+        cents: -501
+      - id: d
+        cents: 2301
+      invalid_lines: [18]
+      total_cents: 3501
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "b", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "32.005"}
+      {"id": "a", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-37.005"}
+      {broken
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-20.005"}
+      {"id": "c", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "32.005"}
+      {"id": "c", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "14.005"}
+      {"id": "b", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-49.005"}
+      {"id": "a", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-14.005"}
+      {"id": "c", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-44.005"}
+      {"id": "b", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "8.005"}
+      {"id": "b", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "20.005"}
+      {"id": "d", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-28.005"}
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "5.005"}
+      {"id": "b", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "34.005"}
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "37.005"}
+
+      {"id": "c", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-44.005"}
+      {"id": "c", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "8.005"}
+      {"id": "c", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "24.005"}
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "7.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: -1401
+      - id: c
+        cents: 2401
+      - id: d
+        cents: -2801
+      invalid_lines: [2]
+      total_cents: -1801
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "32.005"}
+      {"id": "d", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-16.005"}
+      {"id": "c", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-30.005"}
+      {broken
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-38.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "43.005"}
+      {"id": "b", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "44.005"}
+      {"id": "c", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-28.005"}
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "19.005"}
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-34.005"}
+      {"id": "a", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-27.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-27.005"}
+      {"id": "c", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-29.005"}
+      {"id": "d", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-45.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-15.005"}
+      {"id": "c", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-37.005"}
+
+      {"id": "b", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-24.005"}
+      {"id": "d", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "18.005"}
+      {"id": "c", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-31.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: c
+        cents: -3001
+      - id: d
+        cents: -3801
+      invalid_lines: [3]
+      total_cents: -6802
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "a", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-39.005"}
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "29.005"}
+      {"id": "a", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-29.005"}
+      {"id": "b", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "40.005"}
+      {"id": "a", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "48.005"}
+      {"id": "a", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-19.005"}
+      {"id": "c", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "4.005"}
+      {"id": "d", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-5.005"}
+      {"id": "d", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "45.005"}
+      {"id": "a", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-16.005"}
+
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "47.005"}
+      {"id": "a", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-9.005"}
+      {"id": "d", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "25.005"}
+      {"id": "c", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "31.005"}
+      {broken
+      {"id": "d", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-14.005"}
+      {"id": "a", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "25.005"}
+      {"id": "c", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "30.005"}
+      {"id": "d", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "48.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: 2501
+      - id: b
+        cents: 4001
+      - id: c
+        cents: 3101
+      invalid_lines: [15]
+      total_cents: 9603
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "b", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "17.005"}
+      {"id": "b", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-4.005"}
+      {"id": "a", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-32.005"}
+      {"id": "c", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "46.005"}
+      {"id": "b", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "13.005"}
+      {"id": "b", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "2.005"}
+
+      {"id": "b", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-10.005"}
+      {"id": "b", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-47.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-32.005"}
+      {"id": "a", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "4.005"}
+      {"id": "a", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "27.005"}
+      {broken
+      {"id": "c", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-3.005"}
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "25.005"}
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "21.005"}
+      {"id": "b", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "37.005"}
+      {"id": "b", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "41.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "33.005"}
+      {"id": "c", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-46.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: b
+        cents: 1301
+      invalid_lines: [12]
+      total_cents: 1301
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "42.005"}
+
+      {"id": "d", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "22.005"}
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-26.005"}
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-27.005"}
+      {"id": "d", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "38.005"}
+      {"id": "d", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "1.005"}
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-45.005"}
+      {"id": "a", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-45.005"}
+      {"id": "b", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-19.005"}
+      {"id": "c", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-19.005"}
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "32.005"}
+      {"id": "b", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-24.005"}
+      {"id": "c", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-41.005"}
+      {"id": "b", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-17.005"}
+      {"id": "c", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-28.005"}
+      {broken
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "30.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "37.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "28.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: b
+        cents: -1901
+      - id: c
+        cents: 3201
+      - id: d
+        cents: 101
+      invalid_lines: [16]
+      total_cents: 1401
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "a", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-49.005"}
+      {"id": "d", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "46.005"}
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-6.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "43.005"}
+      {"id": "a", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-20.005"}
+      {broken
+      {"id": "a", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-41.005"}
+      {"id": "b", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-42.005"}
+      {"id": "b", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "48.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-44.005"}
+
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-47.005"}
+      {"id": "c", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-44.005"}
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "39.005"}
+      {"id": "d", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-17.005"}
+      {"id": "a", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-50.005"}
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-15.005"}
+      {"id": "c", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-8.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "11.005"}
+      {"id": "d", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "27.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: -4901
+      - id: b
+        cents: 4801
+      - id: c
+        cents: 3901
+      invalid_lines: [5]
+      total_cents: 3801
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {broken
+      {"id": "b", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "21.005"}
+      {"id": "b", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-30.005"}
+      {"id": "a", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-25.005"}
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "36.005"}
+      {"id": "d", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-24.005"}
+      {"id": "a", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "13.005"}
+
+      {"id": "b", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "38.005"}
+      {"id": "b", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-39.005"}
+      {"id": "d", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "16.005"}
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "44.005"}
+      {"id": "c", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "35.005"}
+      {"id": "d", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "26.005"}
+      {"id": "c", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-37.005"}
+      {"id": "d", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "8.005"}
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "25.005"}
+      {"id": "c", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "21.005"}
+      {"id": "a", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "17.005"}
+      {"id": "d", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "34.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: 1701
+      - id: b
+        cents: 2101
+      - id: c
+        cents: 4401
+      - id: d
+        cents: 3401
+      invalid_lines: [0]
+      total_cents: 11604
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "a", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "21.005"}
+      {"id": "c", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-36.005"}
+      {"id": "a", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "16.005"}
+      {"id": "a", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "20.005"}
+      {"id": "c", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "5.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-8.005"}
+      {"id": "c", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-44.005"}
+      {"id": "d", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-32.005"}
+      {"id": "b", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "38.005"}
+      {"id": "d", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "9.005"}
+      {"id": "d", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "49.005"}
+
+      {"id": "b", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "5.005"}
+      {"id": "a", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "48.005"}
+      {"id": "b", "version": 3, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-9.005"}
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-16.005"}
+      {"id": "a", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "1.005"}
+      {broken
+      {"id": "d", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "2.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "9.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: d
+        cents: -3201
+      invalid_lines: [17]
+      total_cents: -3201
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-9.005"}
+      {"id": "b", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-39.005"}
+      {"id": "d", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-41.005"}
+      {"id": "b", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "46.005"}
+      {"id": "a", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-17.005"}
+      {"id": "a", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-12.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "18.005"}
+      {"id": "b", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-37.005"}
+      {broken
+      {"id": "d", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-42.005"}
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "27.005"}
+      {"id": "d", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-38.005"}
+      {"id": "a", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-33.005"}
+      {"id": "a", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-47.005"}
+      {"id": "a", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-3.005"}
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "1.005"}
+
+      {"id": "c", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "8.005"}
+      {"id": "a", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "19.005"}
+      {"id": "d", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-24.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: -301
+      - id: b
+        cents: -3701
+      - id: d
+        cents: -2401
+      invalid_lines: [8]
+      total_cents: -6403
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "c", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-26.005"}
+      {"id": "a", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-30.005"}
+      {"id": "b", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-36.005"}
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "50.005"}
+      {"id": "b", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "2.005"}
+      {"id": "d", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-48.005"}
+
+      {"id": "a", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "12.005"}
+      {"id": "b", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "0.005"}
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-17.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "22.005"}
+      {"id": "a", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-16.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-22.005"}
+      {"id": "b", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "33.005"}
+      {broken
+      {"id": "d", "version": 2, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-40.005"}
+      {"id": "b", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-19.005"}
+      {"id": "c", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-47.005"}
+      {"id": "a", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-37.005"}
+      {"id": "b", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "49.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: 1201
+      - id: b
+        cents: -1901
+      - id: d
+        cents: -2201
+      invalid_lines: [14]
+      total_cents: -2901
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "c", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "26.005"}
+      {"id": "c", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "30.005"}
+      {broken
+      {"id": "d", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "21.005"}
+      {"id": "c", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "17.005"}
+
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-36.005"}
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-44.005"}
+      {"id": "b", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "0.005"}
+      {"id": "c", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "13.005"}
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-44.005"}
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-22.005"}
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-27.005"}
+      {"id": "a", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "18.005"}
+      {"id": "c", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-44.005"}
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-5.005"}
+      {"id": "d", "version": 0, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "24.005"}
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-12.005"}
+      {"id": "a", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-4.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-22.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: -401
+      - id: c
+        cents: -1201
+      - id: d
+        cents: 2101
+      invalid_lines: [2]
+      total_cents: 499
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "a", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-35.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-47.005"}
+      {"id": "b", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-23.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-37.005"}
+      {"id": "a", "version": 4, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-4.005"}
+      {"id": "b", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "7.005"}
+      {"id": "b", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "24.005"}
+      {"id": "a", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "-46.005"}
+      {"id": "b", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "27.005"}
+      {"id": "d", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-44.005"}
+      {"id": "b", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "-3.005"}
+      {broken
+      {"id": "d", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "29.005"}
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-12.005"}
+      {"id": "d", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-1.005"}
+      {"id": "a", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-11.005"}
+      {"id": "a", "version": 4, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "9.005"}
+
+      {"id": "c", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-40.005"}
+      {"id": "d", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-18.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live:
+      - id: a
+        cents: -401
+      - id: b
+        cents: -301
+      invalid_lines: [11]
+      total_cents: -702
+    relative: 0
+    tolerance: 0
+  - function: reconcile_jsonl
+    args:
+    - |-
+      {"id": "a", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "19.005"}
+      {"id": "d", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "34.005"}
+      {broken
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "-22.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "15.005"}
+      {"id": "a", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "22.005"}
+      {"id": "a", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-14.005"}
+      {"id": "d", "version": 1, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "22.005"}
+      {"id": "a", "version": 1, "at": "2026-01-03T12:00:00+00:00", "deleted": true, "amount": "-48.005"}
+      {"id": "c", "version": 1, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "36.005"}
+      {"id": "d", "version": 0, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "11.005"}
+      {"id": "d", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": true, "amount": "21.005"}
+      {"id": "d", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "-26.005"}
+      {"id": "b", "version": 2, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "11.005"}
+      {"id": "c", "version": 3, "at": "2026-01-01T12:00:00+00:00", "deleted": true, "amount": "12.005"}
+      {"id": "d", "version": 0, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "-44.005"}
+      {"id": "c", "version": 3, "at": "2026-01-03T12:00:00+00:00", "deleted": false, "amount": "24.005"}
+      {"id": "c", "version": 2, "at": "2026-01-01T12:00:00+00:00", "deleted": false, "amount": "5.005"}
+
+      {"id": "d", "version": 4, "at": "2026-01-02T12:00:00+00:00", "deleted": false, "amount": "35.005"}
+    - '2026-01-02T00:00:00+00:00'
+    expected:
+      live: []
+      invalid_lines: [2]
+      total_cents: 0
+    relative: 0
+    tolerance: 0
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original ceiling-v5; BigCodeBench: https://github.com/bigcode-project/bigcodebench (composed library
+    use and executable tests design only)'
+  max_tokens: 16384
+  metadata:
+    family: R8A-H5-CG-jsonl
+    cohort: rigorous-v9
+    original_anchor_id: H5-CG-jsonl-01

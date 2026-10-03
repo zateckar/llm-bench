@@ -1,0 +1,61 @@
+- id: S6-reshape-01
+  category: Instruction Following
+  prompt: |-
+    Apply EVERY stage in order to this five-row, six-column integer matrix: [[-6,4,-4,7,-6,-1],[-6,-4,6,6,-1,7],[6,-1,4,7,2,2],[4,-7,-1,-8,-9,-4],[8,0,8,7,-7,7]]
+    1. Rotate the entire matrix 90 degrees clockwise, producing six rows and five columns.
+    2. Traverse rotated rows from top to bottom; rows with even zero-based index left-to-right,
+       odd rows right-to-left. This produces one flat sequence of 30 values.
+    3. Using indices in that ORIGINAL flat sequence, drop positions i where i modulo 4 is 1.
+       Also drop values divisible by 3. Do not renumber until both filters are complete.
+    4. Renumber survivors j from zero. Starting accumulator at zero, add survivor when j is
+       even, subtract it when j is odd. After EACH operation emit accumulator modulo 7 as a
+       number 0..6 (Euclidean remainder even for a negative accumulator).
+    5. Run-length encode consecutive equal emitted numbers as [number,count]. Do not merge
+       equal numbers separated by other numbers. checksum is sum((j+1)*emitted[j]).
+    Return runs, kept (number of survivors), and checksum. Output numbers, not strings.
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above; do not add prose.
+    Explicit JSON output contract (types only): {"runs": {"array_items": {"array_items": "number"}}, "kept": "number", "checksum": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      runs: [[1, 1], [5, 1], [4, 2], [5, 1], [6, 1], [3, 1], [0, 2], [1, 3], [3, 1], [4, 2], [2, 1], [5, 1]]
+      kept: 17
+      checksum: 426
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/allenai/IFBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  max_tokens: 65536
+  metadata:
+    family: R8A-S6-reshape
+    cohort: rigorous-v9
+    original_anchor_id: S6-reshape-01
+  rubric:
+  - {id: 'json:runs[0][0]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[0][1]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[1][0]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[1][1]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[2][0]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[2][1]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[3][0]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[3][1]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[4][0]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[4][1]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[5][0]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[5][1]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[6][0]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[6][1]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[7][0]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[7][1]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[8][0]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[8][1]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[9][0]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[9][1]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[10][0]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[10][1]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[11][0]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:runs[11][1]', weight: 0.041666666666666664, group: runs, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:kept', weight: 1.0, group: kept, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:checksum', weight: 1.0, group: checksum, mandatory: true, critical: false, dimension: content}

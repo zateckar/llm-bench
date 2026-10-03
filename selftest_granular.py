@@ -12,7 +12,6 @@ from llm_client import ClientConfig
 from models import Question, RequestMetrics, TokenUsage
 from quality_execution import score_response
 from quality_report import make_report, paired_comparison, result_record
-from quality_suite import QualityConfig
 from test_loader import SuiteError, load_yaml_tests
 
 
@@ -70,10 +69,12 @@ class GranularEvaluationTests(unittest.TestCase):
         result = score(question, '{"phenotypes": [1, 2, 3]}')
 
         self.assertFalse(result.passed)
-        children = [c for c in result.evaluation.criteria if c.criterion_id.startswith("json:phenotypes.")]
+        children = [
+            c for c in result.evaluation.criteria if c.criterion_id.startswith("json:phenotypes.")
+        ]
         self.assertTrue(children)
         self.assertTrue(all(c.status == "not_evaluated" for c in children))
-        self.assertIsNone(result.evaluation.criterion_achievement)
+        self.assertEqual(result.evaluation.criterion_achievement, 0.0)
 
     def test_json_missing_parent_blocks_descendant_content_credit(self):
         question = Question(
@@ -164,15 +165,14 @@ class GranularEvaluationTests(unittest.TestCase):
         result = score(question, "yes")
         report = make_report(
             [result],
-            QualityConfig(),
             ClientConfig("https://example.invalid", "unused", "model"),
         )
 
-        self.assertEqual(report["schema_version"], 2)
+        self.assertEqual(report["schema_version"], 3)
         self.assertEqual(result_record(result)["evaluation"]["criterion_count"], 1)
         old = json.loads(json.dumps(report))
         old["schema_version"] = 1
-        self.assertTrue(paired_comparison(old, report)["compatible"])
+        self.assertFalse(paired_comparison(old, report)["compatible"])
 
     def test_rubric_contract_is_validated_and_applied(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1,0 +1,47 @@
+- id: SP1-FI-02
+  category: Finances
+  prompt: |-
+    Fictional executable FX quotes, not current market prices. Czech treasury receives
+    EUR 800000 and pays EUR 300000 on the SAME date, and separately owes CZK 5000000.
+    Net the EUR flows first. Hedge exactly 60% of the resulting EUR exposure with a
+    deliverable forward at 24.80 CZK per EUR, no fees. Convert the remaining EUR at
+    scenario spot 24.00 or 26.00 CZK per EUR. All settlement is simultaneous.
+    Return {net_EUR,forward_action:"buy_EUR"|"sell_EUR",forward_EUR,
+    unhedged_EUR,net_CZK_at_24,net_CZK_at_26,scenario_spread_CZK,
+    reference_rate_is_executable:bool}. Last field: does an informational central-bank
+    reference rate alone guarantee an executable dealing price? Do not round intermediates.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"net_EUR": "number", "forward_action": "string", "forward_EUR": "number", "unhedged_EUR": "number", "net_CZK_at_24": "number", "net_CZK_at_26": "number", "scenario_spread_CZK": "number", "reference_rate_is_executable": "boolean"}
+  evaluator: json_match
+  expected:
+    value:
+      net_EUR: 500000
+      forward_action: sell_EUR
+      forward_EUR: 300000
+      unhedged_EUR: 200000
+      net_CZK_at_24: 7240000
+      net_CZK_at_26: 7640000
+      scenario_spread_CZK: 400000
+      reference_rate_is_executable: false
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Synthetic quotes; ECB reference-rate purpose: https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html'
+  description: Natural netting, hedge direction, quote units, and residual exposure; no forecast is implied.
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-FI-02
+    cohort: rigorous-v9
+    original_anchor_id: SP1-FI-02
+  rubric:
+  - {id: 'json:net_EUR', weight: 1.0, group: net_EUR, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:forward_action', weight: 1.0, group: forward_action, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:forward_EUR', weight: 1.0, group: forward_EUR, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:unhedged_EUR', weight: 1.0, group: unhedged_EUR, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:net_CZK_at_24', weight: 1.0, group: net_CZK_at_24, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:net_CZK_at_26', weight: 1.0, group: net_CZK_at_26, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:scenario_spread_CZK', weight: 1.0, group: scenario_spread_CZK, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:reference_rate_is_executable', weight: 1.0, group: reference_rate_is_executable, mandatory: true,
+    critical: false, dimension: content}

@@ -1,0 +1,47 @@
+- id: SP1-TR-CS-DE
+  category: Language Translations
+  prompt: |-
+    Translate/review Czech into German. For EACH source passage choose ALL candidate translations that preserve its entire meaning: modality, negation, conditions, actors, quantities, and dates. Several phrasings may be faithful; do not reject synonyms or word order merely for style. Do not silently repair a candidate. Letters restart for each passage. Return an object with keys "1","2","3", each an alphabetically sorted array of accepted letters.
+
+    Passage 1 (Czech): Případné náklady na opravu hradí dodavatel, ledaže závadu způsobilo nesprávné použití; běžné opotřebení se za závadu nepovažuje.
+    A. Eventuelle Reparaturkosten trägt der Lieferant, es sei denn, der Mangel wurde durch unsachgemäße Verwendung verursacht; normale Abnutzung gilt nicht als Mangel.
+    B. Die endgültigen Reparaturkosten trägt immer der Kunde; normale Abnutzung gilt als Mangel.
+    C. Etwaige Kosten einer Reparatur übernimmt der Lieferant, außer wenn unsachgemäßer Gebrauch den Mangel verursacht hat; gewöhnlicher Verschleiß zählt nicht als Mangel.
+    D. Eventuelle Reparaturkosten trägt der Lieferant nur dann, wenn der Mangel durch unsachgemäße Verwendung verursacht wurde.
+
+    Passage 2 (Czech): Lhůta činí deset pracovních dnů ode dne následujícího po doručení, nikoli deset kalendářních dnů od odeslání.
+    A. Die Frist beträgt zehn Kalendertage ab Versand, nicht zehn Arbeitstage ab Zustellung.
+    B. Die Frist beträgt zehn Arbeitstage ab dem auf die Zustellung folgenden Tag, nicht zehn Kalendertage ab Versand.
+    C. Die Frist beträgt zehn Arbeitstage einschließlich des Zustellungstags und nicht zehn Kalendertage ab Versand.
+    D. Die Frist beträgt zehn Arbeitstage ab dem Tag nach der Zustellung, nicht zehn Kalendertage ab dem Versand.
+
+    Passage 3 (Czech): Ačkoli nebylo prokázáno, že úprava zvyšuje spotřebu, nelze z toho vyvodit, že ji snižuje.
+    A. Obwohl nachgewiesen wurde, dass die Änderung den Verbrauch erhöht, muss sie ihn senken.
+    B. Weil die Änderung den Verbrauch nachweislich nicht erhöht, senkt sie ihn zwangsläufig.
+    C. Obwohl nicht nachgewiesen wurde, dass die Änderung den Verbrauch erhöht, lässt sich daraus nicht schließen, dass sie ihn senkt.
+    D. Da die Änderung den Verbrauch senkt, kann eine Erhöhung ausgeschlossen werden.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"1": {"array_items": "string"}, "2": {"array_items": "string"}, "3": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      '1': [A, C]
+      '2': [B, D]
+      '3': [C]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original parallel passages; semantic fidelity selection, not free-form fluency
+  description: 'Czech to German: all and only meaning-preserving translations, including alternative faithful phrasings.'
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-TR-CS-DE
+    cohort: rigorous-v9
+    original_anchor_id: SP1-TR-CS-DE
+  rubric:
+  - {id: 'json:1[0]', weight: 0.5, group: '1', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:1[1]', weight: 0.5, group: '1', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:2[0]', weight: 0.5, group: '2', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:2[1]', weight: 0.5, group: '2', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:3[0]', weight: 1.0, group: '3', mandatory: true, critical: false, dimension: content}

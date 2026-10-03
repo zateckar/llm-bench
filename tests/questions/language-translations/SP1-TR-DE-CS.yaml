@@ -1,0 +1,47 @@
+- id: SP1-TR-DE-CS
+  category: Language Translations
+  prompt: |-
+    Translate/review German into Czech. For EACH source passage choose ALL candidate translations that preserve its entire meaning: modality, negation, conditions, actors, quantities, and dates. Several phrasings may be faithful; do not reject synonyms or word order merely for style. Do not silently repair a candidate. Letters restart for each passage. Return an object with keys "1","2","3", each an alphabetically sorted array of accepted letters.
+
+    Passage 1 (German): Der Auftragnehmer muss die Unterlagen nicht veröffentlichen, darf sie aber ohne Zustimmung auch nicht an Dritte weitergeben.
+    A. Zhotovitel nesmí podklady zveřejnit, ale smí je bez souhlasu předat třetím osobám.
+    B. Zhotovitel nemusí podklady zveřejnit, bez souhlasu je však nesmí ani předat třetím osobám.
+    C. Zhotovitel má povinnost podklady zveřejnit, ale třetím osobám je předat nemusí.
+    D. Zhotovitel není povinen podklady zveřejňovat, avšak bez souhlasu je také nesmí poskytnout třetím stranám.
+
+    Passage 2 (German): Die Freigabe erfolgt frühestens am 12. August, sofern bis dahin beide Prüfberichte vorliegen; ein einzelner Bericht genügt nicht.
+    A. Ke schválení dojde nejdříve 12. srpna, pokud do té doby budou k dispozici obě zkušební zprávy; jedna zpráva nestačí.
+    B. Ke schválení dojde nejpozději 12. srpna, pokud bude k dispozici alespoň jedna zkušební zpráva.
+    C. Schválení proběhne nejdříve 12. srpna za předpokladu, že do té doby budou předloženy oba protokoly o zkoušce; jediný protokol nepostačuje.
+    D. Schválení proběhne 12. srpna bez ohledu na to, zda jsou zkušební zprávy k dispozici.
+
+    Passage 3 (German): Der Wirkungsgrad stieg von 80 % auf 84 %, also um vier Prozentpunkte, nicht um vier Prozent relativ zum Ausgangswert.
+    A. Účinnost stoupla z 80 % na 84 %, tedy relativně o čtyři procenta původní hodnoty.
+    B. Účinnost klesla z 84 % na 80 %, tedy o čtyři procentní body.
+    C. Účinnost stoupla z 80 % na 84 %, tedy o čtyři procentní body, nikoli relativně o čtyři procenta výchozí hodnoty.
+    D. Účinnost stoupla o 84 procentních bodů na 80 %, nikoli o čtyři procenta.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"1": {"array_items": "string"}, "2": {"array_items": "string"}, "3": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      '1': [B, D]
+      '2': [A, C]
+      '3': [C]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original parallel passages; semantic fidelity selection, not free-form fluency
+  description: 'German to Czech: all and only meaning-preserving translations, including alternative faithful phrasings.'
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-TR-DE-CS
+    cohort: rigorous-v9
+    original_anchor_id: SP1-TR-DE-CS
+  rubric:
+  - {id: 'json:1[0]', weight: 0.5, group: '1', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:1[1]', weight: 0.5, group: '1', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:2[0]', weight: 0.5, group: '2', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:2[1]', weight: 0.5, group: '2', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:3[0]', weight: 1.0, group: '3', mandatory: true, critical: false, dimension: content}

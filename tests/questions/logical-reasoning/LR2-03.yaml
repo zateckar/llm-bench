@@ -1,0 +1,30 @@
+- id: LR2-03
+  category: Logical Reasoning
+  prompt: |-
+    Seven non-preemptive jobs have durations A=3,B=5,C=2,D=4,E=3,F=5,G=2.
+    Dependencies (predecessor -> successor) are A->D, B->D, B->E, C->F, D->G, E->G.
+    Two identical workers are available at time 0. Each runs at most one job at a
+    time; a job uses one worker. Jobs can start immediately when all predecessors
+    finish. Waiting is allowed, transfer costs are zero, and all jobs must finish.
+    Return JSON {"two_workers": minimum completion time, "total_work": sum of durations}.
+
+    Explicit JSON output contract (types only): {"two_workers": "number", "total_work": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      two_workers: 13
+      total_work: 24
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Precedence scheduling with resource contention
+  max_tokens: 8192
+  metadata:
+    family: R8A-LR2-03
+    cohort: rigorous-v9
+    original_anchor_id: LR2-03
+  rubric:
+  - {id: 'json:two_workers', weight: 1.0, group: two_workers, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:total_work', weight: 1.0, group: total_work, mandatory: true, critical: false, dimension: content}

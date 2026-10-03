@@ -1,0 +1,35 @@
+- id: LR2-09
+  category: Logical Reasoning
+  prompt: |-
+    Directed edges are (from,to,cost,fuel):
+    (S,A,4,2),(S,B,2,4),(A,B,1,1),(A,C,5,1),(B,C,2,3),
+    (B,D,6,1),(C,D,1,1),(C,T,5,2),(D,T,2,3).
+    Travel S to T with total fuel at most 9; no refueling. Minimize total cost,
+    then total fuel, then the lexicographic path string. Also count ALL feasible
+    S-to-T paths under the fuel cap, not just optimal ones.
+    Return JSON {"cost": ..., "fuel": ..., "path": "S...T", "feasible_paths": ...}.
+
+    Explicit JSON output contract (types only): {"cost": "number", "fuel": "number", "path": "string", "feasible_paths": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      cost: 9
+      fuel: 9
+      path: SBCT
+      feasible_paths: 6
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Resource-constrained route optimization
+  max_tokens: 8192
+  metadata:
+    family: R8A-LR2-09
+    cohort: rigorous-v9
+    original_anchor_id: LR2-09
+  rubric:
+  - {id: 'json:cost', weight: 1.0, group: cost, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:fuel', weight: 1.0, group: fuel, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:path', weight: 1.0, group: path, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:feasible_paths', weight: 1.0, group: feasible_paths, mandatory: true, critical: false, dimension: content}

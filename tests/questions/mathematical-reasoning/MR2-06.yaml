@@ -1,0 +1,28 @@
+- id: MR2-06
+  category: Mathematical Reasoning
+  prompt: |-
+    Permute the numbers 1 through 7. No number may equal its one-based position;
+    1 and 2 must not be adjacent; and 3 must occur before 4.
+    Count all such permutations and how many of them are even (have an even number
+    of inversions). Return JSON {"count": ..., "even_permutations": ...}.
+
+    Explicit JSON output contract (types only): {"count": "number", "even_permutations": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      count: 608
+      even_permutations: 308
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Derangements with adjacency, relative order, and parity
+  max_tokens: 8192
+  metadata:
+    family: R8A-MR2-06
+    cohort: rigorous-v9
+    original_anchor_id: MR2-06
+  rubric:
+  - {id: 'json:count', weight: 1.0, group: count, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:even_permutations', weight: 1.0, group: even_permutations, mandatory: true, critical: false, dimension: content}

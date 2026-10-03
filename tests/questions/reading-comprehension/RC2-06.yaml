@@ -1,0 +1,33 @@
+- id: RC2-06
+  category: Reading Comprehension
+  prompt: |-
+    A report covers minute interval [0,45). Incident intervals are [4,15),
+    [12,23), [26,35), [39,48). Approved maintenance intervals [10,14) and [28,32)
+    are excluded wherever they overlap incidents. Count the union of incident
+    time within the reporting window, excluding maintenance, without double-counting
+    overlaps. The downtime budget is at most 25 minutes. All intervals are half-open.
+    Return JSON with counted_downtime, meets_budget (boolean), and excess_minutes
+    (zero if within budget, otherwise counted downtime minus budget).
+
+    Explicit JSON output contract (types only): {"counted_downtime": "number", "meets_budget": "boolean", "excess_minutes": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      counted_downtime: 26
+      meets_budget: false
+      excess_minutes: 1
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Union overlapping downtime before exclusions and clipping
+  max_tokens: 8192
+  metadata:
+    family: R8A-RC2-06
+    cohort: rigorous-v9
+    original_anchor_id: RC2-06
+  rubric:
+  - {id: 'json:counted_downtime', weight: 1.0, group: counted_downtime, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:meets_budget', weight: 1.0, group: meets_budget, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:excess_minutes', weight: 1.0, group: excess_minutes, mandatory: true, critical: false, dimension: content}

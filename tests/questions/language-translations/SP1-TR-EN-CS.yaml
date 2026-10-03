@@ -1,0 +1,47 @@
+- id: SP1-TR-EN-CS
+  category: Language Translations
+  prompt: |-
+    Translate/review English into Czech. For EACH source passage choose ALL candidate translations that preserve its entire meaning: modality, negation, conditions, actors, quantities, and dates. Several phrasings may be faithful; do not reject synonyms or word order merely for style. Do not silently repair a candidate. Letters restart for each passage. Return an object with keys "1","2","3", each an alphabetically sorted array of accepted letters.
+
+    Passage 1 (English): The operator may restart the robot only after both guards are closed; a closed guard alone does not require a restart.
+    A. Obsluha musí robota restartovat, jakmile se zavře kterýkoli ochranný kryt.
+    B. Obsluha smí robota restartovat až po zavření obou ochranných krytů; samotné zavření krytu restart nevyžaduje.
+    C. Obsluha smí robota restartovat po zavření alespoň jednoho ochranného krytu; samotné zavření krytu restart nevyžaduje.
+    D. Obsluha může robota znovu spustit pouze tehdy, jsou-li oba ochranné kryty zavřené; zavřený kryt sám o sobě neznamená povinnost restartovat.
+
+    Passage 2 (English): The outstanding balance is EUR 2,450.75, excluding tax. The credit note reduces it by EUR 150, not to EUR 150.
+    A. Neuhrazený zůstatek činí 2 450,75 EUR bez daně. Dobropis jej snižuje o 150 EUR, nikoli na 150 EUR.
+    B. Výjimečný zůstatek činí 2 450,75 EUR včetně daně. Úvěrová zpráva jej snižuje o 150 EUR.
+    C. Dlužná částka je 2 450,75 EUR bez daně. Dobropisem se sníží o 150 EUR, ne na 150 EUR.
+    D. Neuhrazený zůstatek činí 2 450,75 EUR bez daně. Dobropis jej snižuje na 150 EUR, nikoli o 150 EUR.
+
+    Passage 3 (English): Had the sample been cooled before weighing, the result might have differed; the report does not say that cooling actually occurred.
+    A. Vzorek byl před vážením ochlazen, a výsledek se proto určitě lišil; zpráva to potvrzuje.
+    B. Kdyby byl vzorek před vážením ochlazen, výsledek by se nemohl lišit; zpráva neuvádí, zda k ochlazení došlo.
+    C. Kdyby se vzorek po vážení ochladil, výsledek mohl být jiný; zpráva skutečné ochlazení nepotvrzuje.
+    D. Kdyby byl vzorek před vážením ochlazen, výsledek se mohl lišit; zpráva neříká, že k ochlazení skutečně došlo.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"1": {"array_items": "string"}, "2": {"array_items": "string"}, "3": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      '1': [B, D]
+      '2': [A, C]
+      '3': [D]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original parallel passages; semantic fidelity selection, not free-form fluency
+  description: 'English to Czech: all and only meaning-preserving translations, including alternative faithful phrasings.'
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-TR-EN-CS
+    cohort: rigorous-v9
+    original_anchor_id: SP1-TR-EN-CS
+  rubric:
+  - {id: 'json:1[0]', weight: 0.5, group: '1', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:1[1]', weight: 0.5, group: '1', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:2[0]', weight: 0.5, group: '2', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:2[1]', weight: 0.5, group: '2', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:3[0]', weight: 1.0, group: '3', mandatory: true, critical: false, dimension: content}

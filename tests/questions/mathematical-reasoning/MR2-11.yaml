@@ -1,0 +1,33 @@
+- id: MR2-11
+  category: Mathematical Reasoning
+  prompt: |-
+    Independent draws produce types 1,2,3,4 with probabilities 1/10,2/10,3/10,4/10.
+    Compute expected additional draws to collect all types (a) starting empty,
+    (b) starting with types 1 and 4 already collected.
+    Return JSON {"from_empty": [numerator,denominator],
+    "after_types_1_and_4": [numerator,denominator]}, fractions in lowest terms.
+
+    Explicit JSON output contract (types only): {"from_empty": {"array_items": "number"}, "after_types_1_and_4": {"array_items": "number"}}
+  evaluator: json_match
+  expected:
+    value:
+      from_empty: [445, 36]
+      after_types_1_and_4: [19, 3]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Non-uniform coupon collection from two initial states
+  max_tokens: 8192
+  metadata:
+    family: R8A-MR2-11
+    cohort: rigorous-v9
+    original_anchor_id: MR2-11
+  rubric:
+  - {id: 'json:from_empty[0]', weight: 0.5, group: from_empty, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:from_empty[1]', weight: 0.5, group: from_empty, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:after_types_1_and_4[0]', weight: 0.5, group: after_types_1_and_4, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:after_types_1_and_4[1]', weight: 0.5, group: after_types_1_and_4, mandatory: true, critical: false,
+    dimension: content}

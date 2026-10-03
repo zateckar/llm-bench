@@ -1,0 +1,28 @@
+- id: RV4-CW-01
+  category: Creative Writing
+  prompt: Write four lines about a journey home. Each line has exactly 4 whitespace-separated words. Start the lines
+    with Night, Rain, Dawn, Home respectively and end them with wings, stones, gates, echoes respectively. No title,
+    blank lines, or commentary. Only constraint compliance is scored, not artistic quality.
+  evaluator: format_check
+  expected:
+    checks:
+    - type: line_count
+      value: 4
+    - type: every_line_word_count
+      value: 4
+    - type: regex
+      value: \A(?:[^\n]*\n){0}Night\b[^\n]*\bwings[.!?]?(?:\n|$)
+    - type: regex
+      value: \A(?:[^\n]*\n){1}Rain\b[^\n]*\bstones[.!?]?(?:\n|$)
+    - type: regex
+      value: \A(?:[^\n]*\n){2}Dawn\b[^\n]*\bgates[.!?]?(?:\n|$)
+    - type: regex
+      value: \A(?:[^\n]*\n){3}Home\b[^\n]*\bechoes[.!?]?(?:\n|$)
+  pass_threshold: 1.0
+  difficulty: hard
+  source: reliability-v4; compliance only
+  max_tokens: 16384
+  metadata:
+    family: R8A-RV4-CW-01
+    cohort: rigorous-v9
+    original_anchor_id: RV4-CW-01

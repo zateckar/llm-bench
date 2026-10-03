@@ -1,0 +1,30 @@
+- id: MR2-02
+  category: Mathematical Reasoning
+  prompt: |-
+    Put 17 indistinguishable tokens into five labeled boxes A,B,C,D,E.
+    Each box holds at most 6. A holds at least 2, B holds an even number (zero
+    allowed), C holds strictly fewer than D, and E holds at least 1.
+    Count valid allocations and those valid allocations with E holding at least 4.
+    Return JSON {"count": ..., "with_last_at_least_4": ...}.
+
+    Explicit JSON output contract (types only): {"count": "number", "with_last_at_least_4": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      count: 236
+      with_last_at_least_4: 124
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Bounded compositions with parity and ordering restrictions
+  max_tokens: 8192
+  metadata:
+    family: R8A-MR2-02
+    cohort: rigorous-v9
+    original_anchor_id: MR2-02
+  rubric:
+  - {id: 'json:count', weight: 1.0, group: count, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:with_last_at_least_4', weight: 1.0, group: with_last_at_least_4, mandatory: true, critical: false,
+    dimension: content}

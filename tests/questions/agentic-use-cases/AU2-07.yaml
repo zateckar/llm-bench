@@ -1,0 +1,58 @@
+- id: AU2-07
+  category: Agentic Use Cases
+  prompt: |-
+    State initially is {a:1,b:1,c:1}; at least one value must remain 1.
+    T1, T2, T3 all take this same initial snapshot. Each sums a,b,c; if the sum is
+    >=2, it writes 0 to its own key (T1->a, T2->b, T3->c), otherwise writes nothing.
+    They commit in T1,T2,T3 order. Under this exercise's snapshot isolation, a
+    transaction aborts only if a key it writes changed since its snapshot.
+    Separately, execute T1,T2,T3 serially, each reading the latest committed state.
+    Return JSON with snapshot_commits (IDs in order), snapshot_final, serial_final,
+    and violates_at_least_one (whether the snapshot execution breaks the invariant).
+
+    Explicit JSON output contract (types only): {"snapshot_commits": {"array_items": "string"}, "snapshot_final": {"a": "number", "b": "number", "c": "number"}, "serial_final": {"a": "number", "b": "number", "c": "number"}, "violates_at_least_one": "boolean"}
+  evaluator: json_match
+  expected:
+    value:
+      snapshot_commits: [T1, T2, T3]
+      snapshot_final:
+        a: 0
+        b: 0
+        c: 0
+      serial_final:
+        a: 0
+        b: 0
+        c: 1
+      violates_at_least_one: true
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Snapshot write skew versus a serial execution
+  max_tokens: 8192
+  metadata:
+    family: R8A-AU2-07
+    cohort: rigorous-v9
+    original_anchor_id: AU2-07
+  rubric:
+  - {id: 'json:snapshot_commits[0]', weight: 0.3333333333333333, group: snapshot_commits, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshot_commits[1]', weight: 0.3333333333333333, group: snapshot_commits, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshot_commits[2]', weight: 0.3333333333333333, group: snapshot_commits, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshot_final.a', weight: 0.3333333333333333, group: snapshot_final, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshot_final.b', weight: 0.3333333333333333, group: snapshot_final, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshot_final.c', weight: 0.3333333333333333, group: snapshot_final, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:serial_final.a', weight: 0.3333333333333333, group: serial_final, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:serial_final.b', weight: 0.3333333333333333, group: serial_final, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:serial_final.c', weight: 0.3333333333333333, group: serial_final, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:violates_at_least_one', weight: 1.0, group: violates_at_least_one, mandatory: true, critical: false,
+    dimension: content}

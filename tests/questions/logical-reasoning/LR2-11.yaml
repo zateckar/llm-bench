@@ -1,0 +1,55 @@
+- id: LR2-11
+  category: Logical Reasoning
+  prompt: |-
+    Ballot groups are 6 voters: ABCD; 5: BCDA; 4: CDAB; 3: DCBA; 2: DBAC.
+    Each string ranks candidates from most to least preferred. In each round each
+    ballot counts for its highest-ranked remaining candidate. Eliminate exactly
+    one candidate with the fewest votes; on a tie eliminate the alphabetically
+    earliest. Continue until only one remains, even if a majority occurs earlier.
+    Return JSON with rounds (vote-count objects just BEFORE each elimination,
+    containing only remaining candidates), eliminated (in order), and winner.
+
+    Explicit JSON output contract (types only): {"rounds": "array (element types and order specified in task)", "eliminated": {"array_items": "string"}, "winner": "string"}
+  evaluator: json_match
+  expected:
+    value:
+      rounds:
+      - A: 6
+        B: 5
+        C: 4
+        D: 5
+      - A: 6
+        B: 5
+        D: 9
+      - A: 6
+        D: 14
+      eliminated: [C, B, A]
+      winner: D
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Ranked-choice transfers and deterministic tie handling
+  max_tokens: 8192
+  metadata:
+    family: R8A-LR2-11
+    cohort: rigorous-v9
+    original_anchor_id: LR2-11
+  rubric:
+  - {id: 'json:rounds[0].A', weight: 0.1111111111111111, group: rounds, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rounds[0].B', weight: 0.1111111111111111, group: rounds, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rounds[0].C', weight: 0.1111111111111111, group: rounds, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rounds[0].D', weight: 0.1111111111111111, group: rounds, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rounds[1].A', weight: 0.1111111111111111, group: rounds, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rounds[1].B', weight: 0.1111111111111111, group: rounds, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rounds[1].D', weight: 0.1111111111111111, group: rounds, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rounds[2].A', weight: 0.1111111111111111, group: rounds, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rounds[2].D', weight: 0.1111111111111111, group: rounds, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:eliminated[0]', weight: 0.3333333333333333, group: eliminated, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:eliminated[1]', weight: 0.3333333333333333, group: eliminated, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:eliminated[2]', weight: 0.3333333333333333, group: eliminated, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:winner', weight: 1.0, group: winner, mandatory: true, critical: false, dimension: content}

@@ -35,23 +35,49 @@ from pathlib import Path
 
 from evaluators import EVALUATORS, TEST_HELPERS
 from models import DIFFICULTY_WEIGHTS, Question
-from test_loader import SuiteError, load_all_tests
+from test_loader import SuiteError
+from quality_suite import load_questions
 
 # format_check check types the evaluator implements. Kept here explicitly so a
 # typo in a suite file is an error rather than a silently-failing check.
 KNOWN_CHECK_TYPES = {
-    "json", "json_path", "contains", "not_contains",
-    "max_words", "min_words", "word_count_exact",
-    "min_chars", "max_chars", "starts_with", "ends_with",
-    "regex", "not_regex", "count_occurrences",
-    "line_count", "paragraph_count",
-    "every_line_matches", "every_line_word_count",
-    "numbered_list", "bullet_list",
-    "min_sentences", "max_sentences", "sentence_count_exact",
-    "unique_lines", "unique_words", "only_words", "table_shape",
+    "json",
+    "json_path",
+    "contains",
+    "not_contains",
+    "max_words",
+    "min_words",
+    "word_count_exact",
+    "min_chars",
+    "max_chars",
+    "starts_with",
+    "ends_with",
+    "regex",
+    "not_regex",
+    "count_occurrences",
+    "line_count",
+    "paragraph_count",
+    "every_line_matches",
+    "every_line_word_count",
+    "numbered_list",
+    "bullet_list",
+    "min_sentences",
+    "max_sentences",
+    "sentence_count_exact",
+    "unique_lines",
+    "unique_words",
+    "only_words",
+    "table_shape",
 }
 
-VALUELESS_CHECKS = {"json", "unique_lines", "unique_words", "numbered_list", "bullet_list", "table_shape"}
+VALUELESS_CHECKS = {
+    "json",
+    "unique_lines",
+    "unique_words",
+    "numbered_list",
+    "bullet_list",
+    "table_shape",
+}
 
 
 class Report:
@@ -110,7 +136,9 @@ def check_contains_keywords(report: Report, where: str, expected: object) -> Non
         return
 
     if not isinstance(expected, dict):
-        report.error(where, f"contains_keywords expects a list or mapping, got {type(expected).__name__}")
+        report.error(
+            where, f"contains_keywords expects a list or mapping, got {type(expected).__name__}"
+        )
         return
 
     unknown = set(expected) - {"all", "any", "groups", "none", "n_of", "partial"}
@@ -132,20 +160,21 @@ def check_contains_keywords(report: Report, where: str, expected: object) -> Non
         elif n < 1 or n > len(pool):
             report.error(where, f"contains_keywords n_of.n={n} is outside 1..{len(pool)}")
     forbidden = {str(k).lower() for k in (expected.get("none") or [])}
-    required = {
-        str(k).lower()
-        for k in (expected.get("all") or []) + (expected.get("any") or [])
-    }
+    required = {str(k).lower() for k in (expected.get("all") or []) + (expected.get("any") or [])}
     for group in expected.get("groups") or []:
         required |= {str(k).lower() for k in group}
     clash = forbidden & required
     if clash:
-        report.error(where, f"contains_keywords requires and forbids the same term(s): {sorted(clash)}")
+        report.error(
+            where, f"contains_keywords requires and forbids the same term(s): {sorted(clash)}"
+        )
 
 
 def check_format_check(report: Report, where: str, expected: object) -> None:
     if not isinstance(expected, dict):
-        report.error(where, f"format_check expects a mapping with `checks`, got {type(expected).__name__}")
+        report.error(
+            where, f"format_check expects a mapping with `checks`, got {type(expected).__name__}"
+        )
         return
     checks = expected.get("checks")
     if not isinstance(checks, list) or not checks:
@@ -163,22 +192,41 @@ def check_format_check(report: Report, where: str, expected: object) -> None:
         if ctype in ("regex", "not_regex", "every_line_matches"):
             check_regex(report, where, check.get("value"), f"{label} ({ctype})")
         elif ctype == "count_occurrences":
-            check_regex(report, where, check.get("pattern", check.get("value")), f"{label} (pattern)")
-            if not isinstance(check.get("count"), int):
-                report.error(where, f"{label} count_occurrences needs an integer `count`")
+            check_regex(
+                report, where, check.get("pattern", check.get("value")), f"{label} (pattern)"
+            )
+            keys = [k for k in ("count", "min_count", "max_count") if k in check]
+            if not keys or any(type(check[k]) is not int or check[k] < 0 for k in keys):
+                report.error(
+                    where, f"{label} needs a nonnegative integer count/min_count/max_count"
+                )
+            if "count" in keys and len(keys) > 1:
+                report.error(where, f"{label} exact count cannot be combined with bounds")
+            if (
+                "min_count" in keys
+                and "max_count" in keys
+                and check["min_count"] > check["max_count"]
+            ):
+                report.error(where, f"{label} min_count exceeds max_count")
         elif ctype == "json":
             if "strict_json" in check and type(check["strict_json"]) is not bool:
                 report.error(where, f"{label} strict_json must be boolean")
             if "item_fields" in check:
                 fields = check["item_fields"]
                 if check.get("root") != "array" or not isinstance(fields, dict) or not fields:
-                    report.error(where, f"{label} item_fields needs an array root and nonempty mapping")
+                    report.error(
+                        where, f"{label} item_fields needs an array root and nonempty mapping"
+                    )
                 else:
                     for key, spec in fields.items():
                         if not isinstance(key, str) or not key:
-                            report.error(where, f"{label} item field names must be nonempty strings")
+                            report.error(
+                                where, f"{label} item field names must be nonempty strings"
+                            )
                         if not isinstance(spec, dict) or spec.get("type") not in {
-                            "integer", "string", "boolean"
+                            "integer",
+                            "string",
+                            "boolean",
                         }:
                             report.error(where, f"{label} invalid item field {key}")
                             continue
@@ -242,8 +290,13 @@ def check_code_exec(report: Report, where: str, expected: object) -> None:
         if kwargs is not None and not isinstance(kwargs, dict):
             report.error(where, f"{label} ({fn}) `kwargs` must be a mapping")
         for numeric_key in ("tolerance", "relative"):
-            if numeric_key in fixture and not isinstance(fixture[numeric_key], (int, float)):
-                report.error(where, f"{label} ({fn}) `{numeric_key}` must be a number")
+            if numeric_key in fixture and (
+                type(fixture[numeric_key]) not in (int, float)
+                or not math.isfinite(fixture[numeric_key]) or fixture[numeric_key] < 0
+            ):
+                report.error(where, f"{label} ({fn}) `{numeric_key}` must be finite and nonnegative")
+        if "preserve_inputs" in fixture and type(fixture["preserve_inputs"]) is not bool:
+            report.error(where, f"{label} ({fn}) preserve_inputs must be boolean")
 
 
 def check_security_analysis(report: Report, where: str, expected: object) -> None:
@@ -262,9 +315,7 @@ def check_security_analysis(report: Report, where: str, expected: object) -> Non
         if not isinstance(min_criteria, int):
             report.error(where, "min_criteria must be an integer")
         elif not 1 <= min_criteria <= len(criteria):
-            report.error(
-                where, f"min_criteria={min_criteria} is outside 1..{len(criteria)}"
-            )
+            report.error(where, f"min_criteria={min_criteria} is outside 1..{len(criteria)}")
 
 
 def check_multi_step(report: Report, where: str, expected: object) -> None:
@@ -357,6 +408,8 @@ def check_json_match(report: Report, where: str, expected: object) -> None:
         report.error(where, "json_match needs a `value`")
     if "strict_json" in expected and type(expected["strict_json"]) is not bool:
         report.error(where, "json_match strict_json must be a boolean")
+    if "allow_fence" in expected and type(expected["allow_fence"]) is not bool:
+        report.error(where, "json_match allow_fence must be a boolean")
     for key in ("relative", "tolerance"):
         value = expected.get(key, 0)
         if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
@@ -388,11 +441,17 @@ def check_json_match(report: Report, where: str, expected: object) -> None:
         for path, values in aliases.items():
             if not isinstance(path, str) or path not in leaves:
                 report.error(where, f"json_match alias path {path!r} is not an exact scalar leaf")
-            if not isinstance(values, list) or not values or any(
-                isinstance(v, (dict, list)) or (type(v) is float and not math.isfinite(v))
-                for v in (values if isinstance(values, list) else [])
+            if (
+                not isinstance(values, list)
+                or not values
+                or any(
+                    isinstance(v, (dict, list)) or (type(v) is float and not math.isfinite(v))
+                    for v in (values if isinstance(values, list) else [])
+                )
             ):
-                report.error(where, f"json_match aliases for {path!r} must be a nonempty scalar list")
+                report.error(
+                    where, f"json_match aliases for {path!r} must be a nonempty scalar list"
+                )
 
 
 def check_regex_all(report: Report, where: str, expected: object) -> None:
@@ -558,18 +617,15 @@ def validate_question(report: Report, q: Question) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate the benchmark test suite.")
-    parser.add_argument("--tests-dir", default="tests")
     parser.add_argument("--strict", action="store_true", help="treat warnings as failures")
     parser.add_argument("--quiet", action="store_true", help="only print the summary")
     args = parser.parse_args()
 
-    tests_dir = Path(args.tests_dir)
-    if not tests_dir.is_absolute():
-        tests_dir = Path(__file__).parent / tests_dir
+    tests_dir = Path(__file__).parent / "tests"
 
     report = Report()
     try:
-        questions = load_all_tests(tests_dir)
+        questions = load_questions()
     except SuiteError as e:
         print("Suite failed to load:\n" + str(e))
         return 1

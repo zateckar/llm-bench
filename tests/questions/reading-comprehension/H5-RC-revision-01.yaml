@@ -1,0 +1,175 @@
+- id: H5-RC-revision-01
+  category: Reading Comprehension
+  prompt: |-
+    Prepare a source-grounded operational summary from this fictional dossier.
+    Requested route handles are not entity IDs: join route->alias->entity before resolving
+    its record. At cutoff day 23, take the APPROVED revision with greatest (effective day,
+    revision number), among effective days <=23. File order is irrelevant. Unapproved and
+    future revisions do not supersede. If the chosen revision is deleted, do NOT resurrect
+    an earlier live one. No eligible record means unknown, not deleted or zero quota.
+    Sum quotas only for ACTIVE requested routes, grouped by that chosen record's owner.
+    Return {"routes":{requested_route:{"record":record ID or null,"state":"active"|
+    "deleted"|"unknown","quota":integer for active else null}},
+    "owner_totals":{"east":integer,"north":integer,"south":integer},"grand_total":integer}.
+    Include every requested route and no others. Zero totals must still appear.
+    Route directory: {"route000":"alias009","route001":"alias026","route002":"alias043","route003":"alias060","route004":"alias077","route005":"alias094","route006":"alias111","route007":"alias128","route008":"alias145","route009":"alias162","route010":"alias179","route011":"alias196","route012":"alias213","route013":"alias230"}
+    Alias directory: {"alias009":"e000","alias026":"e001","alias043":"e002","alias060":"e003","alias077":"e004","alias094":"e005","alias111":"e006","alias128":"e007","alias145":"e008","alias162":"e009","alias179":"e010","alias196":"e011","alias213":"e012","alias230":"e013"}
+    Records, one JSON object per line:
+    {"record":"r001-4","entity":"e001","revision":4,"effective":26,"approved":true,"deleted":false,"quota":97,"owner":"south"}
+    {"record":"r001-3","entity":"e001","revision":3,"effective":29,"approved":true,"deleted":true,"quota":125,"owner":"south"}
+    {"record":"r010-2","entity":"e010","revision":2,"effective":34,"approved":false,"deleted":true,"quota":115,"owner":"north"}
+    {"record":"r009-3","entity":"e009","revision":3,"effective":22,"approved":false,"deleted":false,"quota":64,"owner":"east"}
+    {"record":"r002-3","entity":"e002","revision":3,"effective":5,"approved":true,"deleted":false,"quota":81,"owner":"north"}
+    {"record":"r005-3","entity":"e005","revision":3,"effective":32,"approved":true,"deleted":false,"quota":69,"owner":"east"}
+    {"record":"r006-3","entity":"e006","revision":3,"effective":30,"approved":true,"deleted":false,"quota":109,"owner":"east"}
+    {"record":"r001-1","entity":"e001","revision":1,"effective":6,"approved":true,"deleted":false,"quota":144,"owner":"north"}
+    {"record":"r002-1","entity":"e002","revision":1,"effective":27,"approved":true,"deleted":false,"quota":96,"owner":"north"}
+    {"record":"r012-1","entity":"e012","revision":1,"effective":25,"approved":true,"deleted":false,"quota":57,"owner":"east"}
+    {"record":"r000-3","entity":"e000","revision":3,"effective":25,"approved":false,"deleted":false,"quota":25,"owner":"east"}
+    {"record":"r003-2","entity":"e003","revision":2,"effective":10,"approved":false,"deleted":false,"quota":91,"owner":"north"}
+    {"record":"r003-1","entity":"e003","revision":1,"effective":13,"approved":true,"deleted":false,"quota":55,"owner":"east"}
+    {"record":"r004-2","entity":"e004","revision":2,"effective":17,"approved":false,"deleted":false,"quota":141,"owner":"east"}
+    {"record":"r009-4","entity":"e009","revision":4,"effective":2,"approved":true,"deleted":false,"quota":22,"owner":"south"}
+    {"record":"r013-3","entity":"e013","revision":3,"effective":29,"approved":false,"deleted":false,"quota":124,"owner":"north"}
+    {"record":"r013-4","entity":"e013","revision":4,"effective":34,"approved":true,"deleted":false,"quota":55,"owner":"north"}
+    {"record":"r008-3","entity":"e008","revision":3,"effective":26,"approved":true,"deleted":false,"quota":89,"owner":"east"}
+    {"record":"r001-2","entity":"e001","revision":2,"effective":26,"approved":true,"deleted":true,"quota":39,"owner":"north"}
+    {"record":"r006-4","entity":"e006","revision":4,"effective":28,"approved":true,"deleted":false,"quota":119,"owner":"north"}
+    {"record":"r004-4","entity":"e004","revision":4,"effective":31,"approved":true,"deleted":false,"quota":134,"owner":"south"}
+    {"record":"r007-2","entity":"e007","revision":2,"effective":20,"approved":true,"deleted":true,"quota":62,"owner":"south"}
+    {"record":"r007-4","entity":"e007","revision":4,"effective":7,"approved":true,"deleted":false,"quota":100,"owner":"south"}
+    {"record":"r004-3","entity":"e004","revision":3,"effective":17,"approved":true,"deleted":false,"quota":48,"owner":"north"}
+    {"record":"r007-1","entity":"e007","revision":1,"effective":29,"approved":true,"deleted":false,"quota":40,"owner":"east"}
+    {"record":"r011-1","entity":"e011","revision":1,"effective":33,"approved":true,"deleted":false,"quota":110,"owner":"south"}
+    {"record":"r010-1","entity":"e010","revision":1,"effective":30,"approved":true,"deleted":false,"quota":127,"owner":"north"}
+    {"record":"r005-1","entity":"e005","revision":1,"effective":11,"approved":true,"deleted":false,"quota":87,"owner":"east"}
+    {"record":"r005-2","entity":"e005","revision":2,"effective":16,"approved":false,"deleted":false,"quota":40,"owner":"east"}
+    {"record":"r006-1","entity":"e006","revision":1,"effective":7,"approved":true,"deleted":false,"quota":68,"owner":"south"}
+    {"record":"r003-3","entity":"e003","revision":3,"effective":3,"approved":true,"deleted":false,"quota":110,"owner":"south"}
+    {"record":"r011-3","entity":"e011","revision":3,"effective":5,"approved":false,"deleted":true,"quota":15,"owner":"north"}
+    {"record":"r012-4","entity":"e012","revision":4,"effective":8,"approved":true,"deleted":false,"quota":135,"owner":"north"}
+    {"record":"r003-4","entity":"e003","revision":4,"effective":8,"approved":true,"deleted":false,"quota":44,"owner":"north"}
+    {"record":"r013-1","entity":"e013","revision":1,"effective":30,"approved":true,"deleted":false,"quota":111,"owner":"east"}
+    {"record":"r010-4","entity":"e010","revision":4,"effective":23,"approved":true,"deleted":false,"quota":134,"owner":"south"}
+    {"record":"r009-1","entity":"e009","revision":1,"effective":21,"approved":true,"deleted":false,"quota":22,"owner":"north"}
+    {"record":"r008-4","entity":"e008","revision":4,"effective":20,"approved":true,"deleted":false,"quota":74,"owner":"north"}
+    {"record":"r006-2","entity":"e006","revision":2,"effective":11,"approved":false,"deleted":false,"quota":137,"owner":"south"}
+    {"record":"r010-3","entity":"e010","revision":3,"effective":15,"approved":true,"deleted":false,"quota":29,"owner":"north"}
+    {"record":"r011-2","entity":"e011","revision":2,"effective":18,"approved":true,"deleted":true,"quota":18,"owner":"east"}
+    {"record":"r012-2","entity":"e012","revision":2,"effective":5,"approved":true,"deleted":false,"quota":28,"owner":"south"}
+    {"record":"r004-1","entity":"e004","revision":1,"effective":21,"approved":true,"deleted":false,"quota":91,"owner":"south"}
+    {"record":"r013-2","entity":"e013","revision":2,"effective":31,"approved":true,"deleted":false,"quota":94,"owner":"east"}
+    {"record":"r008-2","entity":"e008","revision":2,"effective":2,"approved":true,"deleted":false,"quota":139,"owner":"south"}
+    {"record":"r012-3","entity":"e012","revision":3,"effective":2,"approved":true,"deleted":false,"quota":95,"owner":"north"}
+    {"record":"r008-1","entity":"e008","revision":1,"effective":15,"approved":true,"deleted":false,"quota":73,"owner":"east"}
+    {"record":"r000-4","entity":"e000","revision":4,"effective":32,"approved":true,"deleted":false,"quota":42,"owner":"east"}
+    {"record":"r002-4","entity":"e002","revision":4,"effective":10,"approved":false,"deleted":false,"quota":91,"owner":"east"}
+    {"record":"r009-2","entity":"e009","revision":2,"effective":10,"approved":true,"deleted":false,"quota":79,"owner":"south"}
+    {"record":"r005-4","entity":"e005","revision":4,"effective":21,"approved":true,"deleted":false,"quota":10,"owner":"south"}
+    {"record":"r000-1","entity":"e000","revision":1,"effective":34,"approved":true,"deleted":false,"quota":42,"owner":"north"}
+    {"record":"r011-4","entity":"e011","revision":4,"effective":13,"approved":true,"deleted":false,"quota":30,"owner":"south"}
+    {"record":"r002-2","entity":"e002","revision":2,"effective":1,"approved":false,"deleted":false,"quota":29,"owner":"north"}
+    {"record":"r007-3","entity":"e007","revision":3,"effective":5,"approved":true,"deleted":false,"quota":56,"owner":"east"}
+    {"record":"r000-2","entity":"e000","revision":2,"effective":22,"approved":false,"deleted":true,"quota":95,"owner":"north"}
+    Requested routes: ["route000", "route001", "route006", "route008", "route011", "route012", "route013"]
+    Return only the requested JSON, with no extra keys or prose. Null is allowed only where explicitly requested. All ID lists must be sorted lexicographically.
+    Explicit JSON output contract (types only): {"routes": {"route000": {"record": "null or the value type specified in task", "state": "string", "quota": "null or the value type specified in task"}, "route001": {"record": "string", "state": "string", "quota": "number"}, "route006": {"record": "string", "state": "string", "quota": "number"}, "route008": {"record": "string", "state": "string", "quota": "number"}, "route011": {"record": "string", "state": "string", "quota": "null or the value type specified in task"}, "route012": {"record": "string", "state": "string", "quota": "number"}, "route013": {"record": "null or the value type specified in task", "state": "string", "quota": "null or the value type specified in task"}}, "owner_totals": {"east": "number", "north": "number", "south": "number"}, "grand_total": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      routes:
+        route000:
+          record: null
+          state: unknown
+          quota: null
+        route001:
+          record: r001-1
+          state: active
+          quota: 144
+        route006:
+          record: r006-1
+          state: active
+          quota: 68
+        route008:
+          record: r008-4
+          state: active
+          quota: 74
+        route011:
+          record: r011-2
+          state: deleted
+          quota: null
+        route012:
+          record: r012-4
+          state: active
+          quota: 135
+        route013:
+          record: null
+          state: unknown
+          quota: null
+      owner_totals:
+        east: 0
+        north: 353
+        south: 68
+      grand_total: 421
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original ceiling-v5; LiveBench: https://github.com/LiveBench/LiveBench ; NoLiMa: https://github.com/adobe-research/NoLiMa
+    (objective synthesis and indirect retrieval design only)'
+  description: Compositional challenge; deterministic oracle in hard_cases.py. Difficulty awaits fresh model calibration.
+  max_tokens: 16384
+  metadata:
+    family: R8A-H5-RC-revision
+    cohort: rigorous-v9
+    original_anchor_id: H5-RC-revision-01
+  rubric:
+  - {id: 'json:routes.route000.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route000.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route000.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route001.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route001.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route001.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route006.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route006.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route006.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route008.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route008.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route008.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route011.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route011.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route011.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route012.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route012.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route012.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route013.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route013.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route013.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:owner_totals.east', weight: 0.3333333333333333, group: owner_totals, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:owner_totals.north', weight: 0.3333333333333333, group: owner_totals, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:owner_totals.south', weight: 0.3333333333333333, group: owner_totals, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:grand_total', weight: 1.0, group: grand_total, mandatory: true, critical: false, dimension: content}

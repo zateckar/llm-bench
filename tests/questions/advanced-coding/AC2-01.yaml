@@ -1,0 +1,63 @@
+- id: AC2-01
+  category: Advanced Coding
+  prompt: |
+    Implement temporal_route(n, edges, start, end, departure). Nodes are integers
+        0..n-1. Each directed edge is [u,v,duration,open,close]. You may depart on it
+        at any time t with open <= t < close, and arrive at t+duration (arrival may be
+        after close). Waiting at nodes is allowed. All inputs are nonnegative integers,
+        durations are positive, and open < close. Parallel edges and cycles may occur.
+        Return earliest arrival time at end starting at start at departure, or None if
+        unreachable. If start=end return departure. Support n<=100 and <=500 edges.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: temporal_route
+    args: [4, [[0, 1, 3, 0, 4], [1, 3, 2, 6, 8], [0, 2, 1, 0, 5], [2, 3, 10, 0, 10]], 0, 3, 0]
+    expected: 8
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [2, [[0, 1, 8, 2, 3]], 0, 1, 2]
+    expected: 10
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [2, [[0, 1, 8, 2, 3]], 0, 1, 3]
+    expected: null
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [3, [[0, 1, 2, 0, 3], [1, 2, 1, 0, 2]], 0, 2, 0]
+    expected: null
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [1, [], 0, 0, 7]
+    expected: 7
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [3, [[0, 1, 5, 0, 10], [0, 1, 1, 3, 9], [1, 2, 2, 4, 5]], 0, 2, 0]
+    expected: 6
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [3, [[0, 1, 1, 0, 10], [1, 0, 1, 0, 10]], 0, 2, 0]
+    expected: null
+    relative: 0
+    tolerance: 0
+  - function: temporal_route
+    args: [5, [[0, 1, 1, 0, 10], [1, 2, 1, 0, 10], [2, 3, 1, 0, 10], [3, 4, 1, 0, 10]], 0, 4, 0]
+    expected: 4
+    relative: 0
+    tolerance: 0
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Earliest arrival in a time-window graph; waiting and departure boundaries
+  max_tokens: 4096
+  metadata:
+    family: R8A-AC2-01
+    cohort: rigorous-v9
+    original_anchor_id: AC2-01

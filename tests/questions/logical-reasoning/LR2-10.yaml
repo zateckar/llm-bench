@@ -1,0 +1,36 @@
+- id: LR2-10
+  category: Logical Reasoning
+  prompt: |-
+    Read the operation trace in order:
+    r1(x), r2(y), r3(z), w1(y), r4(x), w2(z), w3(x), w4(w).
+    ri(k)/wi(k) mean transaction i reads/writes item k; w is also the name of an item.
+    For different transactions, two operations conflict exactly when they access
+    the same item and at least one is a write. A conflict adds an edge from the
+    earlier operation's transaction to the later one's. Deduplicate edges.
+    Return JSON {"edges": [...], "serial_orders": [...]} with each edge encoded
+    as two digits (e.g. "12"), and every topological ordering encoded as four digits.
+    Sort both arrays lexicographically. If the graph is cyclic, serial_orders is [].
+
+    Explicit JSON output contract (types only): {"edges": {"array_items": "string"}, "serial_orders": "array (element type and order specified in task)"}
+  evaluator: json_match
+  expected:
+    value:
+      edges: ['13', '21', '32', '43']
+      serial_orders: []
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Derive serialization constraints from a transaction trace
+  max_tokens: 8192
+  metadata:
+    family: R8A-LR2-10
+    cohort: rigorous-v9
+    original_anchor_id: LR2-10
+  rubric:
+  - {id: 'json:edges[0]', weight: 0.25, group: edges, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:edges[1]', weight: 0.25, group: edges, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:edges[2]', weight: 0.25, group: edges, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:edges[3]', weight: 0.25, group: edges, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:serial_orders', weight: 1.0, group: serial_orders, mandatory: true, critical: false, dimension: content}

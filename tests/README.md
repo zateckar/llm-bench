@@ -1,177 +1,30 @@
-# Test suites
+# Fixed rigorous question suite
 
-Question files for the quality benchmark. YAML files may contain one category or
-multiple categories; `test_loader.py` loads all of them, validates the fields, and produces
-a stable `test_suite_hash` recorded on every run so a change to the suite shows up
-in the run metadata.
+The canonical run bank is assembled by [quality_suite.py](../quality_suite.py). Every quality run uses the same 275 questions; the test browser displays that complete bank.
 
-## File format
+| Component | Count |
+|---|---:|
+| Static questions: one file per question in questions/ | 171 |
+| Generated reasoning/code: 19 families × 2 seeds × 2 variants | 76 |
+| Interactive simulations: 5 families × 2 seeds × 2 variants | 20 |
+| Long-context: 2 families × 2 seeds × 8k/32k sizes | 8 |
 
-A file is a list of question mappings:
+Static anchors span reasoning, constrained decisions, knowledge, security, code, translations, legal/finance/engineering policies and instruction compliance. Typed output contracts state the required fields without revealing answer values. Scientific and specialist tasks are self-contained policy/problem fixtures; they are not current professional advice.
 
-```yaml
-- id: FK-01                    # unique within the file
-  category: Factual Knowledge  # groups results on the run page
-  difficulty: medium           # easy | medium | hard | expert (sets default weight)
-  prompt: "..."
-  evaluator: contains_keywords # see evaluators.EVALUATORS
-  expected:
-    groups:
-      - ["fluorite", "fluorspar"]
-```
+New v10 tasks add robust portfolio ranking, observational versus interventional and counterfactual probabilities, SQL NULL and join cardinality, weighted minimal policy repair, vector-clock conflict frontiers, and Unicode/casefold revision handling. Every new family has independently derived oracle checks in [selftest_frontier.py](../selftest_frontier.py).
 
-Optional fields (all validated, unknown keys are rejected):
+Generated tasks include selective-report conditioning, bounded constraint search, minimal inconsistent sets, temporal policies, revised multihop evidence, reliability decisions, string parsers, dependency layers and transactional state. Fixed authoring seeds are 19 and 23, with two variants. Family identifiers group related instances for balanced scoring.
 
-| Field | Meaning |
-|-------|---------|
-| `id`, `category`, `prompt` | required |
-| `evaluator` + `expected` | explicit scorer from `evaluators.EVALUATORS` |
-| `criteria` [+ `must_not`] | shorthand for the `security_analysis` evaluator |
-| `keywords` | shorthand for `contains_keywords` |
-| `system_prompt` | sent with the prompt |
-| `difficulty` | `easy`/`medium`/`hard`/`expert` — drives the default weight |
-| `weight` | explicit weight, overriding the difficulty weight |
-| `pass_threshold` | score needed to count as a pass (default 1.0) |
-| `max_tokens` | per-question generation cap |
+Interactive models choose a JSON action, receive a simulated observation and act again. Tasks include conflict recovery, payment reconciliation after ambiguous outcomes, paginated deletion previews, cross-resource races and permission-sensitive replanning. Gates check final state, required actions and authorization. External services and real payments are never called. The provider's native tool-calling format is not tested.
 
-The loader is strict: a typo in an evaluator name, an unknown difficulty, or a
-malformed `expected` value aborts the whole run with a clear message instead of
-silently scoring wrong.
+All passes require every mandatory condition. Strict success is the primary category/family-balanced capability score. Requirement-balanced partial achievement remains diagnostic. The three writing tasks measure verifiable constraints separately. Full JSON comparisons reject incorrect values, omissions and extra keys; missing structures stay in the partial-credit denominator. Code fixture errors earn zero achievement. Canonical code fixtures weight boundary and generated combinations equally, protect input state, and every fixture is required for a full pass.
 
-## Categories in this directory
+Long-context questions require indirect site selection, approved temporal revisions and distributed relational or signed aggregation evidence; both lengths share a seed's core problem. Relevant and filler records have the same identifier grammar. The long-context prompts have exact cl100k_base reference lengths. Provider tokenizers can differ; reported prompt-token counts and unsupported-context outcomes are retained. These are quality questions, separate from the fixed 1k performance workload.
 
-`advanced_coding`, `agentic_use_cases`, `classification`, `code_generation`,
-`creative_writing`, `ethical_reasoning`, `factual_knowledge`,
-`instruction_following`, `logical_reasoning`, `long_context_coherence`,
-`mathematical_reasoning`, `needle_retrieval`, `reading_comprehension`,
-`security`, `summarization`, `terminal_algorithms`, `terminal_debugging`,
-`terminal_file_operations`, `terminal_science`, `terminal_system_admin`,
-`tool_using`, `translation`, `truthfulness`.
+Run **python validate_suite.py --strict** before editing the bank. Keep a derivation or independent executable oracle for answer keys. Test plausible wrong answers, omissions, type errors and boundary cases. Keep prompt constraints consistent with evaluation. Update the revision when behavior changes; fresh runs establish empirical difficulty. Public generation is not a secret holdout.
 
-## Challenge revision
+There are no alternative runtime banks, filters, question seeds, splits or context-size controls. Authoring modules retained for oracle checks are not selectable profiles. Historical YAML and retired tooling were copied to ignored data/archive-v6 and data/archive-v8-tools during this migration; Git retains their previous source versions.
 
-The suite contains 427 static questions across 28 categories. Six categories use 56 `challenge-v2` items:
+Benchmark design sources and the historical run audit are linked from the [project README](../README.md).
 
-| Category | IDs | Count | Main demands |
-|----------|-----|-------|--------------|
-| Logical Reasoning | `LR2-*` | 12 | Enumerate consistent models, optimize schedules and assignments, track state |
-| Mathematical Reasoning | `MR2-*` | 12 | Constrained counting, conditional probability, exact expectations, symmetry |
-| Advanced Coding | `AC2-*` | 8 | Time windows, tombstones, cycles, negative values, idempotency, escaped wildcards |
-| Agentic Use Cases | `AU2-*` | 8 | Resource limits, transaction visibility, retries, compensation, replica conflicts |
-| Tool Using | `TU2-*` | 8 | Exact arguments, uncertain outcomes, concurrency, scope, and untrusted data |
-| Reading Comprehension | `RC2-*` | 8 | Reconcile revisions, exceptions, overlapping intervals, and accounting rules |
-
-These replace the 106 previous questions in those categories, rather than adding
-more questions on top of easy ones. Reliability-v4 adds two checkable tasks to each of the original 23 static categories and reports legacy prose-pattern coverage separately from capability. See [QUALITY_AUDIT.md](../QUALITY_AUDIT.md).
-Specialist-v1 adds five smaller categories and eight Security reviews in `specialists.yaml`;
-see [SPECIALISTS.md](SPECIALISTS.md) for scope, sources and verification.
-The new IDs deliberately do not reuse retired IDs. The suite hash and prompt-based
-cache fingerprint change automatically; historical results remain historical.
-
-Prompts define all assumptions, ordering rules, output schemas, and rounding.
-Structured answers use exact JSON comparison with no ignored fields; code items
-require every fixture to pass. Difficulty comes from solving interacting constraints,
-not obscure trivia, arbitrary prose wording, or unexplained precision requirements.
-Expert reasoning items have an 16,384-token default cap to allow working space.
-
-Check answers and grading offline after edits:
-
-```bash
-uv run python validate_suite.py --strict
-uv run python selftest_evaluators.py
-uv run python selftest_challenges.py
-uv run python selftest_specialists.py
-uv run python selftest_ceiling.py
-```
-
-`challenge_oracles.py` derives the answer keys using small exhaustive searches,
-exact arithmetic, simulations, and reviewed policy traces. Its code reference
-solutions are executed in the benchmark's sandbox. `selftest_challenges.py`
-checks those derivations against the YAML and rejects independently corrupted
-answer fields and flawed implementations. Both are authoring/verification files;
-the model receives only the question prompt and optional system prompt.
-
-This is a static, public suite, so it cannot establish freedom from contamination.
-Hard/expert labels are provisional author estimates. Measure discrimination with
-fresh runs of both baseline and strong models on the same suite hash, temperature,
-and token budgets before claiming a particular performance gap.
-
-## Generated and interactive evaluation
-
-`quality_suite.py` assembles the executable suite around these YAML anchors.
-The default adds four reasoning instances and three interactive tasks, producing
-322 questions, and extends the eight advanced-coding items with 197 extra cases.
-`--static-only` preserves the static suite. Long-context accuracy sizes are an
-independent, explicit option; the default adds none.
-
-Each generated family uses an independent RNG stream derived from the generator
-revision, split, question seed, family, and variant index. Adding a family does
-not perturb other streams. Development and evaluation splits generate different
-instances; fixed anchors are shared. Neither public split promises secrecy or
-freedom from contamination. Use evaluation seeds consistently across models and
-avoid tuning on those instances. Increment `quality_suite.REVISION` when changing
-generation or simulation semantics. Full executable question fingerprints include
-the prompt, answer, fixtures, budgets, metadata, and hidden simulation setup.
-
-Additional code fixtures use `independent_oracles.py`, with different algorithms
-from `challenge_oracles.py`. Verification cross-checks both implementations and
-metamorphic properties. Model prompts do not include the extra test inputs.
-
-`interactive_tasks.py` has no external side effects. A model sends one JSON action
-and observes the result on each turn, including conflicts and uncertain outcomes.
-Tasks stop at 16 model turns or 32,768 total output tokens. A failed tool operation
-is part of the task; an endpoint failure is a separate excluded result. The full
-trajectory, final state, authorization violations, and excess calls are recorded.
-
-Long-context prompts are measured exactly with `cl100k_base`, excluding chat
-envelope overhead. Provider token counts are also stored, with estimates clearly
-distinguished. The quality JSON records the reference tokenizer, prompt hash,
-size, question seed, and outcome so each tested instance can be reproduced.
-
-Run `uv run python selftest_quality.py` after changing these components. This is
-also a CI gate. All network model calls are replaced by fake clients in the tests.
-
-## Reliability-v4 authoring
-
-`reliability_cases.py` generates `reliability.yaml`: 46 tasks across all 23 categories, including eight code tasks with 179 fixtures. Run `python reliability_cases.py` after editing the authoring file, then `python selftest_reliability.py`. New structured tasks require a single JSON document (an optional single code fence is accepted), reject duplicate keys and extra claims, and compare numbers exactly. Long ledgers use many records but do not claim a fixed tokenizer length; the separate generated context tests provide that measurement.
-
-Question difficulty is provisional. Compare fresh runs using the same quality-v5 protocol, suite hash, seeds, split, and output budget. Do not combine old and new headline scores: the set of capability items changed.
-
-## Ceiling-v5
-
-The newer stretch-v6 additions are documented below; ceiling-v5 remains a separate reporting subset.
-
-`ceiling.yaml` adds 52 original questions across 13 categories after 145/187 capability
-items were passed by all four models in runs 44–47. `hard_cases.py` and
-`hard_code_cases.py` regenerate these fixtures. Reporting groups the four variants of
-each non-code family into one cluster and exposes the challenge subset separately.
-The four coding tasks have 215 executable cases. See [QUALITY_AUDIT_V5.md](../QUALITY_AUDIT_V5.md)
-for benchmark inspirations, measured limitations, JSON fixes, and reproduction commands.
-
-`json_match.expected.value_aliases` maps exact scalar paths (such as
-`[1].args.version`) to explicitly accepted alternative values. It does not coerce
-other fields, reorder arrays, ignore keys, accept wrong versions, or repair malformed
-JSON. Use it only for documented semantic equivalents or ambiguous legacy contracts;
-new prompts should specify field types and null/enum behavior unambiguously.
-
-## Stretch-v6
-
-`stretch_cases.py` generates 30 original JSON tasks in `stretch.yaml`, three variants
-of ten families, targeting categories saturated in runs 48–50. These add adaptive
-planning, tool dependencies, bitemporal reconciliation, event summaries, graph
-retrieval, scoped state, circuit diagnosis, conditional inheritance, ordered data
-transforms, and German/Czech semantic translation. See
-[BENCHMARK_REVIEW_V6.md](../BENCHMARK_REVIEW_V6.md) for evidence, source benchmarks,
-scope limitations and fresh-run instructions.
-
-Regenerate with `python stretch_cases.py` and verify with
-`python selftest_stretch.py`. Independent derivations check the keys and 1,718
-mutated answers must fail. New tasks participate in default CLI/web runs and have
-a separate stretch score. Variants are clustered into one family per category.
-The default assembled suite has 434 questions; static-only has 427.
-
-The format check `type: json` supports opt-in `strict_json: true` and `item_fields`
-for arrays of objects. The latter requires exactly the named keys for every element;
-each field declares `type: integer|string|boolean`, with optional full-match
-`pattern` for strings. Indices/status values are checked through `json_path`.
-`IF-07` uses these together to check the entire requested UUID array.
+Authoring layout is independent of runtime selection. The recursive loader reads every YAML question, rejects duplicate keys and duplicate IDs, and still produces one canonical suite. The design, research sources and review iterations are documented in [BENCHMARK_DESIGN.md](../BENCHMARK_DESIGN.md).

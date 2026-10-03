@@ -1,0 +1,33 @@
+- id: LR2-04
+  category: Logical Reasoning
+  prompt: |-
+    Two jugs have capacities 9 and 4 litres. Both start empty. Allowed unit-cost
+    operations: fill either jug, empty either jug, or pour either into the other
+    until the source is empty or the destination is full. Unlimited water exists.
+    The FINAL state must be (6,0): six litres in the 9-litre jug, the other empty.
+    Return JSON {"operations": minimum number, "shortest_state_paths": number of
+    distinct shortest sequences of states including the initial and final states}.
+    Ignore operations that leave the state unchanged. Different operations reaching
+    the same next state count as the same state-path step.
+
+    Explicit JSON output contract (types only): {"operations": "number", "shortest_state_paths": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      operations: 9
+      shortest_state_paths: 1
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Shortest state path with exact final-state requirement
+  max_tokens: 8192
+  metadata:
+    family: R8A-LR2-04
+    cohort: rigorous-v9
+    original_anchor_id: LR2-04
+  rubric:
+  - {id: 'json:operations', weight: 1.0, group: operations, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:shortest_state_paths', weight: 1.0, group: shortest_state_paths, mandatory: true, critical: false,
+    dimension: content}

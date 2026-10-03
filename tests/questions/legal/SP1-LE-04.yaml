@@ -1,0 +1,54 @@
+- id: SP1-LE-04
+  category: Legal
+  prompt: |-
+    Fictional negotiated engineering contract. Interpret only these clauses, with no
+    external law, implied rights, or calendar rules. Business days are Mon-Fri; no holidays.
+    Ownership of each deliverable transfers only after BOTH full payment and written
+    acceptance. Embedded background IP remains supplier-owned; customer receives a
+    perpetual internal-use license on transfer, with no sublicensing right. Confidentiality
+    lasts 3 years after termination except trade secrets, which last while secret.
+    Defect notices must arrive within 5 business days AFTER delivery (delivery day excluded).
+    Termination does not undo ownership or surviving licenses already vested.
+    Delivery Fri 2026-01-09. Notice Fri 2026-01-16. Acceptance Jan 14; payment Jan 20;
+    termination Jan 21. The CAD deliverable includes supplier background library B.
+    On 2030-01-22, technical item S is still a trade secret; ordinary pricing item P is not.
+    Return {notice_deadline:"YYYY-MM-DD",notice_timely:bool,
+    owner_on_jan19:"supplier"|"customer",owner_on_jan22:...,B_owner:...,
+    B_internal_license_survives:bool,B_sublicense_allowed:bool,
+    confidential_on_2030_01_22:[IDs sorted]}.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"notice_deadline": "string", "notice_timely": "boolean", "owner_on_jan19": "string", "owner_on_jan22": "string", "B_owner": "string", "B_internal_license_survives": "boolean", "B_sublicense_allowed": "boolean", "confidential_on_2030_01_22": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      notice_deadline: '2026-01-16'
+      notice_timely: true
+      owner_on_jan19: supplier
+      owner_on_jan22: customer
+      B_owner: supplier
+      B_internal_license_survives: true
+      B_sublicense_allowed: false
+      confidential_on_2030_01_22: [S]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original synthetic exercise
+  description: Conjunctive vesting, business-day deadline, retained background IP, and survival exceptions.
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-LE-04
+    cohort: rigorous-v9
+    original_anchor_id: SP1-LE-04
+  rubric:
+  - {id: 'json:notice_deadline', weight: 1.0, group: notice_deadline, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:notice_timely', weight: 1.0, group: notice_timely, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:owner_on_jan19', weight: 1.0, group: owner_on_jan19, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:owner_on_jan22', weight: 1.0, group: owner_on_jan22, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:B_owner', weight: 1.0, group: B_owner, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:B_internal_license_survives', weight: 1.0, group: B_internal_license_survives, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:B_sublicense_allowed', weight: 1.0, group: B_sublicense_allowed, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:confidential_on_2030_01_22[0]', weight: 1.0, group: confidential_on_2030_01_22, mandatory: true,
+    critical: false, dimension: content}

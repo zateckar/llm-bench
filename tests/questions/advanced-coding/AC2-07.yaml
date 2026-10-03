@@ -1,0 +1,81 @@
+- id: AC2-07
+  category: Advanced Coding
+  prompt: |
+    Implement reconcile(events). Process [id,source,destination,amount] in input
+        order, starting with empty balances. IDs/accounts are strings; amount is an
+        integer. BANK has unlimited funds and is never included in balances. Other
+        accounts start at zero. Reject amount<=0, source==destination, or insufficient
+        source balance. Rejection changes no balances. Each ID is consumed on its FIRST
+        occurrence, even if rejected; silently ignore all later occurrences of it,
+        even if their payload differs. Return {"balances": object, "rejected": IDs in
+        rejection order}. Include only non-BANK accounts touched by successful events;
+        retain accounts whose balance becomes zero. Support 2000 events.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: reconcile
+    args: [[]]
+    expected:
+      balances: {}
+      rejected: []
+    relative: 0
+    tolerance: 0
+  - function: reconcile
+    args: [[['1', BANK, a, 10], ['2', a, b, 7], ['3', b, BANK, 7]]]
+    expected:
+      balances:
+        a: 3
+        b: 0
+      rejected: []
+    relative: 0
+    tolerance: 0
+  - function: reconcile
+    args: [[[x, a, b, 5], [fund, BANK, a, 9], [x, a, b, 5]]]
+    expected:
+      balances:
+        a: 9
+      rejected: [x]
+    relative: 0
+    tolerance: 0
+  - function: reconcile
+    args: [[[a, BANK, x, 4], [a, BANK, x, 99], [b, x, y, 5]]]
+    expected:
+      balances:
+        x: 4
+      rejected: [b]
+    relative: 0
+    tolerance: 0
+  - function: reconcile
+    args: [[[a, BANK, BANK, 2], [b, BANK, x, 0], [c, BANK, x, -3]]]
+    expected:
+      balances: {}
+      rejected: [a, b, c]
+    relative: 0
+    tolerance: 0
+  - function: reconcile
+    args: [[['1', BANK, a, 5], ['2', a, a, 2], ['3', a, BANK, 5]]]
+    expected:
+      balances:
+        a: 0
+      rejected: ['2']
+    relative: 0
+    tolerance: 0
+  - function: reconcile
+    args: [[['1', BANK, a, 1], ['2', a, b, 1], ['3', b, a, 1], ['4', a, c, 2]]]
+    expected:
+      balances:
+        a: 1
+        b: 0
+      rejected: ['4']
+    relative: 0
+    tolerance: 0
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Idempotent ledger replay including failed IDs and zero balances
+  max_tokens: 4096
+  metadata:
+    family: R8A-AC2-07
+    cohort: rigorous-v9
+    original_anchor_id: AC2-07

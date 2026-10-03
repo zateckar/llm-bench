@@ -1,0 +1,91 @@
+- id: H5-IF-pipeline-02
+  category: Instruction Following
+  prompt: |-
+    Transform this ledger with ALL rules, in this order.
+    1. Reject rows not approved OR marked deleted; record only those raw row indices as rejected.
+    2. Normalize key by stripping outside whitespace and case-folding.
+    3. Among eligible rows per normalized key keep greatest version; tied versions use
+    the later input row. A rejected row never supersedes an eligible row. Do not sum duplicates.
+    4. Sort survivors by amount DESCENDING then normalized key ascending. Keep the first
+    five (or all if fewer). Negative amounts and zero remain eligible.
+    5. Return {"rows":[{"key":normalized key,"source":zero-based raw row index,
+    "cents":unchanged integer amount,"rank":one-based final rank}],
+    "rejected_indices":[ascending raw indices],"eligible_distinct":count BEFORE top-five,
+    "omitted_total":sum amounts of surviving keys omitted by top-five}.
+    Never list superseded eligible rows in rejected_indices. Preserve final row order
+    from rule 4; only rejected_indices is numerically sorted.
+    Input: [{"key": "a", "version": 1, "state": "approved", "deleted": true, "amount": 250}, {"key": "d", "version": 1, "state": "approved", "deleted": false, "amount": 0}, {"key": "G", "version": 3, "state": "approved", "deleted": false, "amount": -125}, {"key": " b ", "version": 4, "state": "draft", "deleted": false, "amount": -250}, {"key": "G", "version": 2, "state": "approved", "deleted": false, "amount": -625}, {"key": "B", "version": 4, "state": "draft", "deleted": false, "amount": -250}, {"key": " b ", "version": 1, "state": "approved", "deleted": false, "amount": 125}, {"key": " b ", "version": 2, "state": "approved", "deleted": false, "amount": 875}, {"key": "E", "version": 1, "state": "approved", "deleted": false, "amount": 750}, {"key": "C", "version": 4, "state": "approved", "deleted": false, "amount": 750}, {"key": "f", "version": 4, "state": "draft", "deleted": false, "amount": 125}, {"key": "B", "version": 1, "state": "draft", "deleted": false, "amount": 250}, {"key": "G", "version": 4, "state": "approved", "deleted": false, "amount": 375}, {"key": " A ", "version": 4, "state": "approved", "deleted": false, "amount": 500}, {"key": "a", "version": 1, "state": "approved", "deleted": false, "amount": -375}, {"key": "h", "version": 2, "state": "approved", "deleted": false, "amount": -250}, {"key": "E", "version": 2, "state": "draft", "deleted": false, "amount": -250}, {"key": "f", "version": 3, "state": "approved", "deleted": false, "amount": 500}, {"key": " b ", "version": 2, "state": "approved", "deleted": false, "amount": 625}, {"key": "C", "version": 4, "state": "approved", "deleted": false, "amount": 875}, {"key": " b ", "version": 3, "state": "approved", "deleted": false, "amount": -500}, {"key": "B", "version": 2, "state": "approved", "deleted": false, "amount": 625}, {"key": "a", "version": 2, "state": "draft", "deleted": false, "amount": 625}, {"key": "a", "version": 1, "state": "draft", "deleted": false, "amount": -500}, {"key": " b ", "version": 1, "state": "approved", "deleted": false, "amount": 0}, {"key": "C", "version": 3, "state": "draft", "deleted": false, "amount": -375}, {"key": "f", "version": 2, "state": "approved", "deleted": false, "amount": 250}, {"key": " A ", "version": 3, "state": "approved", "deleted": false, "amount": -250}, {"key": " b ", "version": 3, "state": "approved", "deleted": true, "amount": 500}, {"key": " b ", "version": 3, "state": "approved", "deleted": false, "amount": -625}]
+    Return only the requested JSON, with no extra keys or prose. Null is allowed only where explicitly requested. All ID lists must be sorted lexicographically.
+    Explicit JSON output contract (types only): {"rows": {"array_items": {"key": "string", "source": "number", "cents": "number", "rank": "number"}}, "rejected_indices": {"array_items": "number"}, "eligible_distinct": "number", "omitted_total": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      rows:
+      - key: c
+        source: 19
+        cents: 875
+        rank: 1
+      - key: e
+        source: 8
+        cents: 750
+        rank: 2
+      - key: a
+        source: 13
+        cents: 500
+        rank: 3
+      - key: f
+        source: 17
+        cents: 500
+        rank: 4
+      - key: g
+        source: 12
+        cents: 375
+        rank: 5
+      rejected_indices: [0, 3, 5, 10, 11, 16, 22, 23, 25, 28]
+      eligible_distinct: 8
+      omitted_total: -875
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original ceiling-v5; IFEval: https://huggingface.co/datasets/google/IFEval (jointly verifiable constraints
+    design only)'
+  description: Compositional challenge; deterministic oracle in hard_cases.py. Difficulty awaits fresh model calibration.
+  max_tokens: 16384
+  metadata:
+    family: R8A-H5-IF-pipeline
+    cohort: rigorous-v9
+    original_anchor_id: H5-IF-pipeline-02
+  rubric:
+  - {id: 'json:rows[0].key', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[0].source', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[0].cents', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[0].rank', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[1].key', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[1].source', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[1].cents', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[1].rank', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[2].key', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[2].source', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[2].cents', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[2].rank', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[3].key', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[3].source', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[3].cents', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[3].rank', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[4].key', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[4].source', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[4].cents', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows[4].rank', weight: 0.05, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rejected_indices[0]', weight: 0.1, group: rejected_indices, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rejected_indices[1]', weight: 0.1, group: rejected_indices, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rejected_indices[2]', weight: 0.1, group: rejected_indices, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rejected_indices[3]', weight: 0.1, group: rejected_indices, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rejected_indices[4]', weight: 0.1, group: rejected_indices, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rejected_indices[5]', weight: 0.1, group: rejected_indices, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rejected_indices[6]', weight: 0.1, group: rejected_indices, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rejected_indices[7]', weight: 0.1, group: rejected_indices, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rejected_indices[8]', weight: 0.1, group: rejected_indices, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rejected_indices[9]', weight: 0.1, group: rejected_indices, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:eligible_distinct', weight: 1.0, group: eligible_distinct, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:omitted_total', weight: 1.0, group: omitted_total, mandatory: true, critical: false, dimension: content}

@@ -1,0 +1,35 @@
+- id: MR2-12
+  category: Mathematical Reasoning
+  prompt: |-
+    Let B = 2^7 * 3^4 * 5^2. Find the smallest positive integer n for which B^8 divides n!.
+    Return JSON {"n": ..., "valuations": [v2(n!),v3(n!),v5(n!)],
+    "previous_max_power": largest integer k such that B^k divides (n-1)!}.
+    vp(m) is the exponent of prime p in m.
+
+    Explicit JSON output contract (types only): {"n": "number", "valuations": {"array_items": "number"}, "previous_max_power": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      n: 70
+      valuations: [67, 32, 16]
+      previous_max_power: 7
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Factorial valuations with multiple limiting primes
+  max_tokens: 8192
+  metadata:
+    family: R8A-MR2-12
+    cohort: rigorous-v9
+    original_anchor_id: MR2-12
+  rubric:
+  - {id: 'json:n', weight: 1.0, group: n, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:valuations[0]', weight: 0.3333333333333333, group: valuations, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:valuations[1]', weight: 0.3333333333333333, group: valuations, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:valuations[2]', weight: 0.3333333333333333, group: valuations, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:previous_max_power', weight: 1.0, group: previous_max_power, mandatory: true, critical: false, dimension: content}

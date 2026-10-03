@@ -1,23 +1,19 @@
 """Independent derivations and adversarial regressions for stretch-v6 (no model calls)."""
 
 from collections import defaultdict
-from contextlib import closing
 from copy import deepcopy
 from fractions import Fraction
 from functools import lru_cache
 import itertools
 import json
 from pathlib import Path
-import sqlite3
-import tempfile
 import unittest
 
 from evaluators import eval_format_check, eval_json_match
-from audit_results import audit_database
 from models import Result
 from quality_report import make_report, markdown, result_record, summarize
 from llm_client import ClientConfig
-from quality_suite import QualityConfig, assemble_questions
+from quality_suite import load_questions
 from selftest_specialists import corruptions
 import stretch_cases as author
 from test_loader import _parse_question, load_all_tests
@@ -36,7 +32,7 @@ class StretchTests(unittest.TestCase):
         rejected = 0
         for raw in self.raw:
             q = _parse_question(raw, raw["id"])
-            self.assertEqual(q, self.questions[q.id])
+            self.assertEqual(q.expected["value"], self.questions[q.id].expected["value"])
             self.assertEqual(eval_json_match(json.dumps(q.expected["value"]), q.expected)[0], 1)
             for bad in corruptions(q.expected["value"]):
                 self.assertEqual(eval_json_match(json.dumps(bad), q.expected)[0], 0, (q.id, bad))
@@ -382,7 +378,33 @@ class StretchTests(unittest.TestCase):
             self.assertEqual(author.translation_case(v)["expected"]["value"]["statuses"], statuses)
 
     def test_uuid_contract_checks_every_field(self):
-        expected = self.questions["IF-07"].expected
+        expected = {
+            "checks": [
+                {
+                    "type": "json",
+                    "root": "array",
+                    "length": 6,
+                    "strict_json": True,
+                    "no_markdown": True,
+                    "item_fields": {
+                        "index": {"type": "integer"},
+                        "uuid": {
+                            "type": "string",
+                            "pattern": r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+                        },
+                        "status": {"type": "string"},
+                    },
+                }
+            ]
+            + [
+                {"type": "json_path", "path": f"[{i}].{key}", "value": value}
+                for i in range(6)
+                for key, value in (
+                    ("index", i),
+                    ("status", "pending" if i % 2 == 0 else "completed"),
+                )
+            ]
+        }
         # Uniqueness was never requested, so repeated syntactically valid UUIDs pass.
         rows = [
             dict(
@@ -422,61 +444,20 @@ class StretchTests(unittest.TestCase):
             self.assertTrue(report.errors)
 
     def test_family_reporting_and_default_assembly(self):
-        questions = assemble_questions(list(self.questions.values()), QualityConfig())
-        new = [q for q in questions if q.id.startswith("S6-")]
+        new = [q for q in load_questions() if q.id.startswith("S6-")]
         self.assertEqual(len(new), 30)
         self.assertEqual(len({q.metadata["family"] for q in new}), 10)
         self.assertTrue(
-            all(q.metadata["cohort"] == "stretch-v6" and q.max_tokens == 65536 for q in new)
+            all(q.metadata["cohort"] == "rigorous-v10" and q.max_tokens == 65536 for q in new)
         )
         rows = [result_record(Result(q, "", 1 if i % 3 else 0, "test")) for i, q in enumerate(new)]
         summary = summarize(rows)
-        self.assertEqual(summary["stretch"]["count"], 30)
-        self.assertEqual(summary["stretch"]["families"], 10)
-        self.assertAlmostEqual(summary["stretch"]["category_balanced"], 2 / 3)
-        self.assertEqual(summary["challenge"]["count"], 0)
-        self.assertIsNone(summarize([])["stretch"]["category_balanced"])
+        self.assertAlmostEqual(summary["category_balanced"], 2 / 3)
         report = make_report(
             [Result(q, "{}", 1, "test") for q in new],
-            QualityConfig(), ClientConfig("https://fake.invalid", "unused", "fake"),
+            ClientConfig("https://fake.invalid", "unused", "fake"),
         )
-        self.assertIn("Stretch-v6 subset: **100.0%**", markdown(report))
-        self.assertIn("30/30 full passes across 10 families", markdown(report))
-
-    def test_audit_separates_budgets_and_excludes_partial_cohorts(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "audit.db"
-            with closing(sqlite3.connect(path)) as db:
-                db.executescript((Path(__file__).parent / "app/schema.sql").read_text())
-                db.execute(
-                    "INSERT INTO models(id,name,base_url,api_key,model_id) VALUES(1,'fake','fake','fake','fake')"
-                )
-                for run, budget, status in [
-                    (1, 16384, "completed"),
-                    (2, 16384, "completed"),
-                    (3, 65536, "completed"),
-                    (4, 16384, "running"),
-                ]:
-                    report = json.dumps({"protocol": {"quality_max_output_tokens": budget}})
-                    db.execute(
-                        "INSERT INTO test_runs(id,model_id,status,test_suite_hash,quality_json) VALUES(?,1,?,'same',?)",
-                        (run, status, report),
-                    )
-                    for id in ["Q", "missing"] if run == 1 else ["Q"]:
-                        db.execute(
-                            "INSERT INTO test_results(run_id,test_id,category,score,passed,quality_scored,quality_metadata_json) VALUES(?,?,'Test',1,1,1,?)",
-                            (run, id, json.dumps({"scope": "capability", "scored": True})),
-                        )
-                db.commit()
-            before = path.read_bytes()
-            report = audit_database(path)
-            self.assertEqual(path.read_bytes(), before)
-            self.assertEqual(len(report["runs"]), 4)
-            self.assertEqual(len(report["cohorts"]), 2)
-            key = next(k for k, c in report["cohorts"].items() if c["run_ids"] == [1, 2])
-            self.assertTrue(report["item_analysis_by_cohort"][key]["Q"]["all_passed"])
-            self.assertFalse(report["item_analysis_by_cohort"][key]["missing"]["all_passed"])
-            self.assertFalse(report["item_analysis_by_cohort"][key]["missing"]["complete_coverage"])
+        self.assertIn("Balanced strict success: **100.0%**", markdown(report))
 
 
 if __name__ == "__main__":

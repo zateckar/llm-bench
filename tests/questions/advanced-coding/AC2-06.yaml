@@ -1,0 +1,79 @@
+- id: AC2-06
+  category: Advanced Coding
+  prompt: |
+    Implement optimal_jobs(jobs). Each job is [id,start,end,profit], with a unique
+        string id, integer times start<end, and integer profit (possibly negative).
+        Select non-overlapping half-open jobs maximizing total profit. Touching jobs
+        are compatible. Selecting nothing is allowed. Break equal-profit ties by the
+        lexicographically smallest SORTED list of selected IDs (Python list comparison,
+        including the shorter-prefix rule). Return {"profit": integer, "ids": sorted list}.
+        Jobs arrive unsorted. Support up to 16 jobs; avoid assumptions about positive profits.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: optimal_jobs
+    args: [[]]
+    expected:
+      profit: 0
+      ids: []
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[a, 0, 3, 5], [b, 0, 1, 3], [c, 1, 3, 3]]]
+    expected:
+      profit: 6
+      ids: [b, c]
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[z, 0, 2, 5], [a, 0, 1, 2], [b, 1, 2, 3]]]
+    expected:
+      profit: 5
+      ids: [a, b]
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[a, 0, 1, 0], [b, 1, 2, 2]]]
+    expected:
+      profit: 2
+      ids: [a, b]
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[b, 0, 1, 2], [z, 1, 2, 0]]]
+    expected:
+      profit: 2
+      ids: [b]
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[a, 0, 1, -1], [b, 1, 2, -2]]]
+    expected:
+      profit: 0
+      ids: []
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[c, 3, 5, 6], [b, 1, 4, 9], [a, -1, 1, 3], [d, 1, 3, 4]]]
+    expected:
+      profit: 13
+      ids: [a, c, d]
+    relative: 0
+    tolerance: 0
+  - function: optimal_jobs
+    args: [[[a, 0, 2, 0], [b, 2, 3, 0]]]
+    expected:
+      profit: 0
+      ids: []
+    relative: 0
+    tolerance: 0
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Weighted scheduling with reconstruction and lexicographic ties
+  max_tokens: 4096
+  metadata:
+    family: R8A-AC2-06
+    cohort: rigorous-v9
+    original_anchor_id: AC2-06

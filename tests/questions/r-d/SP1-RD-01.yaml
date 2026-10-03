@@ -1,0 +1,42 @@
+- id: SP1-RD-01
+  category: R&D
+  prompt: |-
+    Automotive energy model, all assumptions exact. Vehicle mass 2000 kg decelerates
+    from 20 m/s to 10 m/s on level ground. Wheel kinetic-energy loss = m*(v0^2-v1^2)/2.
+    Regeneration converts at most 60% of that energy to electrical energy, but battery
+    acceptance is capped at 20 kW for the entire 5 s event. Actual recovered electrical
+    energy is the smaller limit. Mechanical braking supplies kinetic loss minus wheel
+    energy diverted to regen (electrical energy divided by 0.60). Neglect all other losses.
+    Then battery supplies 30 kW traction for 40 s plus 2 kW auxiliaries for 45 s (including
+    the brake event). Return integer joules {kinetic_loss_J,recovered_J,
+    friction_brake_J,net_battery_depletion_J} and {regen_limited_by:"efficiency"|"acceptance"}.
+    Use nearest integer only on friction_brake_J, half up; other outputs exact.
+    One flat object with those five keys.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"kinetic_loss_J": "number", "recovered_J": "number", "friction_brake_J": "number", "net_battery_depletion_J": "number", "regen_limited_by": "string"}
+  evaluator: json_match
+  expected:
+    value:
+      kinetic_loss_J: 300000
+      recovered_J: 100000
+      friction_brake_J: 133333
+      net_battery_depletion_J: 1190000
+      regen_limited_by: acceptance
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original synthetic exercise
+  description: Battery charge limit differs from wheel regen energy; auxiliary duration includes braking.
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-RD-01
+    cohort: rigorous-v9
+    original_anchor_id: SP1-RD-01
+  rubric:
+  - {id: 'json:kinetic_loss_J', weight: 1.0, group: kinetic_loss_J, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:recovered_J', weight: 1.0, group: recovered_J, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:friction_brake_J', weight: 1.0, group: friction_brake_J, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:net_battery_depletion_J', weight: 1.0, group: net_battery_depletion_J, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:regen_limited_by', weight: 1.0, group: regen_limited_by, mandatory: true, critical: false, dimension: content}

@@ -1,0 +1,95 @@
+- id: S6-scopedstate-02
+  category: Long Context Coherence
+  prompt: |-
+    Follow a nested configuration session. The root initially has color=11, quota=22, region=33.
+    push creates an EMPTY child overlay; reads inherit through parents. set writes only the
+    current overlay. unset writes an explicit null mask: reads return null, not a parent's
+    value. commit pops the child and copies only its explicit entries (including null masks)
+    into its parent. rollback pops and discards the child. Neither operation pops the root.
+    read records visible [color,quota,region]. All operations below are valid and ordered.
+    The final stack has only the root. Integer values are opaque configuration data.
+    Operations: [["push"],["set","quota",57],["push"],["unset","color"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","color",90],["push"],["unset","quota"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","color",40],["push"],["unset","color"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","quota",78],["push"],["unset","color"],["read"],["commit"],["read"],["commit"],["read"],["push"],["set","region",16],["push"],["unset","quota"],["read"],["rollback"],["read"],["commit"],["read"],["push"],["set","color",20],["push"],["unset","quota"],["read"],["commit"],["read"],["commit"],["read"]]
+    Return reads (one three-element array for every read in chronological order) and root
+    (final explicit root entries for color,quota,region). Do not conflate null with inheritance.
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above; do not add prose.
+    Explicit JSON output contract (types only): {"reads": "array (element types and order specified in task)", "root": {"color": "number", "quota": "null or the value type specified in task", "region": "number"}}
+    root is {color:value_or_null,quota:value_or_null,region:value_or_null}, never an array.
+  evaluator: json_match
+  expected:
+    value:
+      reads: [[null, 57, 33], [11, 57, 33], [11, 57, 33], [90, null, 33], [90, 57, 33], [90, 57, 33], [null, 57,
+          33], [40, 57, 33], [40, 57, 33], [null, 78, 33], [null, 78, 33], [null, 78, 33], [null, null, 16], [null,
+          78, 16], [null, 78, 16], [20, null, 16], [20, null, 16], [20, null, 16]]
+      root:
+        color: 20
+        quota: null
+        region: 16
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  max_tokens: 65536
+  metadata:
+    family: R8A-S6-scopedstate
+    cohort: rigorous-v9
+    original_anchor_id: S6-scopedstate-02
+  rubric:
+  - {id: 'json:reads[0][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[0][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[0][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[1][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[1][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[1][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[2][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[2][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[2][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[3][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[3][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[3][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[4][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[4][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[4][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[5][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[5][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[5][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[6][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[6][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[6][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[7][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[7][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[7][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[8][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[8][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[8][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[9][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[9][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[9][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[10][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[10][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[10][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[11][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[11][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[11][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[12][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[12][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[12][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[13][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[13][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[13][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[14][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[14][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[14][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[15][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[15][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[15][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[16][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[16][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[16][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[17][0]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[17][1]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reads[17][2]', weight: 0.018518518518518517, group: reads, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:root.color', weight: 0.3333333333333333, group: root, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:root.quota', weight: 0.3333333333333333, group: root, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:root.region', weight: 0.3333333333333333, group: root, mandatory: true, critical: false, dimension: content}

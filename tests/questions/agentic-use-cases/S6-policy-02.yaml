@@ -1,0 +1,60 @@
+- id: S6-policy-02
+  category: Agentic Use Cases
+  prompt: |-
+    An incident has one hidden state, fixed throughout the run. Every state below is possible.
+    Only the named remedy for the true state is safe. Tests are deterministic, reveal a binary
+    outcome, have the stated positive cost and do not change the state. You may adapt the next
+    test to previous outcomes. You can stop as soon as all remaining states have the SAME
+    remedy; you need not identify the exact state. Minimize the WORST total test cost, not the
+    mean or the number of tests. Remedy application costs zero. Repeating a test adds no evidence.
+    States in column order: ["s0","s1","s2","s3","s4","s5","s6","s7"]
+    Corresponding safe remedies: ["repair-B","repair-C","repair-A","repair-B","repair-C","repair-D","repair-A","repair-D"]
+    Tests: [{"id":"T0","cost":1,"outcomes":[0,1,0,1,0,1,0,1]},{"id":"T1","cost":4,"outcomes":[0,0,1,1,0,0,1,1]},{"id":"T2","cost":4,"outcomes":[0,0,0,0,1,1,1,1]},{"id":"T3","cost":2,"outcomes":[1,0,1,0,1,1,0,1]},{"id":"T4","cost":4,"outcomes":[1,0,1,0,0,1,0,0]},{"id":"T5","cost":5,"outcomes":[0,0,0,1,0,1,1,0]},{"id":"T6","cost":1,"outcomes":[0,1,1,0,1,0,0,0]}]
+    Return worst_cost, optimal_first_tests (ALL minimizing first test IDs, sorted), and
+    cost_by_first_test (test ID -> minimum worst total cost when forced to start with that test,
+    including its cost). A test that never splits the initial states has value null in that map
+    and is not a candidate first test. Branches may stop at different depths.
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above; do not add prose.
+    Explicit JSON output contract (types only): {"worst_cost": "number", "optimal_first_tests": {"array_items": "string"}, "cost_by_first_test": {"T0": "number", "T1": "number", "T2": "number", "T3": "number", "T4": "number", "T5": "number", "T6": "number"}}
+  evaluator: json_match
+  expected:
+    value:
+      worst_cost: 5
+      optimal_first_tests: [T6]
+      cost_by_first_test:
+        T0: 6
+        T1: 7
+        T2: 6
+        T3: 7
+        T4: 8
+        T5: 10
+        T6: 5
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  max_tokens: 65536
+  metadata:
+    family: R8A-S6-policy
+    cohort: rigorous-v9
+    original_anchor_id: S6-policy-02
+  rubric:
+  - {id: 'json:worst_cost', weight: 1.0, group: worst_cost, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:optimal_first_tests[0]', weight: 1.0, group: optimal_first_tests, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:cost_by_first_test.T0', weight: 0.14285714285714285, group: cost_by_first_test, mandatory: true,
+    critical: false, dimension: content}
+  - {id: 'json:cost_by_first_test.T1', weight: 0.14285714285714285, group: cost_by_first_test, mandatory: true,
+    critical: false, dimension: content}
+  - {id: 'json:cost_by_first_test.T2', weight: 0.14285714285714285, group: cost_by_first_test, mandatory: true,
+    critical: false, dimension: content}
+  - {id: 'json:cost_by_first_test.T3', weight: 0.14285714285714285, group: cost_by_first_test, mandatory: true,
+    critical: false, dimension: content}
+  - {id: 'json:cost_by_first_test.T4', weight: 0.14285714285714285, group: cost_by_first_test, mandatory: true,
+    critical: false, dimension: content}
+  - {id: 'json:cost_by_first_test.T5', weight: 0.14285714285714285, group: cost_by_first_test, mandatory: true,
+    critical: false, dimension: content}
+  - {id: 'json:cost_by_first_test.T6', weight: 0.14285714285714285, group: cost_by_first_test, mandatory: true,
+    critical: false, dimension: content}

@@ -1,0 +1,46 @@
+- id: SP1-RD-03
+  category: R&D
+  prompt: |-
+    Robotics transform and stopping-envelope exercise. Column vectors, metres/seconds.
+    At the image timestamp robot pose in world is translation (2,3), yaw +90 degrees
+    (counterclockwise). Camera axes align with robot axes; camera origin is (0.2,0)
+    in robot frame. Detected point is (1,0.5) in camera frame. The latest robot pose
+    arrives 0.2 s later at (2,3.4), same yaw; use the image-time pose for reconstruction.
+    At decision time robot speed toward a different stationary obstacle is 2 m/s.
+    Total delay before braking is 0.2 s sensor age plus 0.1 s actuation latency; during
+    delay speed is constant. Braking deceleration is 4 m/s^2. Add 0.25 m safety margin.
+    Available obstacle distance AT decision time is 1.30 m. Treat the age delay as an
+    additional conservative policy allowance; do not subtract it from distance again.
+    Return {world_point:[x,y],using_latest_pose_y_error_m,required_clearance_m,
+    clearance_deficit_m,safe_under_policy:bool}. Exact decimals, no safety certification implied.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"world_point": {"array_items": "number"}, "using_latest_pose_y_error_m": "number", "required_clearance_m": "number", "clearance_deficit_m": "number", "safe_under_policy": "boolean"}
+  evaluator: json_match
+  expected:
+    value:
+      world_point: [1.5, 4.2]
+      using_latest_pose_y_error_m: 0.4
+      required_clearance_m: 1.35
+      clearance_deficit_m: 0.05
+      safe_under_policy: false
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original synthetic exercise
+  description: Compose camera offset before world rotation; timestamp mismatch and latency contribute separate errors.
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-RD-03
+    cohort: rigorous-v9
+    original_anchor_id: SP1-RD-03
+  rubric:
+  - {id: 'json:world_point[0]', weight: 0.5, group: world_point, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:world_point[1]', weight: 0.5, group: world_point, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:using_latest_pose_y_error_m', weight: 1.0, group: using_latest_pose_y_error_m, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:required_clearance_m', weight: 1.0, group: required_clearance_m, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:clearance_deficit_m', weight: 1.0, group: clearance_deficit_m, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:safe_under_policy', weight: 1.0, group: safe_under_policy, mandatory: true, critical: false, dimension: content}

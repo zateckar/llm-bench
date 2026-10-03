@@ -1,0 +1,54 @@
+- id: SP1-RD-04
+  category: R&D
+  prompt: |-
+    Automotive R&D trial. Four independently randomized vehicles each run the OLD and
+    NEW controller in counterbalanced order, matched route/weather. Lower Wh/km is better.
+    Vehicle summaries (old,new): V1(180,174), V2(200,198), V3(160,164), V4(220,210).
+    Each summary averages 100 repeated laps; laps are not independent randomized units.
+    Define improvement as old-new. Compute mean improvement across vehicles and the
+    exact two-sided sign test ignoring ties: under null each of the 2^n sign patterns
+    is equally likely; count patterns with |positive_count-negative_count| at least
+    the observed imbalance. Report reduced p fraction. A different unrandomized fleet
+    shows 12 Wh/km improvement but also changed tyres and weather; its isolated controller
+    causal effect cannot be identified from those observations.
+    Return {independent_units,improvements:[V1..V4],mean_improvement,
+    sign_test_p:{numerator,denominator},significant_at_0_05:bool,
+    other_fleet_controller_effect_identified:bool}.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"independent_units": "number", "improvements": {"array_items": "number"}, "mean_improvement": "number", "sign_test_p": {"numerator": "number", "denominator": "number"}, "significant_at_0_05": "boolean", "other_fleet_controller_effect_identified": "boolean"}
+  evaluator: json_match
+  expected:
+    value:
+      independent_units: 4
+      improvements: [6, 2, -4, 10]
+      mean_improvement: 3.5
+      sign_test_p:
+        numerator: 5
+        denominator: 8
+      significant_at_0_05: false
+      other_fleet_controller_effect_identified: false
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original synthetic exercise
+  description: Three positive differences out of four yield (1+4+4+1)/16; repeated laps do not raise randomized
+    sample size.
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-RD-04
+    cohort: rigorous-v9
+    original_anchor_id: SP1-RD-04
+  rubric:
+  - {id: 'json:independent_units', weight: 1.0, group: independent_units, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:improvements[0]', weight: 0.25, group: improvements, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:improvements[1]', weight: 0.25, group: improvements, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:improvements[2]', weight: 0.25, group: improvements, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:improvements[3]', weight: 0.25, group: improvements, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:mean_improvement', weight: 1.0, group: mean_improvement, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:sign_test_p.numerator', weight: 0.5, group: sign_test_p, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:sign_test_p.denominator', weight: 0.5, group: sign_test_p, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:significant_at_0_05', weight: 1.0, group: significant_at_0_05, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:other_fleet_controller_effect_identified', weight: 1.0, group: other_fleet_controller_effect_identified,
+    mandatory: true, critical: false, dimension: content}

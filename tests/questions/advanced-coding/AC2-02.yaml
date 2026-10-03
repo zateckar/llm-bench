@@ -1,0 +1,62 @@
+- id: AC2-02
+  category: Advanced Coding
+  prompt: |
+    Implement interval_overlay(intervals), where each interval is [start,end) with
+        integer endpoints and start<=end. Return sorted maximal segments [start,end,count]
+        with count>0 showing how many input intervals cover each point. Duplicates count
+        separately. Ignore empty intervals. Adjacent segments with equal counts MUST merge,
+        including across coincident starts and ends. Negative endpoints are allowed.
+        Support up to 2000 intervals; return [] for no covered points.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: interval_overlay
+    args: [[]]
+    expected: []
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[1, 4], [2, 5], [4, 7]]]
+    expected: [[1, 2, 1], [2, 5, 2], [5, 7, 1]]
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[0, 2], [2, 4]]]
+    expected: [[0, 4, 1]]
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[1, 3], [1, 3], [2, 2]]]
+    expected: [[1, 3, 2]]
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[-5, -1], [-3, 2], [0, 0]]]
+    expected: [[-5, -3, 1], [-3, -1, 2], [-1, 2, 1]]
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[0, 10], [2, 4], [4, 6], [6, 8]]]
+    expected: [[0, 2, 1], [2, 8, 2], [8, 10, 1]]
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[0, 1], [3, 4]]]
+    expected: [[0, 1, 1], [3, 4, 1]]
+    relative: 0
+    tolerance: 0
+  - function: interval_overlay
+    args: [[[1, 1], [2, 2]]]
+    expected: []
+    relative: 0
+    tolerance: 0
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Sweep-line interval multiplicity with half-open endpoints and coalescing
+  max_tokens: 4096
+  metadata:
+    family: R8A-AC2-02
+    cohort: rigorous-v9
+    original_anchor_id: AC2-02

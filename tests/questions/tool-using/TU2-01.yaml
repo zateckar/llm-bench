@@ -1,0 +1,57 @@
+- id: TU2-01
+  category: Tool Using
+  prompt: |-
+    Goal: fetch every active object in snapshot s7 at its latest version in that
+    snapshot. First page ALREADY returned cursor p2 and rows a:v2 active,
+    b:v3 active. You ALREADY fetched a:v2. Tools:
+      list_objects(cursor,snapshot), fetch_object(id,version).
+    The page at p2 will return next=null and rows b:v4 active, c:v2 active,
+    a:v2 active, d:v9 deleted. For duplicate IDs keep greatest version; deleted
+    objects must not be fetched. Complete listing before fetching, then fetch
+    missing versions in alphabetic ID order. Do not fetch stale versions.
+
+    This is an offline planning exercise, not a request to call real tools.
+    Return ONLY a JSON array of the required REMAINING calls in execution order,
+    each {"tool": "name", "args": {exact parameter names and values}}. Do not
+    repeat completed calls, add explanations, or include unnecessary calls.
+
+    Explicit JSON output contract (types only): "array (element types and order specified in task)"
+  evaluator: json_match
+  expected:
+    value_aliases:
+      '[1].args.version': [v4]
+      '[2].args.version': [v2]
+    value:
+    - tool: list_objects
+      args:
+        cursor: p2
+        snapshot: s7
+    - tool: fetch_object
+      args:
+        id: b
+        version: 4
+    - tool: fetch_object
+      args:
+        id: c
+        version: 2
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: hard
+  source: challenge-v2
+  description: Snapshot pagination, stale versions, and deduplication
+  metadata:
+    family: R8A-TU2-01
+    cohort: rigorous-v9
+    original_anchor_id: TU2-01
+  rubric:
+  - {id: 'json:[0].tool', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[0].args.cursor', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[0].args.snapshot', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:[1].tool', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].args.id', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].args.version', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[2].tool', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[2].args.id', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[2].args.version', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false, dimension: content}

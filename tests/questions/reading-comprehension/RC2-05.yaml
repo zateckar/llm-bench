@@ -1,0 +1,37 @@
+- id: RC2-05
+  category: Reading Comprehension
+  prompt: |-
+    A training program begins with group A=240 people and B=160. Simultaneously,
+    one quarter of ORIGINAL A transfers to B and one eighth of ORIGINAL B transfers
+    to A. After the transfers, 15 people from the original-A members who stayed in
+    A withdraw; 25 people from the original-B members who stayed in B withdraw.
+    No transferees withdraw and no other changes occur.
+    Return JSON with final_A, final_B, retained_original_A_in_A, and A_fraction
+    (fraction of all remaining participants in A, as a reduced [numerator,denominator]).
+
+    Explicit JSON output contract (types only): {"final_A": "number", "final_B": "number", "retained_original_A_in_A": "number", "A_fraction": {"array_items": "number"}}
+  evaluator: json_match
+  expected:
+    value:
+      final_A: 185
+      final_B: 175
+      retained_original_A_in_A: 165
+      A_fraction: [37, 72]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Track cohort origins across simultaneous transfers and withdrawals
+  max_tokens: 8192
+  metadata:
+    family: R8A-RC2-05
+    cohort: rigorous-v9
+    original_anchor_id: RC2-05
+  rubric:
+  - {id: 'json:final_A', weight: 1.0, group: final_A, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:final_B', weight: 1.0, group: final_B, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:retained_original_A_in_A', weight: 1.0, group: retained_original_A_in_A, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:A_fraction[0]', weight: 0.5, group: A_fraction, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:A_fraction[1]', weight: 0.5, group: A_fraction, mandatory: true, critical: false, dimension: content}

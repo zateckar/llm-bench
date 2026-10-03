@@ -1,0 +1,48 @@
+- id: SP1-TR-DE-EN
+  category: Language Translations
+  prompt: |-
+    Translate/review German into English. For EACH source passage choose ALL candidate translations that preserve its entire meaning: modality, negation, conditions, actors, quantities, and dates. Several phrasings may be faithful; do not reject synonyms or word order merely for style. Do not silently repair a candidate. Letters restart for each passage. Return an object with keys "1","2","3", each an alphabetically sorted array of accepted letters.
+
+    Passage 1 (German): Die Anlage darf erst wieder anlaufen, wenn der Druck unter 2 bar liegt; bei genau 2 bar bleibt die Freigabe gesperrt.
+    A. The plant may restart only once the pressure is below 2 bar; at exactly 2 bar, authorization remains blocked.
+    B. The plant must restart whenever pressure is at most 2 bar; at exactly 2 bar it is enabled.
+    C. The plant may restart once pressure is above 2 bar; at exactly 2 bar it remains blocked.
+    D. The installation may resume operation only when pressure is less than 2 bar; permission is still withheld at exactly 2 bar.
+
+    Passage 2 (German): Die Geschäftsführung hat den Vorschlag vorläufig gebilligt, nicht endgültig genehmigt. Eine Umsetzung ist damit noch nicht erlaubt.
+    A. Management has finally approved the proposal; implementation is now permitted.
+    B. Management has provisionally endorsed the proposal, not given final approval. Implementation is not yet authorized by that endorsement.
+    C. Management has provisionally endorsed the proposal, and this alone authorizes implementation until final approval.
+    D. Management rejected the proposal temporarily; implementation is therefore permanently forbidden.
+
+    Passage 3 (German): Die Rechnung ist bis einschließlich 5. Juni zu begleichen. Skonto von 2 % gilt nur für den Nettowarenwert, nicht für Frachtkosten.
+    A. The invoice must be settled before 5 June, excluding that day. The 2% discount includes freight.
+    B. The invoice is payable by 6 May inclusive. A 2% discount applies only to freight costs.
+    C. The invoice must be paid by 5 June inclusive. A 2% prompt-payment discount applies only to the net value of the goods, not freight charges.
+    D. Payment of the invoice is due no later than 5 June, including that date. The 2% cash discount covers the net goods value alone and excludes freight.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"1": {"array_items": "string"}, "2": {"array_items": "string"}, "3": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      '1': [A, D]
+      '2': [B]
+      '3': [C, D]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original parallel passages; semantic fidelity selection, not free-form fluency
+  description: 'German to English: all and only meaning-preserving translations, including alternative faithful
+    phrasings.'
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-TR-DE-EN
+    cohort: rigorous-v9
+    original_anchor_id: SP1-TR-DE-EN
+  rubric:
+  - {id: 'json:1[0]', weight: 0.5, group: '1', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:1[1]', weight: 0.5, group: '1', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:2[0]', weight: 1.0, group: '2', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:3[0]', weight: 0.5, group: '3', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:3[1]', weight: 0.5, group: '3', mandatory: true, critical: false, dimension: content}

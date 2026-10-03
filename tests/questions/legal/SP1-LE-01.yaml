@@ -1,0 +1,54 @@
+- id: SP1-LE-01
+  category: Legal
+  prompt: |-
+    European patent examination exercise; apply ONLY this stipulated rule pack.
+    Each claim has a valid effective date stated below. Novelty is lost only if ONE
+    eligible document directly discloses ALL claim elements together; do not mosaic.
+    Public documents before the effective date are eligible for novelty and inventive
+    step. An earlier-filed, later-published EP application meeting Article 54(3) is
+    eligible for novelty only. Here all such formal conditions are stipulated met.
+    Dates and element sets:
+    C1: effective 2025-02-01, {A,B}; C2: effective 2025-06-01, {A,B,C}.
+    D1: public 2025-01-10, {A}; D2: public 2025-01-20, {B,C};
+    D3: EP filed 2025-01-05, published 2025-08-01, {A,B};
+    D4: public 2025-04-01, {A,B,C}; D5: public 2025-07-01, {A,B,C,D}.
+    For each claim return {novelty_destroyers:[document IDs],
+    inventive_step_eligible:[document IDs],inventive_step_decidable:bool}.
+    The last field asks whether an inventive-step conclusion can be determined from
+    element sets alone without evidence about skilled-person reasoning; novelty and
+    inventive step must be assessed separately. Sort IDs. Top keys C1,C2.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"C1": {"novelty_destroyers": {"array_items": "string"}, "inventive_step_eligible": {"array_items": "string"}, "inventive_step_decidable": "boolean"}, "C2": {"novelty_destroyers": {"array_items": "string"}, "inventive_step_eligible": {"array_items": "string"}, "inventive_step_decidable": "boolean"}}
+  evaluator: json_match
+  expected:
+    value:
+      C1:
+        novelty_destroyers: [D3]
+        inventive_step_eligible: [D1, D2]
+        inventive_step_decidable: false
+      C2:
+        novelty_destroyers: [D4]
+        inventive_step_eligible: [D1, D2, D4]
+        inventive_step_decidable: false
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'EPC Article 56: https://www.epo.org/en/legal/epc/2020/a56.html ; stipulated Article 54 eligibility'
+  description: Distinguishes single-document novelty, effective dates, and novelty-only prior art; element overlap
+    does not establish obviousness.
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-LE-01
+    cohort: rigorous-v9
+    original_anchor_id: SP1-LE-01
+  rubric:
+  - {id: 'json:C1.novelty_destroyers[0]', weight: 0.25, group: C1, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:C1.inventive_step_eligible[0]', weight: 0.25, group: C1, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:C1.inventive_step_eligible[1]', weight: 0.25, group: C1, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:C1.inventive_step_decidable', weight: 0.25, group: C1, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:C2.novelty_destroyers[0]', weight: 0.2, group: C2, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:C2.inventive_step_eligible[0]', weight: 0.2, group: C2, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:C2.inventive_step_eligible[1]', weight: 0.2, group: C2, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:C2.inventive_step_eligible[2]', weight: 0.2, group: C2, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:C2.inventive_step_decidable', weight: 0.2, group: C2, mandatory: true, critical: false, dimension: content}

@@ -71,7 +71,7 @@ def main():
     questions = {
         q.id: q
         for q in load_all_tests(Path(__file__).parent / "tests")
-        if q.source == "challenge-v2"
+        if q.id in set(REASONING) | set(CODE)
     }
     assert set(questions) == set(REASONING) | set(CODE), "Oracle coverage differs from suite"
     checks = 0

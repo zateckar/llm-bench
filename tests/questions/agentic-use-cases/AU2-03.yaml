@@ -1,0 +1,44 @@
+- id: AU2-03
+  category: Agentic Use Cases
+  prompt: |-
+    A target snapshot at LSN 100 has rows {a:10,b:20}. Replay this arrival-ordered
+    change stream; each tuple is (LSN,transaction,operation,key,value):
+    (99,x,set,a,9),(101,p,set,a,11),(102,q,delete,b,null),(103,p,set,c,30),
+    (104,q,abort,null,null),(105,p,commit,null,null),(105,p,commit,null,null),
+    (106,r,set,a,12),(107,s,set,b,25),(108,s,commit,null,null),(109,r,set,c,31).
+    Ignore LSN<=100 and duplicate LSNs. Buffer writes by transaction, applying
+    them in stream order only on commit; abort discards them. Uncommitted writes
+    remain invisible. This exercise permits cutover only when no transaction is pending.
+    Return JSON with rows (final visible object), committed (transaction IDs in
+    commit order), pending (sorted IDs), and safe_to_cut_over (boolean).
+
+    Explicit JSON output contract (types only): {"rows": {"a": "number", "b": "number", "c": "number"}, "committed": {"array_items": "string"}, "pending": {"array_items": "string"}, "safe_to_cut_over": "boolean"}
+  evaluator: json_match
+  expected:
+    value:
+      rows:
+        a: 11
+        b: 25
+        c: 30
+      committed: [p, s]
+      pending: [r]
+      safe_to_cut_over: false
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: CDC replay with snapshot boundary, aborts, duplicate delivery, and pending transactions
+  max_tokens: 8192
+  metadata:
+    family: R8A-AU2-03
+    cohort: rigorous-v9
+    original_anchor_id: AU2-03
+  rubric:
+  - {id: 'json:rows.a', weight: 0.3333333333333333, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows.b', weight: 0.3333333333333333, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rows.c', weight: 0.3333333333333333, group: rows, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:committed[0]', weight: 0.5, group: committed, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:committed[1]', weight: 0.5, group: committed, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:pending[0]', weight: 1.0, group: pending, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:safe_to_cut_over', weight: 1.0, group: safe_to_cut_over, mandatory: true, critical: false, dimension: content}

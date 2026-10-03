@@ -1,0 +1,54 @@
+- id: AU2-06
+  category: Agentic Use Cases
+  prompt: |-
+    A single worker runs one job at a time; each attempt takes exactly 1 second.
+    Initial jobs (ready_at,id): (0,A),(0,B),(2,C). Whenever idle, pick the pending
+    job with smallest (ready_at,id), waiting until ready_at if needed. After failed
+    attempt k, retry becomes ready at finish_time + 2^k. Maximum 3 attempts; a
+    failure on attempt 3 dead-letters the job immediately. A fails twice then succeeds;
+    B fails all attempts; C succeeds first time. Attempts begin at 1.
+    Return JSON {"starts": [[start_time,id,attempt], ...] in execution order,
+    "dead_letters": IDs in dead-letter order, "finished_at": final completion time}.
+
+    Explicit JSON output contract (types only): {"starts": {"array_items": "array (element types and order specified in task)"}, "dead_letters": {"array_items": "string"}, "finished_at": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      starts: [[0, A, 1], [1, B, 1], [2, C, 1], [3, A, 2], [4, B, 2], [8, A, 3], [9, B, 3]]
+      dead_letters: [B]
+      finished_at: 10
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Retry scheduling with worker contention and dead-letter limits
+  max_tokens: 8192
+  metadata:
+    family: R8A-AU2-06
+    cohort: rigorous-v9
+    original_anchor_id: AU2-06
+  rubric:
+  - {id: 'json:starts[0][0]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[0][1]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[0][2]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[1][0]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[1][1]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[1][2]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[2][0]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[2][1]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[2][2]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[3][0]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[3][1]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[3][2]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[4][0]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[4][1]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[4][2]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[5][0]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[5][1]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[5][2]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[6][0]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[6][1]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:starts[6][2]', weight: 0.047619047619047616, group: starts, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:dead_letters[0]', weight: 1.0, group: dead_letters, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:finished_at', weight: 1.0, group: finished_at, mandatory: true, critical: false, dimension: content}

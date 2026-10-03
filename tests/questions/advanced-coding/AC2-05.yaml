@@ -1,0 +1,71 @@
+- id: AC2-05
+  category: Advanced Coding
+  prompt: |
+    Implement shortest_subarray(nums, target) returning [start,end] (zero-based,
+        end exclusive) of a NONEMPTY contiguous subarray with sum >= target.
+        Minimize length, then start index. Return [-1,-1] if impossible. nums may contain
+        negative numbers and zeros, and target may be negative or zero. Empty subarrays
+        are never candidates. Support arrays up to length 2000. Empty input is allowed.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: shortest_subarray
+    args: [[2, -1, 2], 3]
+    expected: [0, 3]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[1, -2, 3, 1, -1, 4], 4]
+    expected: [5, 6]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[0, 0], 0]
+    expected: [0, 1]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[], 0]
+    expected: [-1, -1]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[-5, -2, -3], -2]
+    expected: [1, 2]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[-5, -4], -3]
+    expected: [-1, -1]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[1, 2, 1, 2], 3]
+    expected: [0, 2]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[84, -37, 32, 40, 95], 167]
+    expected: [2, 5]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[-1, -1, 5, -2, 5], 8]
+    expected: [2, 5]
+    relative: 0
+    tolerance: 0
+  - function: shortest_subarray
+    args: [[2, -2, 2], 2]
+    expected: [0, 1]
+    relative: 0
+    tolerance: 0
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Shortest qualifying subarray with negative numbers and deterministic ties
+  max_tokens: 4096
+  metadata:
+    family: R8A-AC2-05
+    cohort: rigorous-v9
+    original_anchor_id: AC2-05

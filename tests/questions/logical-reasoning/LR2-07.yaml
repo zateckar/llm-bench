@@ -1,0 +1,39 @@
+- id: LR2-07
+  category: Logical Reasoning
+  prompt: |-
+    The possible dates are Apr-11, Apr-14, Apr-17, Jun-12, Jun-16, Sep-11,
+    Sep-13, Dec-13, Dec-14, Dec-12. M knows only the month and D only the day.
+    Both are perfect logicians; the list and these rules are common knowledge.
+    M: "I do not know the date, and I know D does not know it."
+    D: "Before that statement I did not know, but now I know."
+    M: "Now I know too."
+    Each statement is truthful and incorporates all earlier public statements.
+    Return JSON {"remaining_counts": [number of dates after statement 1, after
+    statement 2, after statement 3], "dates": [all final dates in lexical order]}.
+    Use date strings exactly as given.
+
+    Explicit JSON output contract (types only): {"remaining_counts": {"array_items": "number"}, "dates": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      remaining_counts: [5, 3, 1]
+      dates: [Sep-11]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Successive public-announcement elimination
+  max_tokens: 8192
+  metadata:
+    family: R8A-LR2-07
+    cohort: rigorous-v9
+    original_anchor_id: LR2-07
+  rubric:
+  - {id: 'json:remaining_counts[0]', weight: 0.3333333333333333, group: remaining_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:remaining_counts[1]', weight: 0.3333333333333333, group: remaining_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:remaining_counts[2]', weight: 0.3333333333333333, group: remaining_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:dates[0]', weight: 1.0, group: dates, mandatory: true, critical: false, dimension: content}

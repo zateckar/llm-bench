@@ -1,0 +1,46 @@
+- id: H5-ER-allocation-02
+  category: Ethical Reasoning
+  prompt: |-
+    Apply this fictional agreed allocation policy; do not substitute an unstated
+    ethical theory. Each person is indivisible. Require consent; total cost <= 16;
+    at least TWO rural recipients. Among feasible allocations maximize total benefit,
+    then minimize total cost; return ALL tied allocations. Do not maximize number of
+    people ahead of benefit. Group membership has no other role. All facts:
+    [{"id": "A", "group": "rural", "cost": 3, "benefit": 10, "consent": true}, {"id": "B", "group": "urban", "cost": 4, "benefit": 5, "consent": true}, {"id": "C", "group": "urban", "cost": 4, "benefit": 6, "consent": true}, {"id": "D", "group": "rural", "cost": 3, "benefit": 12, "consent": true}, {"id": "E", "group": "urban", "cost": 4, "benefit": 3, "consent": true}, {"id": "F", "group": "urban", "cost": 3, "benefit": 5, "consent": true}, {"id": "G", "group": "rural", "cost": 2, "benefit": 8, "consent": false}, {"id": "H", "group": "urban", "cost": 3, "benefit": 7, "consent": true}, {"id": "I", "group": "urban", "cost": 2, "benefit": 4, "consent": true}]
+    Return {"benefit":integer,"cost":integer,"allocations":[sorted recipient-ID lists,
+    outer list lexicographically sorted],"nonconsenting_eligible":bool,
+    "universally_ethically_optimal_proved":bool}. The last question asks whether optimizing
+    this specified policy proves optimality under every possible ethical framework.
+    Return only the requested JSON, with no extra keys or prose. Null is allowed only where explicitly requested. All ID lists must be sorted lexicographically.
+    Explicit JSON output contract (types only): {"benefit": "number", "cost": "number", "allocations": {"array_items": {"array_items": "string"}}, "nonconsenting_eligible": "boolean", "universally_ethically_optimal_proved": "boolean"}
+  evaluator: json_match
+  expected:
+    value:
+      benefit: 40
+      cost: 16
+      allocations: [[A, C, D, F, H]]
+      nonconsenting_eligible: false
+      universally_ethically_optimal_proved: false
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original ceiling-v5; BBEH: https://github.com/google-deepmind/bbeh (compositional reasoning design only)'
+  description: Compositional challenge; deterministic oracle in hard_cases.py. Difficulty awaits fresh model calibration.
+  max_tokens: 16384
+  metadata:
+    family: R8A-H5-ER-allocation
+    cohort: rigorous-v9
+    original_anchor_id: H5-ER-allocation-02
+  rubric:
+  - {id: 'json:benefit', weight: 1.0, group: benefit, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:cost', weight: 1.0, group: cost, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:allocations[0][0]', weight: 0.2, group: allocations, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:allocations[0][1]', weight: 0.2, group: allocations, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:allocations[0][2]', weight: 0.2, group: allocations, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:allocations[0][3]', weight: 0.2, group: allocations, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:allocations[0][4]', weight: 0.2, group: allocations, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:nonconsenting_eligible', weight: 1.0, group: nonconsenting_eligible, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:universally_ethically_optimal_proved', weight: 1.0, group: universally_ethically_optimal_proved,
+    mandatory: true, critical: false, dimension: content}

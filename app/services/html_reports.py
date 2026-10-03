@@ -37,12 +37,22 @@ def interactive_turns(result):
         return []
     turns, number = [], 0
     for t in transcript:
-        if not isinstance(t, dict) or t.get("role") not in {"assistant", "tool"} or "content" not in t:
+        if (
+            not isinstance(t, dict)
+            or t.get("role") not in {"assistant", "tool"}
+            or "content" not in t
+        ):
             continue
         number += t["role"] == "assistant"
-        turns.append({"role": t["role"], "number": number,
-                      "content": t["content"] if isinstance(t["content"], str)
-                      else json.dumps(t["content"], ensure_ascii=False, indent=2)})
+        turns.append(
+            {
+                "role": t["role"],
+                "number": number,
+                "content": t["content"]
+                if isinstance(t["content"], str)
+                else json.dumps(t["content"], ensure_ascii=False, indent=2),
+            }
+        )
     return turns
 
 
@@ -90,6 +100,8 @@ async def load_run(run_id):
     run["model_id"] = run.pop("model_identifier")
     run["label"] = f"#{run['id']} · {run['model_name']}"
     run["quality"] = object_json(run.get("quality_json"))
+    if run["quality"].get("schema_version") != 3:
+        run["quality"] = {}
     run["perf"] = object_json(run.get("perf_json"))
     run["results"] = await fetch_all(
         "SELECT * FROM test_results WHERE run_id = ? ORDER BY category, question_index, id",
@@ -124,10 +136,11 @@ async def load_run(run_id):
     run["passed_questions"] = sum(bool(r["passed"]) for r in run["results"] if r["scored"])
     scored = [r for r in run["results"] if r["scored"]]
     run["avg_score"] = sum(r["score"] for r in scored) / len(scored) if scored else 0
-    weight = sum(r.get("weight") or 1 for r in scored)
-    run["weighted_score"] = (
-        sum(r["score"] * (r.get("weight") or 1) for r in scored) / weight if weight else 0
-    )
+    if run["quality"].get("schema_version") == 3:
+        run["avg_score"] = run["quality"]["summary"]["category_balanced"] or 0.0
+        for name, summary in run["quality"]["summary"]["categories"].items():
+            if name in run["categories"] and run["categories"][name]["scored"]:
+                run["categories"][name]["avg_score"] = summary["score"]
     return run
 
 
@@ -256,58 +269,25 @@ def bar_chart(runs, getter, title, unit="%"):
 
 
 def performance_view(runs):
-    def rows(specs, source):
-        return [
-            {"label": label, "values": [fmt(at(source(r), key), unit) for r in runs]}
-            for label, key, unit in specs
-        ]
+    def current_perf(run):
+        raw = run["perf"]
+        return raw if raw.get("schema_version") == 3 else {}
 
-    question_rows = rows(
-        [
-            ("Workers", "workers", "int"),
-            ("Wall clock", "duration_ms", "ms"),
-            ("Latency p50", "latency_p50_ms", "ms"),
-            ("Latency p95", "latency_p95_ms", "ms"),
-            ("Latency p99", "latency_p99_ms", "ms"),
-            ("TTFT p50", "ttft_p50_ms", "ms"),
-            ("TTFT p95", "ttft_p95_ms", "ms"),
-            ("Aggregate output", "output_tokens_per_sec", "tok/s"),
-            ("Prompt tokens", "total_prompt_tokens", "int"),
-            ("Output tokens", "total_completion_tokens", "int"),
-            ("Request errors", "error_count", "int"),
-        ],
-        lambda r: r,
-    )
-    suite_rows = rows(
-        [
-            ("Single-stream decode", "decode_tokens_per_sec", "tok/s"),
-            ("Long-output decode", "long_output_tokens_per_sec", "tok/s"),
-            ("Prefill", "prefill_tokens_per_sec", "tok/s"),
-            ("Serial latency p50", "serial_latency.p50_ms", "ms"),
-            ("Serial latency p95", "serial_latency.p95_ms", "ms"),
-            ("Serial TTFT p50", "serial_ttft.p50_ms", "ms"),
-            ("Serial TTFT p95", "serial_ttft.p95_ms", "ms"),
+    current = [{**r, "perf": current_perf(r)} for r in runs]
+    suite_rows = [
+        {"label": label, "values": [fmt(at(r["perf"], key), unit) for r in current]}
+        for label, key, unit in [
             ("Peak aggregate output", "peak_output_tokens_per_sec", "tok/s"),
-            ("Peak request rate", "peak_requests_per_sec", "req/s"),
-            ("Saturation concurrency", "saturation_concurrency", "int"),
-            ("Scaling efficiency", "scaling_efficiency", "%"),
-            ("Concurrency meeting SLO", "slo_capacity", "int"),
-            ("Estimated active users", "capacity_users", "int"),
-            ("SLO: maximum TTFT p95", "slo_ttft_p95_ms", "ms"),
-            ("SLO: minimum stream decode p50", "slo_stream_tps_p50", "tok/s"),
-            ("SLO: maximum error rate", "slo_error_rate", "%"),
-            ("Requests per user per hour", "requests_per_user_hour", "int"),
-            ("Cache TTFT speedup", "cache_probe.ttft_speedup", "×"),
-            ("Cache hit ratio", "cache_probe.cache_hit_ratio", "%"),
-            ("Cache prefill gain", "cache_probe.prefill_gain", "×"),
-        ],
-        lambda r: r["perf"],
-    )
+            ("Peak successful request rate", "peak_requests_per_sec", "req/s"),
+            ("Reference input tokens", "protocol.input_reference_tokens", "int"),
+            ("Output limit", "protocol.max_output_tokens", "int"),
+        ]
+    ]
     charts = []
     for key, title, unit in [
-        ("output_tokens_per_sec", "Throughput under load", "tok/s"),
-        ("ttft.p95_ms", "Time to first token under load · p95", "ms"),
-        ("stream_tps.p50_ms", "Per-stream decode under load · p50", "tok/s"),
+        ("output_tokens_per_sec", "Delivered output under load", "tok/s"),
+        ("latency.p95_ms", "Completed-request latency · p95", "ms"),
+        ("ttft.p95_ms", "First delivered token · p95", "ms"),
     ]:
         series = [
             {
@@ -319,7 +299,7 @@ def performance_view(runs):
                     if number(p.get("concurrency")) is not None
                 ],
             }
-            for i, r in enumerate(runs)
+            for i, r in enumerate(current)
         ]
         svg = line_chart(series, title, "Concurrent requests", unit)
         if svg:
@@ -330,25 +310,14 @@ def performance_view(runs):
                     "series": [s for s in series if any(y is not None for _, y in s["points"])],
                 }
             )
-    context_series = []
-    context_rows = []
-    load_rows = []
-    notes = []
-    for r in runs:
+    load_rows, notes = [], []
+    for r in current:
         perf = r["perf"]
         if not perf:
-            notes.append(f"{r['label']}: dedicated performance suite not recorded.")
-        if perf.get("error"):
-            notes.append(f"{r['label']}: performance suite incomplete — {perf['error']}")
-        if perf.get("streaming") is False:
-            notes.append(f"{r['label']}: streaming unavailable; TTFT may be unmeasured.")
-        raw_notes = perf.get("notes", [])
-        if isinstance(raw_notes, list):
-            notes.extend(f"{r['label']}: {note}" for note in raw_notes)
-        cache_notes = at(perf, "cache_probe.notes")
-        if isinstance(cache_notes, list):
-            notes.extend(f"{r['label']} · cache: {note}" for note in cache_notes)
-        groups = defaultdict(list)
+            notes.append(f"{r['label']}: no performance report for the current protocol.")
+        if perf.get("cancelled"):
+            notes.append(f"{r['label']}: stopped early; measurements are incomplete.")
+        notes.extend(f"{r['label']}: {note}" for note in perf.get("notes", []))
         for p in points(perf, "concurrency"):
             load_rows.append(
                 {
@@ -358,67 +327,27 @@ def performance_view(runs):
                         for key, unit in [
                             ("concurrency", "int"),
                             ("requests", "int"),
+                            ("errors", "int"),
+                            ("wall_ms", "ms"),
                             ("output_tokens_per_sec", "tok/s"),
                             ("requests_per_sec", "req/s"),
+                            ("latency.p50_ms", "ms"),
                             ("latency.p95_ms", "ms"),
-                            ("ttft.p95_ms", "ms"),
-                            ("stream_tps.p50_ms", "tok/s"),
-                            ("error_rate", "%"),
-                        ]
-                    ],
-                }
-            )
-        for p in points(perf, "context_sweep"):
-            size, level = number(p.get("context_tokens")), number(p.get("concurrency")) or 1
-            skipped = bool(p.get("skipped"))
-            if size is not None:
-                groups[level].append((size, None if skipped else number(at(p, "ttft.p50_ms"))))
-            context_rows.append(
-                {
-                    "run": r["label"],
-                    "status": p.get("skip_reason")
-                    or ("Skipped" if skipped else "Measured")
-                    + (
-                        " · " + "; ".join(map(str, p["notes"]))
-                        if isinstance(p.get("notes"), list) and p["notes"]
-                        else ""
-                    ),
-                    "values": [fmt(size, "int"), fmt(level, "int")]
-                    + [
-                        fmt(None if skipped else at(p, key), unit)
-                        for key, unit in [
                             ("ttft.p50_ms", "ms"),
-                            ("warm_ttft.p50_ms", "ms"),
-                            ("prompt_tokens_per_sec", "tok/s"),
-                            ("output_tokens_per_sec", "tok/s"),
-                            ("error_rate", "%"),
+                            ("ttft.p95_ms", "ms"),
+                            ("failure_latency.p95_ms", "ms"),
+                            ("estimated_token_requests", "int"),
+                            ("burst_delivery_requests", "int"),
                         ]
                     ],
                 }
             )
-        for level, values in sorted(groups.items()):
-            context_series.append(
-                {
-                    "label": f"{r['label']} · c={level:g}",
-                    "color": COLORS[len(context_series) % len(COLORS)],
-                    "points": values,
-                }
-            )
-    svg = line_chart(
-        context_series, "Context scaling · cold TTFT p50", "Target context tokens", "ms"
-    )
-    if svg:
-        charts.append(
-            {"title": "Context scaling · cold TTFT p50", "svg": svg, "series": context_series}
-        )
     return {
-        "question_rows": question_rows,
         "suite_rows": suite_rows,
         "charts": charts,
         "load_rows": load_rows,
-        "context_rows": context_rows,
         "notes": notes,
-        "labels": [r["label"] for r in runs],
+        "labels": [r["label"] for r in current],
     }
 
 
@@ -427,12 +356,7 @@ def render_report(runs):
     charts = []
     # Never silently substitute a legacy average for balanced capability.
     for title, getter, unit in [
-        ("Balanced capability", lambda r: at(r, "quality.summary.category_balanced"), "%"),
-        (
-            "All-item average",
-            lambda r: r.get("avg_score") if r.get("scored_questions") else None,
-            "%",
-        ),
+        ("Strict task success", lambda r: at(r, "quality.summary.category_balanced"), "%"),
         ("Peak aggregate output", lambda r: at(r, "perf.peak_output_tokens_per_sec"), "tok/s"),
     ]:
         svg = bar_chart(runs, getter, title, unit)

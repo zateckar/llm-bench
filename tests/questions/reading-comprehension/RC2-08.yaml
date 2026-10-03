@@ -1,0 +1,47 @@
+- id: RC2-08
+  category: Reading Comprehension
+  prompt: |-
+    For the day-20 report, choose each region's latest APPROVED quota with effective
+    day <=20; ties in effective day use the larger revision. Unapproved entries
+    and future entries have no effect. Entries (region,revision,effective,quota,approved):
+    (north,1,5,40,true),(south,1,5,30,true),(north,2,12,45,false),
+    (south,2,18,35,true),(north,3,21,50,true),(east,1,15,20,true),
+    (east,2,15,22,true),(south,3,19,99,false).
+    Return JSON with quotas (region->quota), revisions (region->selected revision),
+    and total (sum of selected quotas). Do not sum revisions or silently accept drafts.
+
+    Explicit JSON output contract (types only): {"quotas": {"east": "number", "north": "number", "south": "number"}, "revisions": {"east": "number", "north": "number", "south": "number"}, "total": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      quotas:
+        east: 22
+        north: 40
+        south: 35
+      revisions:
+        east: 2
+        north: 1
+        south: 2
+      total: 97
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Resolve approved revisions independently for each region
+  max_tokens: 8192
+  metadata:
+    family: R8A-RC2-08
+    cohort: rigorous-v9
+    original_anchor_id: RC2-08
+  rubric:
+  - {id: 'json:quotas.east', weight: 0.3333333333333333, group: quotas, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:quotas.north', weight: 0.3333333333333333, group: quotas, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:quotas.south', weight: 0.3333333333333333, group: quotas, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:revisions.east', weight: 0.3333333333333333, group: revisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:revisions.north', weight: 0.3333333333333333, group: revisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:revisions.south', weight: 0.3333333333333333, group: revisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:total', weight: 1.0, group: total, mandatory: true, critical: false, dimension: content}

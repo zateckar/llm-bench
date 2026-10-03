@@ -1,0 +1,58 @@
+- id: TU2-08
+  category: Tool Using
+  prompt: |-
+    Give external identity e5 the reader role in tenant t2; preserve other roles.
+    Tools: resolve_identity(external,tenant), get_entitlements(user,tenant),
+    grant_role(user,tenant,role,if_version), revoke_role(user,tenant,role).
+    A cached identity u3 belongs to tenant t1 and must not be used for t2.
+    No calls for t2 have run. Resolve will return user u9; get_entitlements for u9
+    in t2 will return version 6 and roles ["auditor"]. Grant is additive. Resolve,
+    read current entitlements, then make only the missing grant using that version.
+
+    This is an offline planning exercise, not a request to call real tools.
+    Return ONLY a JSON array of the required REMAINING calls in execution order,
+    each {"tool": "name", "args": {exact parameter names and values}}. Do not
+    repeat completed calls, add explanations, or include unnecessary calls.
+
+    Explicit JSON output contract (types only): "array (element types and order specified in task)"
+  evaluator: json_match
+  expected:
+    value:
+    - tool: resolve_identity
+      args:
+        external: e5
+        tenant: t2
+    - tool: get_entitlements
+      args:
+        user: u9
+        tenant: t2
+    - tool: grant_role
+      args:
+        user: u9
+        tenant: t2
+        role: reader
+        if_version: 6
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: hard
+  source: challenge-v2
+  description: Tenant-scoped identity resolution and minimal entitlement changes
+  metadata:
+    family: R8A-TU2-08
+    cohort: rigorous-v9
+    original_anchor_id: TU2-08
+  rubric:
+  - {id: 'json:[0].tool', weight: 0.09090909090909091, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[0].args.external', weight: 0.09090909090909091, group: answer, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:[0].args.tenant', weight: 0.09090909090909091, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].tool', weight: 0.09090909090909091, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].args.user', weight: 0.09090909090909091, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].args.tenant', weight: 0.09090909090909091, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[2].tool', weight: 0.09090909090909091, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[2].args.user', weight: 0.09090909090909091, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[2].args.tenant', weight: 0.09090909090909091, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[2].args.role', weight: 0.09090909090909091, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[2].args.if_version', weight: 0.09090909090909091, group: answer, mandatory: true, critical: false,
+    dimension: content}

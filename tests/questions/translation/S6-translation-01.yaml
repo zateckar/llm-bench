@@ -1,0 +1,49 @@
+- id: S6-translation-01
+  category: Translation
+  prompt: |-
+    Translate the German policy into the requested English-keyed semantic representation.
+    Source policy (ASCII transliteration preserves the original language): Nur wenn alle freigegebenen Berichte unterschrieben sind und kein freigegebener Bericht widerrufen wurde, darf die Lieferung erfolgen. Entwuerfe zaehlen nicht. Bei einer leeren Menge freigegebener Berichte gilt die Bedingung als erfuellt.
+    English domain definitions: freigegeben/schvalena means approved; unterschrieben/podepsana
+    means signed; widerrufen/odvolana means revoked; Entwurf/navrh means draft.
+    Treat a necessary condition (only if) as insufficient to establish permission; a biconditional
+    (if and only if) establishes both permission when true and prohibition when false. A revoked
+    approved report always prohibits delivery under these policies. No other permissions exist
+    in the evidence, but do NOT assume missing permissions are false: label them unknown.
+    Scenarios in order, each report is [approved,signed,revoked]: [[],[[true,true,false]],[[true,false,false]],[[true,true,false],[true,false,false]],[[false,false,true],[true,true,false]],[[true,true,true],[true,false,false]],[[false,true,false]],[[true,false,false],[true,false,false]]]
+    Return signature_quantifier (all, any, or not_all), condition_sufficient (Boolean),
+    drafts_count (Boolean), statuses (allowed/forbidden/unknown per scenario). These keys encode
+    the translated meaning; no free-form translation or outside assumptions are requested.
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above; do not add prose.
+    Explicit JSON output contract (types only): {"signature_quantifier": "string", "condition_sufficient": "boolean", "drafts_count": "boolean", "statuses": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      signature_quantifier: all
+      condition_sufficient: false
+      drafts_count: false
+      statuses: [unknown, unknown, forbidden, forbidden, unknown, forbidden, unknown, forbidden]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  max_tokens: 65536
+  metadata:
+    family: R8A-S6-translation
+    cohort: rigorous-v9
+    original_anchor_id: S6-translation-01
+  rubric:
+  - {id: 'json:signature_quantifier', weight: 1.0, group: signature_quantifier, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:condition_sufficient', weight: 1.0, group: condition_sufficient, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:drafts_count', weight: 1.0, group: drafts_count, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:statuses[0]', weight: 0.125, group: statuses, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:statuses[1]', weight: 0.125, group: statuses, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:statuses[2]', weight: 0.125, group: statuses, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:statuses[3]', weight: 0.125, group: statuses, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:statuses[4]', weight: 0.125, group: statuses, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:statuses[5]', weight: 0.125, group: statuses, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:statuses[6]', weight: 0.125, group: statuses, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:statuses[7]', weight: 0.125, group: statuses, mandatory: true, critical: false, dimension: content}

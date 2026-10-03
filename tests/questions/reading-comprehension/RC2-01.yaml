@@ -1,0 +1,35 @@
+- id: RC2-01
+  category: Reading Comprehension
+  prompt: |-
+    A register originally lists applications a=12, b=9, c=7, d=16, e=11 units.
+    A later notice withdraws b and c. The final notice reinstates c and confirms d;
+    confirmation does not add a second copy. The unit figures never change.
+    The summary includes all applications except those still withdrawn. Its
+    "over ten" measure counts applications with strictly more than 10 units,
+    not their units. Return JSON with included (IDs sorted), total (units), and
+    over_ten (application count). The original register is not the final state.
+
+    Explicit JSON output contract (types only): {"included": {"array_items": "string"}, "total": "number", "over_ten": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      included: [a, c, d, e]
+      total: 46
+      over_ten: 3
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: hard
+  source: challenge-v2
+  description: Reconcile withdrawals and reinstatements without misreading an exception
+  metadata:
+    family: R8A-RC2-01
+    cohort: rigorous-v9
+    original_anchor_id: RC2-01
+  rubric:
+  - {id: 'json:included[0]', weight: 0.25, group: included, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:included[1]', weight: 0.25, group: included, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:included[2]', weight: 0.25, group: included, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:included[3]', weight: 0.25, group: included, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:total', weight: 1.0, group: total, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:over_ten', weight: 1.0, group: over_ten, mandatory: true, critical: false, dimension: content}

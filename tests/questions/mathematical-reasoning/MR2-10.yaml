@@ -1,0 +1,35 @@
+- id: MR2-10
+  category: Mathematical Reasoning
+  prompt: |-
+    Color the nine positions of a circle with A,B,C, using each color exactly
+    three times. Adjacent positions, including position 9 next to 1, must have
+    different colors. Colors are named: exchanging A and B is not an equivalence.
+    Count configurations (1) on labeled positions 1..9, (2) identifying rotations
+    only, (3) identifying both rotations and reflections. Do not assume all
+    configurations have nine distinct rotations.
+    Return JSON {"labeled": ..., "up_to_rotation": ...,
+    "up_to_rotation_and_reflection": ...}.
+
+    Explicit JSON output contract (types only): {"labeled": "number", "up_to_rotation": "number", "up_to_rotation_and_reflection": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      labeled: 132
+      up_to_rotation: 16
+      up_to_rotation_and_reflection: 8
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Symmetry counting with periodic configurations
+  max_tokens: 8192
+  metadata:
+    family: R8A-MR2-10
+    cohort: rigorous-v9
+    original_anchor_id: MR2-10
+  rubric:
+  - {id: 'json:labeled', weight: 1.0, group: labeled, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:up_to_rotation', weight: 1.0, group: up_to_rotation, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:up_to_rotation_and_reflection', weight: 1.0, group: up_to_rotation_and_reflection, mandatory: true,
+    critical: false, dimension: content}

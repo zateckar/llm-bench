@@ -1,0 +1,35 @@
+- id: CW-04
+  category: Creative Writing
+  prompt: |-
+    Write a persuasive argument against giving young children accounts on online networks. It must:
+    - be between 90 and 120 words,
+    - be exactly 3 paragraphs separated by blank lines,
+    - include at least 2 statistics or percentages (for example '80%' or '4 out of 5'),
+    - never use the words 'social' or 'media'.
+    Reply with ONLY the argument.
+
+    Use the following fictional sample figures: 20%, 35%, and 60%. The figures are illustrative, not real research; include the literal word hypothetical to describe the sample. No external sources are required. Only formal compliance is scored.
+  evaluator: format_check
+  expected:
+    checks:
+    - type: min_words
+      value: 90
+    - type: max_words
+      value: 120
+    - type: paragraph_count
+      value: 3
+    - type: count_occurrences
+      pattern: (?<!\d)(?:20|35|60)%
+      min_count: 2
+    - type: not_regex
+      value: (?i)\b(social|media)\b
+      description: '''social'' and ''media'' absent'
+    - type: contains
+      value: hypothetical
+  pass_threshold: 1.0
+  difficulty: expert
+  description: Paragraph count is now counted as paragraphs, not as non-empty lines
+  metadata:
+    family: R8A-CW-04
+    cohort: rigorous-v9
+    original_anchor_id: CW-04

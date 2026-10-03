@@ -46,19 +46,19 @@ def _evaluation_for(
             spec = rubric.get(criterion.criterion_id)
             if not spec:
                 continue
-            raw_ratio = (
-                criterion.earned / criterion.possible
-                if criterion.possible
-                else 0.0
-            )
+            raw_ratio = criterion.earned / criterion.possible if criterion.possible else 0.0
             weight = float(spec.get("weight", criterion.possible or 1.0))
             criterion.earned = raw_ratio * weight
             criterion.possible = weight
             criterion.dimension = str(spec.get("dimension", criterion.dimension))
             criterion.mandatory = bool(spec.get("mandatory", True))
             criterion.critical = bool(spec.get("critical", criterion.critical))
-            criterion.group = str(spec["group"]) if spec.get("group") is not None else criterion.group
-            criterion.depends_on = [str(dep) for dep in (spec.get("depends_on") or criterion.depends_on)]
+            criterion.group = (
+                str(spec["group"]) if spec.get("group") is not None else criterion.group
+            )
+            criterion.depends_on = [
+                str(dep) for dep in (spec.get("depends_on") or criterion.depends_on)
+            ]
             if spec.get("group") is not None:
                 criterion.evidence = {
                     **criterion.evidence,
@@ -95,6 +95,33 @@ def _evaluation_for(
                 reason_code=reason_code or ("full_match" if full_pass else "task_mismatch"),
             )
         ]
+    by_id = {criterion.criterion_id: criterion for criterion in criteria}
+    visited, visiting = set(), set()
+
+    def check_dependencies(criterion):
+        ident = criterion.criterion_id
+        if ident in visited:
+            return
+        if ident in visiting:
+            raise ValueError(f"Criterion dependency cycle at {ident}")
+        visiting.add(ident)
+        blocked = []
+        for dependency in criterion.depends_on:
+            parent = by_id.get(dependency)
+            if parent is None:
+                raise ValueError(f"Unknown criterion dependency {dependency}")
+            check_dependencies(parent)
+            if parent.status != "pass":
+                blocked.append(dependency)
+        if blocked:
+            criterion.status, criterion.earned = "not_evaluated", 0.0
+            criterion.reason_code = "blocked_by_dependency"
+            criterion.evidence = {**criterion.evidence, "blocked_by": blocked}
+        visiting.remove(ident)
+        visited.add(ident)
+
+    for criterion in criteria:
+        check_dependencies(criterion)
     gate_failed = any(
         (criterion.mandatory or criterion.critical)
         and criterion.status in {"fail", "error", "not_evaluated"}
@@ -121,15 +148,19 @@ def _availability_evaluation(q, outcome: str, reason: str) -> EvaluationResult:
         full_pass=False,
         outcome=outcome,
         sink={
-            "criteria": [{
-                "id": "response",
-                "status": "not_evaluated" if outcome in {"endpoint_error", "unsupported_context", "cancelled"} else "fail",
-                "earned": 0.0,
-                "possible": 1.0,
-                "dimension": "availability",
-                "reason_code": outcome,
-                "evidence": {"detail": reason[:240]},
-            }],
+            "criteria": [
+                {
+                    "id": "response",
+                    "status": "not_evaluated"
+                    if outcome in {"endpoint_error", "unsupported_context", "cancelled"}
+                    else "fail",
+                    "earned": 0.0,
+                    "possible": 1.0,
+                    "dimension": "availability",
+                    "reason_code": outcome,
+                    "evidence": {"detail": reason[:240]},
+                }
+            ],
             "contract_score": None,
         },
         reason_code=outcome,
@@ -176,7 +207,10 @@ def score_response(q, response, tokens, metrics, cached=False):
         result.evaluation = _availability_evaluation(q, result.outcome, result.detail)
         return result
     if not strip_think_blocks(response).strip():
-        result.outcome, result.detail = "missing_answer", "No final answer; reasoning alone is not an answer"
+        result.outcome, result.detail = (
+            "missing_answer",
+            "No final answer; reasoning alone is not an answer",
+        )
         result.evaluation = _availability_evaluation(q, result.outcome, result.detail)
         return result
     diagnostic_sink: dict = {}
@@ -196,9 +230,12 @@ def score_response(q, response, tokens, metrics, cached=False):
         result.outcome = "pass"
     elif q.metadata.get("scope") == "heuristic":
         result.outcome = "heuristic_mismatch"
-    elif q.evaluator == "json_match" and extract_json(
-        response, strict=isinstance(q.expected, dict) and q.expected.get("strict_json", False)
-    )[1]:
+    elif (
+        q.evaluator == "json_match"
+        and extract_json(
+            response, strict=isinstance(q.expected, dict) and q.expected.get("strict_json", False)
+        )[1]
+    ):
         result.outcome = "formatting"
     elif q.category == "Creative Writing":
         result.outcome = "compliance_failure"
@@ -227,3 +264,81 @@ def execute_question(q, client, cancelled=lambda: False):
         return run_interaction(q, client, cancelled)
     response, tokens, metrics = client.complete(q.prompt, q.system_prompt, max_tokens=q.max_tokens)
     return score_response(q, response, tokens, metrics)
+
+
+def run_quality(questions, client_config, max_concurrency=8, on_result=None, cancelled=None):
+    """Shared CLI/web execution; every planned question retains an outcome."""
+    from concurrent.futures import ThreadPoolExecutor
+    from dataclasses import replace
+    import threading
+    import time
+    from llm_client import ChatClient
+    from models import RequestMetrics
+    from quality_suite import QUALITY_WORKERS
+
+    cancelled = cancelled or (lambda: False)
+    workers = min(QUALITY_WORKERS, max_concurrency)
+    config = replace(client_config, detect_repetition=True)
+    lock = threading.Lock()
+    local = threading.local()
+    clients = []
+    results = [None] * len(questions)
+    unavailable = threading.Event()
+    consecutive_errors = 0
+    message = ""
+
+    def job(index, q):
+        nonlocal consecutive_errors, message
+        if cancelled() or unavailable.is_set():
+            return
+        client = getattr(local, "client", None)
+        if client is None:
+            client = ChatClient(config)
+            local.client = client
+            with lock:
+                clients.append(client)
+        try:
+            result = execute_question(q, client, lambda: cancelled() or unavailable.is_set())
+        except Exception as error:
+            result = Result(q, "", 0, detail=f"Evaluator error: {error}", outcome="evaluator_error")
+            result.evaluation = _availability_evaluation(q, "evaluator_error", result.detail)
+        with lock:
+            results[index] = result
+            consecutive_errors = consecutive_errors + 1 if result.outcome == "endpoint_error" else 0
+            if consecutive_errors >= 8:
+                message = "Stopped after eight consecutive endpoint failures. " + result.detail
+                unavailable.set()
+            if on_result:
+                try:
+                    on_result(index, result)
+                except Exception:
+                    unavailable.set()
+                    raise
+
+    started = time.perf_counter()
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(job, index, q) for index, q in enumerate(questions)]
+            for future in futures:
+                future.result()
+    finally:
+        for client in clients:
+            session = getattr(client, "session", None)
+            if session is not None:
+                session.close()
+    for index, q in enumerate(questions):
+        if results[index] is None:
+            reason = message or "Run cancelled before this question started"
+            result = Result(
+                q,
+                "",
+                0,
+                detail=reason,
+                outcome="cancelled",
+                metrics=RequestMetrics(ok=False, error=reason, attempts=0),
+            )
+            result.evaluation = _availability_evaluation(q, "cancelled", reason)
+            results[index] = result
+            if on_result and not cancelled():
+                on_result(index, result)
+    return results, (time.perf_counter() - started) * 1000, message

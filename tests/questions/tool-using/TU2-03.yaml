@@ -1,0 +1,45 @@
+- id: TU2-03
+  category: Tool Using
+  prompt: |-
+    A charge for order o7, amount 4800 cents, key pay:o7 ALREADY timed out.
+    A timeout does not establish whether the charge succeeded. Tools:
+      lookup_payment(key), charge(order,amount,key), record_receipt(order,payment,amount).
+    Policy: look up an uncertain charge first; if found successful, record its receipt
+    and never charge again. If absent, retry with the original key. The lookup will
+    return {"status":"succeeded","payment":"p31","amount":4800}. No receipt exists.
+
+    This is an offline planning exercise, not a request to call real tools.
+    Return ONLY a JSON array of the required REMAINING calls in execution order,
+    each {"tool": "name", "args": {exact parameter names and values}}. Do not
+    repeat completed calls, add explanations, or include unnecessary calls.
+
+    Explicit JSON output contract (types only): "array (element types and order specified in task)"
+  evaluator: json_match
+  expected:
+    value:
+    - tool: lookup_payment
+      args:
+        key: pay:o7
+    - tool: record_receipt
+      args:
+        order: o7
+        payment: p31
+        amount: 4800
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: hard
+  source: challenge-v2
+  description: Resolve an uncertain payment outcome before recording its receipt
+  metadata:
+    family: R8A-TU2-03
+    cohort: rigorous-v9
+    original_anchor_id: TU2-03
+  rubric:
+  - {id: 'json:[0].tool', weight: 0.16666666666666666, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[0].args.key', weight: 0.16666666666666666, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].tool', weight: 0.16666666666666666, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].args.order', weight: 0.16666666666666666, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].args.payment', weight: 0.16666666666666666, group: answer, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:[1].args.amount', weight: 0.16666666666666666, group: answer, mandatory: true, critical: false, dimension: content}

@@ -1,0 +1,40 @@
+- id: SP1-RD-02
+  category: R&D
+  prompt: |-
+    Mechanical design worst-case stack, dimensions in integer micrometres.
+    Housing internal length H=50000 +/-80. Insert A=20000 +/-30, B=29500 +/-50.
+    Gap at 20 C is H-A-B. At operating temperature the actual housing grows exactly 60,
+    A grows 40 and B grows 90 (independent of their manufacture errors). A selected shim
+    s chosen from [0,100,200,300] occupies gap and has zero tolerance/thermal growth.
+    Requirement: for EVERY allowed tolerance combination at BOTH temperatures,
+    remaining gap must be in [100,450] inclusive. Do not use root-sum-square/statistics.
+    Return {cold_unshimmed:[min,max],hot_unshimmed:[min,max],
+    feasible_shims:[ascending values],all_units_compliant_with_nominal_200:bool}.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"cold_unshimmed": {"array_items": "number"}, "hot_unshimmed": {"array_items": "number"}, "feasible_shims": "array (element type and order specified in task)", "all_units_compliant_with_nominal_200": "boolean"}
+  evaluator: json_match
+  expected:
+    value:
+      cold_unshimmed: [340, 660]
+      hot_unshimmed: [270, 590]
+      feasible_shims: []
+      all_units_compliant_with_nominal_200: false
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original synthetic exercise
+  description: 'Cold upper bound requires shim >=210, hot lower bound requires <=170: impossible even continuously.'
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-RD-02
+    cohort: rigorous-v9
+    original_anchor_id: SP1-RD-02
+  rubric:
+  - {id: 'json:cold_unshimmed[0]', weight: 0.5, group: cold_unshimmed, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:cold_unshimmed[1]', weight: 0.5, group: cold_unshimmed, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:hot_unshimmed[0]', weight: 0.5, group: hot_unshimmed, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:hot_unshimmed[1]', weight: 0.5, group: hot_unshimmed, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:feasible_shims', weight: 1.0, group: feasible_shims, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:all_units_compliant_with_nominal_200', weight: 1.0, group: all_units_compliant_with_nominal_200,
+    mandatory: true, critical: false, dimension: content}

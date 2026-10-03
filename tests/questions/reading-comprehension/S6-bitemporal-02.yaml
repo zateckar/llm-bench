@@ -1,0 +1,129 @@
+- id: S6-bitemporal-02
+  category: Reading Comprehension
+  prompt: |-
+    Reconstruct three accounting snapshots. Each query is [business_time,knowledge_cutoff].
+    For each account A0..A6 first retain rows with from <= business_time < to AND recorded <=
+    knowledge_cutoff. Among these select greatest (recorded,priority), lexicographically as an
+    integer pair. Priority is a tie-breaker, not a global revision number. A selected void row
+    is still the source but contributes no money; never resurrect an older row after a void.
+    Missing accounts have null sources. Negative amounts reduce totals. Owners come from the
+    selected rows, not from any newer or older row.
+    Rows: [{"id":"r60","account":"A6","from":7,"to":11,"recorded":11,"priority":0,"amount":1,"owner":"west","void":false},{"id":"r01","account":"A0","from":8,"to":15,"recorded":3,"priority":1,"amount":11,"owner":"west","void":false},{"id":"r30","account":"A3","from":5,"to":7,"recorded":11,"priority":0,"amount":56,"owner":"east","void":false},{"id":"r51","account":"A5","from":0,"to":5,"recorded":7,"priority":1,"amount":26,"owner":"west","void":false},{"id":"r62","account":"A6","from":8,"to":14,"recorded":2,"priority":2,"amount":5,"owner":"west","void":false},{"id":"r03","account":"A0","from":0,"to":4,"recorded":8,"priority":3,"amount":51,"owner":"west","void":false},{"id":"r20","account":"A2","from":1,"to":7,"recorded":8,"priority":0,"amount":15,"owner":"west","void":false},{"id":"r43","account":"A4","from":0,"to":5,"recorded":2,"priority":3,"amount":-27,"owner":"east","void":false},{"id":"r14","account":"A1","from":5,"to":8,"recorded":11,"priority":4,"amount":56,"owner":"west","void":false},{"id":"r21","account":"A2","from":6,"to":8,"recorded":7,"priority":1,"amount":-6,"owner":"west","void":false},{"id":"r02","account":"A0","from":8,"to":14,"recorded":5,"priority":2,"amount":-11,"owner":"west","void":false},{"id":"r22","account":"A2","from":0,"to":2,"recorded":6,"priority":2,"amount":-25,"owner":"east","void":false},{"id":"r31","account":"A3","from":2,"to":5,"recorded":1,"priority":1,"amount":47,"owner":"east","void":false},{"id":"r23","account":"A2","from":1,"to":5,"recorded":2,"priority":3,"amount":55,"owner":"east","void":false},{"id":"r64","account":"A6","from":2,"to":8,"recorded":10,"priority":4,"amount":76,"owner":"west","void":true},{"id":"r50","account":"A5","from":7,"to":13,"recorded":5,"priority":0,"amount":-18,"owner":"west","void":false},{"id":"r63","account":"A6","from":4,"to":10,"recorded":5,"priority":3,"amount":-28,"owner":"west","void":false},{"id":"r04","account":"A0","from":3,"to":10,"recorded":2,"priority":4,"amount":-18,"owner":"west","void":true},{"id":"r40","account":"A4","from":3,"to":7,"recorded":3,"priority":0,"amount":76,"owner":"west","void":false},{"id":"r34","account":"A3","from":5,"to":8,"recorded":5,"priority":4,"amount":19,"owner":"east","void":false},{"id":"r32","account":"A3","from":4,"to":7,"recorded":11,"priority":2,"amount":77,"owner":"west","void":false},{"id":"r24","account":"A2","from":0,"to":7,"recorded":7,"priority":4,"amount":41,"owner":"west","void":true},{"id":"r52","account":"A5","from":6,"to":9,"recorded":11,"priority":2,"amount":36,"owner":"east","void":false},{"id":"r12","account":"A1","from":1,"to":7,"recorded":4,"priority":2,"amount":22,"owner":"east","void":false},{"id":"r54","account":"A5","from":0,"to":5,"recorded":3,"priority":4,"amount":13,"owner":"east","void":false},{"id":"r10","account":"A1","from":7,"to":14,"recorded":9,"priority":0,"amount":-5,"owner":"east","void":false},{"id":"r44","account":"A4","from":0,"to":5,"recorded":10,"priority":4,"amount":76,"owner":"west","void":true},{"id":"r11","account":"A1","from":7,"to":12,"recorded":11,"priority":1,"amount":77,"owner":"east","void":false},{"id":"r53","account":"A5","from":4,"to":10,"recorded":4,"priority":3,"amount":72,"owner":"west","void":false},{"id":"r00","account":"A0","from":3,"to":10,"recorded":9,"priority":0,"amount":41,"owner":"east","void":false},{"id":"r33","account":"A3","from":0,"to":2,"recorded":2,"priority":3,"amount":28,"owner":"west","void":false},{"id":"r61","account":"A6","from":5,"to":7,"recorded":8,"priority":1,"amount":29,"owner":"west","void":false},{"id":"r13","account":"A1","from":1,"to":4,"recorded":3,"priority":3,"amount":-4,"owner":"east","void":false},{"id":"r42","account":"A4","from":3,"to":5,"recorded":2,"priority":2,"amount":-16,"owner":"east","void":false},{"id":"r41","account":"A4","from":8,"to":14,"recorded":5,"priority":1,"amount":50,"owner":"east","void":false}]
+    Queries: [[5,6],[7,9],[9,12]]
+    Return snapshots in query order. Each has sources (all seven account -> source ID or null),
+    totals (east and west, include zero), and void_accounts (sorted account IDs).
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above; do not add prose.
+    Explicit JSON output contract (types only): {"snapshots": "array (element types and order specified in task)"}
+    The root is {snapshots:[{sources:{account:source_ID_or_null},totals:{east:number,west:number},void_accounts:[account_IDs]}]}; one snapshot per query.
+  evaluator: json_match
+  expected:
+    value:
+      snapshots:
+      - sources:
+          A0: r04
+          A1: r12
+          A2: null
+          A3: r34
+          A4: r40
+          A5: r53
+          A6: r63
+        totals:
+          east: 41
+          west: 120
+        void_accounts: [A0]
+      - sources:
+          A0: r00
+          A1: r10
+          A2: r21
+          A3: r34
+          A4: null
+          A5: r50
+          A6: r63
+        totals:
+          east: 55
+          west: -52
+        void_accounts: []
+      - sources:
+          A0: r00
+          A1: r11
+          A2: null
+          A3: null
+          A4: r41
+          A5: r50
+          A6: r60
+        totals:
+          east: 168
+          west: -17
+        void_accounts: []
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  max_tokens: 65536
+  metadata:
+    family: R8A-S6-bitemporal
+    cohort: rigorous-v9
+    original_anchor_id: S6-bitemporal-02
+  rubric:
+  - {id: 'json:snapshots[0].sources.A0', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[0].sources.A1', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[0].sources.A2', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[0].sources.A3', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[0].sources.A4', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[0].sources.A5', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[0].sources.A6', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[0].totals.east', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[0].totals.west', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[0].void_accounts[0]', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[1].sources.A0', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[1].sources.A1', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[1].sources.A2', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[1].sources.A3', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[1].sources.A4', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[1].sources.A5', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[1].sources.A6', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[1].totals.east', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[1].totals.west', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[1].void_accounts', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[2].sources.A0', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[2].sources.A1', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[2].sources.A2', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[2].sources.A3', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[2].sources.A4', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[2].sources.A5', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[2].sources.A6', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[2].totals.east', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[2].totals.west', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:snapshots[2].void_accounts', weight: 0.03333333333333333, group: snapshots, mandatory: true, critical: false,
+    dimension: content}

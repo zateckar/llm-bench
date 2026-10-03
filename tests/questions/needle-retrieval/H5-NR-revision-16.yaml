@@ -1,0 +1,439 @@
+- id: H5-NR-revision-16
+  category: Needle Retrieval
+  prompt: |-
+    Prepare a source-grounded operational summary from this fictional dossier.
+    Requested route handles are not entity IDs: join route->alias->entity before resolving
+    its record. At cutoff day 23, take the APPROVED revision with greatest (effective day,
+    revision number), among effective days <=23. File order is irrelevant. Unapproved and
+    future revisions do not supersede. If the chosen revision is deleted, do NOT resurrect
+    an earlier live one. No eligible record means unknown, not deleted or zero quota.
+    Sum quotas only for ACTIVE requested routes, grouped by that chosen record's owner.
+    Return {"routes":{requested_route:{"record":record ID or null,"state":"active"|
+    "deleted"|"unknown","quota":integer for active else null}},
+    "owner_totals":{"east":integer,"north":integer,"south":integer},"grand_total":integer}.
+    Include every requested route and no others. Zero totals must still appear.
+    Route directory: {"route000":"alias009","route001":"alias026","route002":"alias043","route003":"alias060","route004":"alias077","route005":"alias094","route006":"alias111","route007":"alias128","route008":"alias145","route009":"alias162","route010":"alias179","route011":"alias196","route012":"alias213","route013":"alias230","route014":"alias247","route015":"alias264","route016":"alias281","route017":"alias298","route018":"alias315","route019":"alias332","route020":"alias349","route021":"alias366","route022":"alias383","route023":"alias400","route024":"alias417","route025":"alias434","route026":"alias451","route027":"alias468","route028":"alias485","route029":"alias502","route030":"alias519","route031":"alias536","route032":"alias553","route033":"alias570","route034":"alias587","route035":"alias604","route036":"alias621","route037":"alias638","route038":"alias655","route039":"alias672","route040":"alias689","route041":"alias706","route042":"alias723","route043":"alias740","route044":"alias757","route045":"alias774","route046":"alias791","route047":"alias808","route048":"alias825","route049":"alias842","route050":"alias859","route051":"alias876","route052":"alias893","route053":"alias910","route054":"alias927","route055":"alias944","route056":"alias961","route057":"alias978","route058":"alias995","route059":"alias015","route060":"alias032","route061":"alias049","route062":"alias066","route063":"alias083","route064":"alias100","route065":"alias117","route066":"alias134","route067":"alias151","route068":"alias168","route069":"alias185","route070":"alias202","route071":"alias219","route072":"alias236","route073":"alias253","route074":"alias270","route075":"alias287","route076":"alias304","route077":"alias321","route078":"alias338","route079":"alias355"}
+    Alias directory: {"alias009":"e000","alias026":"e001","alias043":"e002","alias060":"e003","alias077":"e004","alias094":"e005","alias111":"e006","alias128":"e007","alias145":"e008","alias162":"e009","alias179":"e010","alias196":"e011","alias213":"e012","alias230":"e013","alias247":"e014","alias264":"e015","alias281":"e016","alias298":"e017","alias315":"e018","alias332":"e019","alias349":"e020","alias366":"e021","alias383":"e022","alias400":"e023","alias417":"e024","alias434":"e025","alias451":"e026","alias468":"e027","alias485":"e028","alias502":"e029","alias519":"e030","alias536":"e031","alias553":"e032","alias570":"e033","alias587":"e034","alias604":"e035","alias621":"e036","alias638":"e037","alias655":"e038","alias672":"e039","alias689":"e040","alias706":"e041","alias723":"e042","alias740":"e043","alias757":"e044","alias774":"e045","alias791":"e046","alias808":"e047","alias825":"e048","alias842":"e049","alias859":"e050","alias876":"e051","alias893":"e052","alias910":"e053","alias927":"e054","alias944":"e055","alias961":"e056","alias978":"e057","alias995":"e058","alias015":"e059","alias032":"e060","alias049":"e061","alias066":"e062","alias083":"e063","alias100":"e064","alias117":"e065","alias134":"e066","alias151":"e067","alias168":"e068","alias185":"e069","alias202":"e070","alias219":"e071","alias236":"e072","alias253":"e073","alias270":"e074","alias287":"e075","alias304":"e076","alias321":"e077","alias338":"e078","alias355":"e079"}
+    Records, one JSON object per line:
+    {"record":"r021-2","entity":"e021","revision":2,"effective":3,"approved":true,"deleted":false,"quota":68,"owner":"south"}
+    {"record":"r014-2","entity":"e014","revision":2,"effective":34,"approved":true,"deleted":false,"quota":30,"owner":"north"}
+    {"record":"r038-3","entity":"e038","revision":3,"effective":19,"approved":false,"deleted":false,"quota":24,"owner":"south"}
+    {"record":"r071-1","entity":"e071","revision":1,"effective":1,"approved":true,"deleted":false,"quota":34,"owner":"east"}
+    {"record":"r019-1","entity":"e019","revision":1,"effective":12,"approved":true,"deleted":false,"quota":131,"owner":"east"}
+    {"record":"r033-2","entity":"e033","revision":2,"effective":20,"approved":true,"deleted":false,"quota":81,"owner":"south"}
+    {"record":"r064-1","entity":"e064","revision":1,"effective":9,"approved":true,"deleted":false,"quota":24,"owner":"east"}
+    {"record":"r030-2","entity":"e030","revision":2,"effective":29,"approved":true,"deleted":false,"quota":60,"owner":"south"}
+    {"record":"r056-3","entity":"e056","revision":3,"effective":24,"approved":false,"deleted":false,"quota":54,"owner":"east"}
+    {"record":"r048-4","entity":"e048","revision":4,"effective":30,"approved":true,"deleted":false,"quota":65,"owner":"south"}
+    {"record":"r067-1","entity":"e067","revision":1,"effective":8,"approved":true,"deleted":false,"quota":24,"owner":"east"}
+    {"record":"r070-4","entity":"e070","revision":4,"effective":13,"approved":true,"deleted":false,"quota":56,"owner":"north"}
+    {"record":"r058-1","entity":"e058","revision":1,"effective":18,"approved":true,"deleted":false,"quota":107,"owner":"south"}
+    {"record":"r015-4","entity":"e015","revision":4,"effective":26,"approved":true,"deleted":false,"quota":58,"owner":"north"}
+    {"record":"r064-2","entity":"e064","revision":2,"effective":6,"approved":true,"deleted":false,"quota":69,"owner":"south"}
+    {"record":"r036-2","entity":"e036","revision":2,"effective":17,"approved":true,"deleted":false,"quota":133,"owner":"east"}
+    {"record":"r075-3","entity":"e075","revision":3,"effective":3,"approved":true,"deleted":false,"quota":138,"owner":"south"}
+    {"record":"r061-4","entity":"e061","revision":4,"effective":22,"approved":true,"deleted":false,"quota":34,"owner":"north"}
+    {"record":"r001-3","entity":"e001","revision":3,"effective":25,"approved":false,"deleted":false,"quota":105,"owner":"south"}
+    {"record":"r001-4","entity":"e001","revision":4,"effective":6,"approved":true,"deleted":true,"quota":95,"owner":"east"}
+    {"record":"r071-4","entity":"e071","revision":4,"effective":9,"approved":true,"deleted":false,"quota":45,"owner":"east"}
+    {"record":"r005-2","entity":"e005","revision":2,"effective":30,"approved":false,"deleted":true,"quota":109,"owner":"east"}
+    {"record":"r038-1","entity":"e038","revision":1,"effective":2,"approved":true,"deleted":false,"quota":26,"owner":"east"}
+    {"record":"r075-2","entity":"e075","revision":2,"effective":19,"approved":true,"deleted":false,"quota":101,"owner":"north"}
+    {"record":"r070-3","entity":"e070","revision":3,"effective":9,"approved":true,"deleted":false,"quota":78,"owner":"south"}
+    {"record":"r021-4","entity":"e021","revision":4,"effective":22,"approved":true,"deleted":false,"quota":14,"owner":"north"}
+    {"record":"r036-3","entity":"e036","revision":3,"effective":23,"approved":true,"deleted":false,"quota":132,"owner":"east"}
+    {"record":"r027-4","entity":"e027","revision":4,"effective":33,"approved":true,"deleted":false,"quota":110,"owner":"north"}
+    {"record":"r073-1","entity":"e073","revision":1,"effective":28,"approved":true,"deleted":false,"quota":117,"owner":"north"}
+    {"record":"r051-1","entity":"e051","revision":1,"effective":17,"approved":true,"deleted":false,"quota":65,"owner":"south"}
+    {"record":"r052-3","entity":"e052","revision":3,"effective":25,"approved":true,"deleted":false,"quota":84,"owner":"south"}
+    {"record":"r007-1","entity":"e007","revision":1,"effective":23,"approved":true,"deleted":false,"quota":79,"owner":"south"}
+    {"record":"r063-2","entity":"e063","revision":2,"effective":23,"approved":true,"deleted":false,"quota":142,"owner":"north"}
+    {"record":"r066-4","entity":"e066","revision":4,"effective":4,"approved":true,"deleted":false,"quota":97,"owner":"south"}
+    {"record":"r079-3","entity":"e079","revision":3,"effective":33,"approved":true,"deleted":true,"quota":67,"owner":"east"}
+    {"record":"r019-3","entity":"e019","revision":3,"effective":2,"approved":true,"deleted":false,"quota":135,"owner":"south"}
+    {"record":"r024-4","entity":"e024","revision":4,"effective":30,"approved":false,"deleted":false,"quota":38,"owner":"east"}
+    {"record":"r058-3","entity":"e058","revision":3,"effective":13,"approved":true,"deleted":false,"quota":69,"owner":"east"}
+    {"record":"r012-2","entity":"e012","revision":2,"effective":19,"approved":true,"deleted":false,"quota":13,"owner":"east"}
+    {"record":"r048-2","entity":"e048","revision":2,"effective":26,"approved":true,"deleted":true,"quota":128,"owner":"east"}
+    {"record":"r021-1","entity":"e021","revision":1,"effective":15,"approved":true,"deleted":false,"quota":86,"owner":"east"}
+    {"record":"r008-3","entity":"e008","revision":3,"effective":4,"approved":true,"deleted":true,"quota":10,"owner":"east"}
+    {"record":"r038-2","entity":"e038","revision":2,"effective":27,"approved":true,"deleted":true,"quota":107,"owner":"north"}
+    {"record":"r067-4","entity":"e067","revision":4,"effective":21,"approved":true,"deleted":false,"quota":32,"owner":"south"}
+    {"record":"r029-3","entity":"e029","revision":3,"effective":27,"approved":false,"deleted":true,"quota":28,"owner":"south"}
+    {"record":"r034-2","entity":"e034","revision":2,"effective":33,"approved":true,"deleted":false,"quota":110,"owner":"north"}
+    {"record":"r011-2","entity":"e011","revision":2,"effective":20,"approved":false,"deleted":true,"quota":22,"owner":"south"}
+    {"record":"r002-4","entity":"e002","revision":4,"effective":24,"approved":true,"deleted":false,"quota":106,"owner":"east"}
+    {"record":"r010-2","entity":"e010","revision":2,"effective":10,"approved":true,"deleted":false,"quota":30,"owner":"north"}
+    {"record":"r078-4","entity":"e078","revision":4,"effective":15,"approved":true,"deleted":false,"quota":18,"owner":"north"}
+    {"record":"r005-3","entity":"e005","revision":3,"effective":31,"approved":true,"deleted":false,"quota":16,"owner":"south"}
+    {"record":"r054-4","entity":"e054","revision":4,"effective":14,"approved":false,"deleted":false,"quota":66,"owner":"north"}
+    {"record":"r073-4","entity":"e073","revision":4,"effective":4,"approved":true,"deleted":false,"quota":78,"owner":"north"}
+    {"record":"r070-2","entity":"e070","revision":2,"effective":31,"approved":true,"deleted":false,"quota":13,"owner":"north"}
+    {"record":"r031-1","entity":"e031","revision":1,"effective":1,"approved":true,"deleted":false,"quota":130,"owner":"east"}
+    {"record":"r001-2","entity":"e001","revision":2,"effective":29,"approved":true,"deleted":false,"quota":81,"owner":"north"}
+    {"record":"r023-3","entity":"e023","revision":3,"effective":10,"approved":true,"deleted":false,"quota":102,"owner":"south"}
+    {"record":"r072-4","entity":"e072","revision":4,"effective":23,"approved":true,"deleted":false,"quota":147,"owner":"south"}
+    {"record":"r023-2","entity":"e023","revision":2,"effective":13,"approved":true,"deleted":false,"quota":49,"owner":"north"}
+    {"record":"r028-3","entity":"e028","revision":3,"effective":17,"approved":true,"deleted":false,"quota":54,"owner":"east"}
+    {"record":"r060-1","entity":"e060","revision":1,"effective":11,"approved":true,"deleted":false,"quota":135,"owner":"south"}
+    {"record":"r045-1","entity":"e045","revision":1,"effective":7,"approved":true,"deleted":false,"quota":73,"owner":"north"}
+    {"record":"r012-3","entity":"e012","revision":3,"effective":2,"approved":true,"deleted":false,"quota":38,"owner":"north"}
+    {"record":"r015-1","entity":"e015","revision":1,"effective":19,"approved":true,"deleted":false,"quota":85,"owner":"south"}
+    {"record":"r029-2","entity":"e029","revision":2,"effective":20,"approved":true,"deleted":false,"quota":55,"owner":"east"}
+    {"record":"r028-4","entity":"e028","revision":4,"effective":18,"approved":true,"deleted":false,"quota":69,"owner":"north"}
+    {"record":"r047-4","entity":"e047","revision":4,"effective":3,"approved":true,"deleted":false,"quota":73,"owner":"north"}
+    {"record":"r020-2","entity":"e020","revision":2,"effective":14,"approved":true,"deleted":false,"quota":97,"owner":"east"}
+    {"record":"r053-1","entity":"e053","revision":1,"effective":26,"approved":true,"deleted":false,"quota":140,"owner":"east"}
+    {"record":"r017-2","entity":"e017","revision":2,"effective":6,"approved":true,"deleted":false,"quota":119,"owner":"south"}
+    {"record":"r004-1","entity":"e004","revision":1,"effective":14,"approved":true,"deleted":false,"quota":49,"owner":"east"}
+    {"record":"r018-1","entity":"e018","revision":1,"effective":14,"approved":true,"deleted":false,"quota":105,"owner":"north"}
+    {"record":"r024-2","entity":"e024","revision":2,"effective":14,"approved":false,"deleted":false,"quota":69,"owner":"east"}
+    {"record":"r061-2","entity":"e061","revision":2,"effective":11,"approved":true,"deleted":false,"quota":103,"owner":"north"}
+    {"record":"r041-4","entity":"e041","revision":4,"effective":2,"approved":true,"deleted":false,"quota":51,"owner":"south"}
+    {"record":"r002-3","entity":"e002","revision":3,"effective":19,"approved":true,"deleted":false,"quota":15,"owner":"east"}
+    {"record":"r027-3","entity":"e027","revision":3,"effective":9,"approved":true,"deleted":false,"quota":74,"owner":"north"}
+    {"record":"r055-2","entity":"e055","revision":2,"effective":11,"approved":true,"deleted":true,"quota":99,"owner":"north"}
+    {"record":"r051-3","entity":"e051","revision":3,"effective":35,"approved":false,"deleted":false,"quota":69,"owner":"east"}
+    {"record":"r049-3","entity":"e049","revision":3,"effective":21,"approved":true,"deleted":true,"quota":144,"owner":"east"}
+    {"record":"r032-4","entity":"e032","revision":4,"effective":26,"approved":true,"deleted":false,"quota":25,"owner":"east"}
+    {"record":"r035-4","entity":"e035","revision":4,"effective":14,"approved":true,"deleted":false,"quota":112,"owner":"north"}
+    {"record":"r008-4","entity":"e008","revision":4,"effective":13,"approved":true,"deleted":true,"quota":109,"owner":"north"}
+    {"record":"r044-4","entity":"e044","revision":4,"effective":9,"approved":false,"deleted":false,"quota":16,"owner":"east"}
+    {"record":"r064-4","entity":"e064","revision":4,"effective":10,"approved":false,"deleted":false,"quota":46,"owner":"east"}
+    {"record":"r032-2","entity":"e032","revision":2,"effective":4,"approved":true,"deleted":false,"quota":149,"owner":"south"}
+    {"record":"r000-3","entity":"e000","revision":3,"effective":35,"approved":true,"deleted":true,"quota":126,"owner":"south"}
+    {"record":"r025-2","entity":"e025","revision":2,"effective":26,"approved":true,"deleted":true,"quota":69,"owner":"east"}
+    {"record":"r028-1","entity":"e028","revision":1,"effective":20,"approved":true,"deleted":false,"quota":75,"owner":"east"}
+    {"record":"r070-1","entity":"e070","revision":1,"effective":14,"approved":true,"deleted":false,"quota":132,"owner":"north"}
+    {"record":"r074-4","entity":"e074","revision":4,"effective":5,"approved":true,"deleted":false,"quota":113,"owner":"north"}
+    {"record":"r012-4","entity":"e012","revision":4,"effective":23,"approved":false,"deleted":false,"quota":99,"owner":"north"}
+    {"record":"r032-3","entity":"e032","revision":3,"effective":33,"approved":true,"deleted":false,"quota":69,"owner":"north"}
+    {"record":"r073-3","entity":"e073","revision":3,"effective":3,"approved":true,"deleted":false,"quota":78,"owner":"north"}
+    {"record":"r043-1","entity":"e043","revision":1,"effective":33,"approved":true,"deleted":false,"quota":107,"owner":"east"}
+    {"record":"r059-1","entity":"e059","revision":1,"effective":22,"approved":true,"deleted":false,"quota":110,"owner":"east"}
+    {"record":"r020-1","entity":"e020","revision":1,"effective":17,"approved":true,"deleted":false,"quota":133,"owner":"east"}
+    {"record":"r009-2","entity":"e009","revision":2,"effective":25,"approved":true,"deleted":false,"quota":54,"owner":"north"}
+    {"record":"r035-2","entity":"e035","revision":2,"effective":26,"approved":true,"deleted":false,"quota":67,"owner":"south"}
+    {"record":"r059-4","entity":"e059","revision":4,"effective":25,"approved":true,"deleted":true,"quota":131,"owner":"east"}
+    {"record":"r007-2","entity":"e007","revision":2,"effective":21,"approved":false,"deleted":false,"quota":98,"owner":"south"}
+    {"record":"r069-2","entity":"e069","revision":2,"effective":14,"approved":true,"deleted":false,"quota":71,"owner":"north"}
+    {"record":"r022-3","entity":"e022","revision":3,"effective":13,"approved":true,"deleted":false,"quota":140,"owner":"north"}
+    {"record":"r044-3","entity":"e044","revision":3,"effective":2,"approved":true,"deleted":false,"quota":135,"owner":"south"}
+    {"record":"r060-2","entity":"e060","revision":2,"effective":10,"approved":true,"deleted":false,"quota":44,"owner":"east"}
+    {"record":"r037-2","entity":"e037","revision":2,"effective":29,"approved":true,"deleted":false,"quota":98,"owner":"south"}
+    {"record":"r011-4","entity":"e011","revision":4,"effective":19,"approved":true,"deleted":false,"quota":121,"owner":"north"}
+    {"record":"r041-2","entity":"e041","revision":2,"effective":33,"approved":true,"deleted":true,"quota":79,"owner":"south"}
+    {"record":"r068-4","entity":"e068","revision":4,"effective":9,"approved":true,"deleted":false,"quota":104,"owner":"north"}
+    {"record":"r027-2","entity":"e027","revision":2,"effective":17,"approved":true,"deleted":false,"quota":18,"owner":"south"}
+    {"record":"r018-2","entity":"e018","revision":2,"effective":23,"approved":false,"deleted":false,"quota":89,"owner":"east"}
+    {"record":"r026-4","entity":"e026","revision":4,"effective":33,"approved":true,"deleted":false,"quota":63,"owner":"east"}
+    {"record":"r049-1","entity":"e049","revision":1,"effective":2,"approved":true,"deleted":false,"quota":65,"owner":"south"}
+    {"record":"r002-1","entity":"e002","revision":1,"effective":7,"approved":true,"deleted":false,"quota":142,"owner":"east"}
+    {"record":"r057-4","entity":"e057","revision":4,"effective":20,"approved":true,"deleted":false,"quota":92,"owner":"east"}
+    {"record":"r050-4","entity":"e050","revision":4,"effective":23,"approved":false,"deleted":false,"quota":144,"owner":"south"}
+    {"record":"r045-4","entity":"e045","revision":4,"effective":22,"approved":true,"deleted":false,"quota":85,"owner":"north"}
+    {"record":"r030-4","entity":"e030","revision":4,"effective":10,"approved":true,"deleted":true,"quota":78,"owner":"east"}
+    {"record":"r051-4","entity":"e051","revision":4,"effective":25,"approved":true,"deleted":true,"quota":71,"owner":"south"}
+    {"record":"r054-1","entity":"e054","revision":1,"effective":7,"approved":true,"deleted":false,"quota":99,"owner":"north"}
+    {"record":"r031-2","entity":"e031","revision":2,"effective":35,"approved":true,"deleted":false,"quota":122,"owner":"north"}
+    {"record":"r050-1","entity":"e050","revision":1,"effective":15,"approved":true,"deleted":false,"quota":27,"owner":"east"}
+    {"record":"r026-1","entity":"e026","revision":1,"effective":19,"approved":true,"deleted":false,"quota":125,"owner":"north"}
+    {"record":"r052-1","entity":"e052","revision":1,"effective":9,"approved":true,"deleted":false,"quota":149,"owner":"south"}
+    {"record":"r041-1","entity":"e041","revision":1,"effective":1,"approved":true,"deleted":false,"quota":127,"owner":"south"}
+    {"record":"r077-3","entity":"e077","revision":3,"effective":26,"approved":true,"deleted":false,"quota":75,"owner":"east"}
+    {"record":"r024-1","entity":"e024","revision":1,"effective":24,"approved":true,"deleted":false,"quota":58,"owner":"east"}
+    {"record":"r076-3","entity":"e076","revision":3,"effective":14,"approved":false,"deleted":false,"quota":14,"owner":"east"}
+    {"record":"r071-2","entity":"e071","revision":2,"effective":23,"approved":true,"deleted":false,"quota":20,"owner":"south"}
+    {"record":"r037-3","entity":"e037","revision":3,"effective":29,"approved":true,"deleted":false,"quota":119,"owner":"south"}
+    {"record":"r015-2","entity":"e015","revision":2,"effective":13,"approved":true,"deleted":false,"quota":14,"owner":"south"}
+    {"record":"r004-4","entity":"e004","revision":4,"effective":26,"approved":true,"deleted":false,"quota":103,"owner":"north"}
+    {"record":"r014-3","entity":"e014","revision":3,"effective":25,"approved":false,"deleted":false,"quota":110,"owner":"north"}
+    {"record":"r079-4","entity":"e079","revision":4,"effective":14,"approved":true,"deleted":false,"quota":15,"owner":"south"}
+    {"record":"r010-4","entity":"e010","revision":4,"effective":7,"approved":true,"deleted":false,"quota":34,"owner":"south"}
+    {"record":"r017-4","entity":"e017","revision":4,"effective":29,"approved":true,"deleted":false,"quota":110,"owner":"north"}
+    {"record":"r012-1","entity":"e012","revision":1,"effective":12,"approved":true,"deleted":false,"quota":107,"owner":"east"}
+    {"record":"r048-3","entity":"e048","revision":3,"effective":26,"approved":true,"deleted":false,"quota":25,"owner":"east"}
+    {"record":"r040-4","entity":"e040","revision":4,"effective":18,"approved":true,"deleted":false,"quota":21,"owner":"south"}
+    {"record":"r074-3","entity":"e074","revision":3,"effective":35,"approved":true,"deleted":false,"quota":63,"owner":"south"}
+    {"record":"r072-1","entity":"e072","revision":1,"effective":24,"approved":true,"deleted":false,"quota":24,"owner":"south"}
+    {"record":"r010-3","entity":"e010","revision":3,"effective":31,"approved":true,"deleted":true,"quota":143,"owner":"east"}
+    {"record":"r028-2","entity":"e028","revision":2,"effective":7,"approved":false,"deleted":false,"quota":142,"owner":"north"}
+    {"record":"r036-4","entity":"e036","revision":4,"effective":22,"approved":true,"deleted":false,"quota":25,"owner":"east"}
+    {"record":"r006-1","entity":"e006","revision":1,"effective":3,"approved":true,"deleted":false,"quota":109,"owner":"north"}
+    {"record":"r041-3","entity":"e041","revision":3,"effective":28,"approved":true,"deleted":false,"quota":35,"owner":"south"}
+    {"record":"r005-4","entity":"e005","revision":4,"effective":7,"approved":false,"deleted":false,"quota":43,"owner":"north"}
+    {"record":"r036-1","entity":"e036","revision":1,"effective":22,"approved":true,"deleted":false,"quota":36,"owner":"north"}
+    {"record":"r046-2","entity":"e046","revision":2,"effective":28,"approved":true,"deleted":false,"quota":119,"owner":"east"}
+    {"record":"r011-1","entity":"e011","revision":1,"effective":28,"approved":true,"deleted":false,"quota":97,"owner":"east"}
+    {"record":"r039-2","entity":"e039","revision":2,"effective":35,"approved":true,"deleted":true,"quota":120,"owner":"east"}
+    {"record":"r022-4","entity":"e022","revision":4,"effective":19,"approved":true,"deleted":true,"quota":70,"owner":"north"}
+    {"record":"r056-2","entity":"e056","revision":2,"effective":14,"approved":true,"deleted":false,"quota":21,"owner":"east"}
+    {"record":"r003-4","entity":"e003","revision":4,"effective":10,"approved":false,"deleted":false,"quota":66,"owner":"north"}
+    {"record":"r013-4","entity":"e013","revision":4,"effective":12,"approved":true,"deleted":false,"quota":131,"owner":"north"}
+    {"record":"r003-2","entity":"e003","revision":2,"effective":23,"approved":true,"deleted":false,"quota":130,"owner":"east"}
+    {"record":"r065-2","entity":"e065","revision":2,"effective":26,"approved":true,"deleted":false,"quota":122,"owner":"east"}
+    {"record":"r077-1","entity":"e077","revision":1,"effective":30,"approved":true,"deleted":false,"quota":148,"owner":"east"}
+    {"record":"r074-1","entity":"e074","revision":1,"effective":15,"approved":true,"deleted":false,"quota":109,"owner":"east"}
+    {"record":"r057-2","entity":"e057","revision":2,"effective":2,"approved":false,"deleted":false,"quota":58,"owner":"north"}
+    {"record":"r023-1","entity":"e023","revision":1,"effective":14,"approved":true,"deleted":false,"quota":104,"owner":"south"}
+    {"record":"r047-3","entity":"e047","revision":3,"effective":10,"approved":false,"deleted":false,"quota":16,"owner":"east"}
+    {"record":"r039-1","entity":"e039","revision":1,"effective":13,"approved":true,"deleted":false,"quota":101,"owner":"south"}
+    {"record":"r060-3","entity":"e060","revision":3,"effective":5,"approved":false,"deleted":true,"quota":84,"owner":"south"}
+    {"record":"r035-1","entity":"e035","revision":1,"effective":33,"approved":true,"deleted":false,"quota":101,"owner":"south"}
+    {"record":"r043-3","entity":"e043","revision":3,"effective":3,"approved":true,"deleted":false,"quota":140,"owner":"south"}
+    {"record":"r017-3","entity":"e017","revision":3,"effective":28,"approved":true,"deleted":false,"quota":97,"owner":"east"}
+    {"record":"r003-1","entity":"e003","revision":1,"effective":17,"approved":true,"deleted":false,"quota":60,"owner":"north"}
+    {"record":"r019-2","entity":"e019","revision":2,"effective":25,"approved":true,"deleted":false,"quota":82,"owner":"south"}
+    {"record":"r015-3","entity":"e015","revision":3,"effective":1,"approved":true,"deleted":false,"quota":34,"owner":"north"}
+    {"record":"r046-4","entity":"e046","revision":4,"effective":5,"approved":true,"deleted":false,"quota":83,"owner":"east"}
+    {"record":"r054-2","entity":"e054","revision":2,"effective":19,"approved":true,"deleted":false,"quota":144,"owner":"south"}
+    {"record":"r050-3","entity":"e050","revision":3,"effective":10,"approved":true,"deleted":false,"quota":32,"owner":"north"}
+    {"record":"r042-2","entity":"e042","revision":2,"effective":2,"approved":false,"deleted":false,"quota":136,"owner":"north"}
+    {"record":"r049-2","entity":"e049","revision":2,"effective":12,"approved":false,"deleted":true,"quota":57,"owner":"east"}
+    {"record":"r068-2","entity":"e068","revision":2,"effective":25,"approved":true,"deleted":false,"quota":97,"owner":"north"}
+    {"record":"r062-2","entity":"e062","revision":2,"effective":6,"approved":false,"deleted":false,"quota":141,"owner":"east"}
+    {"record":"r042-4","entity":"e042","revision":4,"effective":6,"approved":true,"deleted":false,"quota":146,"owner":"south"}
+    {"record":"r005-1","entity":"e005","revision":1,"effective":8,"approved":true,"deleted":false,"quota":88,"owner":"east"}
+    {"record":"r046-3","entity":"e046","revision":3,"effective":30,"approved":true,"deleted":false,"quota":38,"owner":"north"}
+    {"record":"r007-4","entity":"e007","revision":4,"effective":12,"approved":false,"deleted":false,"quota":36,"owner":"north"}
+    {"record":"r064-3","entity":"e064","revision":3,"effective":4,"approved":true,"deleted":false,"quota":81,"owner":"south"}
+    {"record":"r078-3","entity":"e078","revision":3,"effective":33,"approved":true,"deleted":false,"quota":102,"owner":"east"}
+    {"record":"r072-3","entity":"e072","revision":3,"effective":13,"approved":false,"deleted":true,"quota":136,"owner":"north"}
+    {"record":"r006-4","entity":"e006","revision":4,"effective":3,"approved":false,"deleted":false,"quota":10,"owner":"east"}
+    {"record":"r061-3","entity":"e061","revision":3,"effective":2,"approved":false,"deleted":false,"quota":77,"owner":"east"}
+    {"record":"r017-1","entity":"e017","revision":1,"effective":19,"approved":true,"deleted":false,"quota":66,"owner":"east"}
+    {"record":"r027-1","entity":"e027","revision":1,"effective":7,"approved":true,"deleted":false,"quota":61,"owner":"east"}
+    {"record":"r062-4","entity":"e062","revision":4,"effective":13,"approved":true,"deleted":false,"quota":68,"owner":"east"}
+    {"record":"r018-3","entity":"e018","revision":3,"effective":34,"approved":true,"deleted":false,"quota":150,"owner":"east"}
+    {"record":"r016-3","entity":"e016","revision":3,"effective":29,"approved":true,"deleted":true,"quota":149,"owner":"south"}
+    {"record":"r078-2","entity":"e078","revision":2,"effective":12,"approved":true,"deleted":false,"quota":25,"owner":"north"}
+    {"record":"r040-1","entity":"e040","revision":1,"effective":25,"approved":true,"deleted":false,"quota":101,"owner":"east"}
+    {"record":"r019-4","entity":"e019","revision":4,"effective":21,"approved":true,"deleted":false,"quota":51,"owner":"south"}
+    {"record":"r016-2","entity":"e016","revision":2,"effective":9,"approved":true,"deleted":false,"quota":89,"owner":"east"}
+    {"record":"r029-1","entity":"e029","revision":1,"effective":27,"approved":true,"deleted":false,"quota":138,"owner":"north"}
+    {"record":"r050-2","entity":"e050","revision":2,"effective":13,"approved":true,"deleted":false,"quota":142,"owner":"east"}
+    {"record":"r021-3","entity":"e021","revision":3,"effective":29,"approved":true,"deleted":false,"quota":95,"owner":"north"}
+    {"record":"r032-1","entity":"e032","revision":1,"effective":34,"approved":true,"deleted":false,"quota":54,"owner":"north"}
+    {"record":"r048-1","entity":"e048","revision":1,"effective":3,"approved":true,"deleted":false,"quota":57,"owner":"north"}
+    {"record":"r071-3","entity":"e071","revision":3,"effective":15,"approved":false,"deleted":false,"quota":72,"owner":"north"}
+    {"record":"r026-2","entity":"e026","revision":2,"effective":11,"approved":true,"deleted":false,"quota":141,"owner":"north"}
+    {"record":"r013-2","entity":"e013","revision":2,"effective":25,"approved":true,"deleted":false,"quota":99,"owner":"south"}
+    {"record":"r006-3","entity":"e006","revision":3,"effective":33,"approved":true,"deleted":false,"quota":31,"owner":"east"}
+    {"record":"r022-1","entity":"e022","revision":1,"effective":2,"approved":true,"deleted":false,"quota":47,"owner":"south"}
+    {"record":"r069-3","entity":"e069","revision":3,"effective":28,"approved":true,"deleted":true,"quota":79,"owner":"south"}
+    {"record":"r074-2","entity":"e074","revision":2,"effective":21,"approved":false,"deleted":false,"quota":37,"owner":"east"}
+    {"record":"r058-2","entity":"e058","revision":2,"effective":20,"approved":true,"deleted":false,"quota":121,"owner":"east"}
+    {"record":"r057-3","entity":"e057","revision":3,"effective":9,"approved":true,"deleted":false,"quota":107,"owner":"north"}
+    {"record":"r062-1","entity":"e062","revision":1,"effective":24,"approved":true,"deleted":false,"quota":64,"owner":"east"}
+    {"record":"r065-1","entity":"e065","revision":1,"effective":26,"approved":true,"deleted":false,"quota":81,"owner":"south"}
+    {"record":"r008-2","entity":"e008","revision":2,"effective":8,"approved":false,"deleted":false,"quota":48,"owner":"east"}
+    {"record":"r077-4","entity":"e077","revision":4,"effective":19,"approved":true,"deleted":false,"quota":43,"owner":"east"}
+    {"record":"r056-4","entity":"e056","revision":4,"effective":24,"approved":true,"deleted":false,"quota":138,"owner":"south"}
+    {"record":"r051-2","entity":"e051","revision":2,"effective":4,"approved":true,"deleted":false,"quota":11,"owner":"north"}
+    {"record":"r066-2","entity":"e066","revision":2,"effective":35,"approved":true,"deleted":false,"quota":52,"owner":"east"}
+    {"record":"r002-2","entity":"e002","revision":2,"effective":32,"approved":true,"deleted":false,"quota":110,"owner":"north"}
+    {"record":"r023-4","entity":"e023","revision":4,"effective":29,"approved":true,"deleted":false,"quota":24,"owner":"east"}
+    {"record":"r010-1","entity":"e010","revision":1,"effective":25,"approved":true,"deleted":false,"quota":95,"owner":"north"}
+    {"record":"r038-4","entity":"e038","revision":4,"effective":33,"approved":true,"deleted":false,"quota":45,"owner":"south"}
+    {"record":"r034-4","entity":"e034","revision":4,"effective":3,"approved":true,"deleted":true,"quota":131,"owner":"east"}
+    {"record":"r000-1","entity":"e000","revision":1,"effective":15,"approved":true,"deleted":false,"quota":69,"owner":"north"}
+    {"record":"r078-1","entity":"e078","revision":1,"effective":4,"approved":true,"deleted":false,"quota":142,"owner":"south"}
+    {"record":"r030-3","entity":"e030","revision":3,"effective":24,"approved":true,"deleted":false,"quota":12,"owner":"east"}
+    {"record":"r072-2","entity":"e072","revision":2,"effective":10,"approved":true,"deleted":false,"quota":94,"owner":"north"}
+    {"record":"r044-1","entity":"e044","revision":1,"effective":32,"approved":true,"deleted":false,"quota":111,"owner":"south"}
+    {"record":"r053-3","entity":"e053","revision":3,"effective":31,"approved":false,"deleted":false,"quota":44,"owner":"east"}
+    {"record":"r016-4","entity":"e016","revision":4,"effective":33,"approved":false,"deleted":true,"quota":26,"owner":"north"}
+    {"record":"r004-2","entity":"e004","revision":2,"effective":1,"approved":true,"deleted":false,"quota":105,"owner":"east"}
+    {"record":"r025-4","entity":"e025","revision":4,"effective":29,"approved":false,"deleted":false,"quota":32,"owner":"south"}
+    {"record":"r079-1","entity":"e079","revision":1,"effective":29,"approved":true,"deleted":false,"quota":23,"owner":"east"}
+    {"record":"r076-1","entity":"e076","revision":1,"effective":2,"approved":true,"deleted":false,"quota":101,"owner":"north"}
+    {"record":"r079-2","entity":"e079","revision":2,"effective":22,"approved":true,"deleted":false,"quota":18,"owner":"east"}
+    {"record":"r065-4","entity":"e065","revision":4,"effective":34,"approved":true,"deleted":false,"quota":99,"owner":"east"}
+    {"record":"r053-4","entity":"e053","revision":4,"effective":9,"approved":true,"deleted":false,"quota":63,"owner":"south"}
+    {"record":"r014-4","entity":"e014","revision":4,"effective":7,"approved":true,"deleted":true,"quota":94,"owner":"north"}
+    {"record":"r052-2","entity":"e052","revision":2,"effective":29,"approved":true,"deleted":true,"quota":97,"owner":"east"}
+    {"record":"r031-3","entity":"e031","revision":3,"effective":11,"approved":true,"deleted":true,"quota":142,"owner":"north"}
+    {"record":"r066-1","entity":"e066","revision":1,"effective":21,"approved":true,"deleted":false,"quota":75,"owner":"north"}
+    {"record":"r055-4","entity":"e055","revision":4,"effective":14,"approved":true,"deleted":false,"quota":83,"owner":"east"}
+    {"record":"r046-1","entity":"e046","revision":1,"effective":29,"approved":true,"deleted":false,"quota":46,"owner":"east"}
+    {"record":"r073-2","entity":"e073","revision":2,"effective":35,"approved":false,"deleted":true,"quota":47,"owner":"east"}
+    {"record":"r009-3","entity":"e009","revision":3,"effective":17,"approved":false,"deleted":true,"quota":114,"owner":"east"}
+    {"record":"r000-4","entity":"e000","revision":4,"effective":18,"approved":true,"deleted":true,"quota":137,"owner":"south"}
+    {"record":"r059-2","entity":"e059","revision":2,"effective":22,"approved":true,"deleted":false,"quota":85,"owner":"north"}
+    {"record":"r014-1","entity":"e014","revision":1,"effective":26,"approved":true,"deleted":false,"quota":103,"owner":"north"}
+    {"record":"r043-2","entity":"e043","revision":2,"effective":24,"approved":false,"deleted":false,"quota":136,"owner":"north"}
+    {"record":"r065-3","entity":"e065","revision":3,"effective":17,"approved":true,"deleted":false,"quota":125,"owner":"east"}
+    {"record":"r013-3","entity":"e013","revision":3,"effective":4,"approved":true,"deleted":false,"quota":147,"owner":"south"}
+    {"record":"r011-3","entity":"e011","revision":3,"effective":9,"approved":true,"deleted":false,"quota":79,"owner":"south"}
+    {"record":"r037-1","entity":"e037","revision":1,"effective":25,"approved":true,"deleted":false,"quota":23,"owner":"east"}
+    {"record":"r063-4","entity":"e063","revision":4,"effective":31,"approved":true,"deleted":true,"quota":118,"owner":"north"}
+    {"record":"r026-3","entity":"e026","revision":3,"effective":30,"approved":true,"deleted":false,"quota":49,"owner":"east"}
+    {"record":"r068-1","entity":"e068","revision":1,"effective":13,"approved":true,"deleted":false,"quota":149,"owner":"north"}
+    {"record":"r022-2","entity":"e022","revision":2,"effective":5,"approved":true,"deleted":true,"quota":126,"owner":"north"}
+    {"record":"r053-2","entity":"e053","revision":2,"effective":34,"approved":false,"deleted":false,"quota":84,"owner":"north"}
+    {"record":"r067-2","entity":"e067","revision":2,"effective":35,"approved":true,"deleted":true,"quota":109,"owner":"south"}
+    {"record":"r066-3","entity":"e066","revision":3,"effective":34,"approved":true,"deleted":false,"quota":88,"owner":"south"}
+    {"record":"r004-3","entity":"e004","revision":3,"effective":16,"approved":true,"deleted":false,"quota":127,"owner":"east"}
+    {"record":"r020-3","entity":"e020","revision":3,"effective":1,"approved":true,"deleted":false,"quota":37,"owner":"south"}
+    {"record":"r007-3","entity":"e007","revision":3,"effective":27,"approved":true,"deleted":false,"quota":20,"owner":"south"}
+    {"record":"r000-2","entity":"e000","revision":2,"effective":2,"approved":true,"deleted":false,"quota":14,"owner":"south"}
+    {"record":"r018-4","entity":"e018","revision":4,"effective":10,"approved":true,"deleted":false,"quota":114,"owner":"east"}
+    {"record":"r029-4","entity":"e029","revision":4,"effective":8,"approved":false,"deleted":false,"quota":50,"owner":"east"}
+    {"record":"r025-1","entity":"e025","revision":1,"effective":10,"approved":true,"deleted":false,"quota":58,"owner":"north"}
+    {"record":"r009-1","entity":"e009","revision":1,"effective":20,"approved":true,"deleted":false,"quota":149,"owner":"north"}
+    {"record":"r020-4","entity":"e020","revision":4,"effective":11,"approved":true,"deleted":false,"quota":110,"owner":"south"}
+    {"record":"r042-1","entity":"e042","revision":1,"effective":20,"approved":true,"deleted":false,"quota":125,"owner":"south"}
+    {"record":"r062-3","entity":"e062","revision":3,"effective":33,"approved":false,"deleted":false,"quota":30,"owner":"north"}
+    {"record":"r059-3","entity":"e059","revision":3,"effective":15,"approved":false,"deleted":false,"quota":79,"owner":"east"}
+    {"record":"r003-3","entity":"e003","revision":3,"effective":23,"approved":false,"deleted":false,"quota":123,"owner":"south"}
+    {"record":"r054-3","entity":"e054","revision":3,"effective":15,"approved":true,"deleted":true,"quota":114,"owner":"north"}
+    {"record":"r039-4","entity":"e039","revision":4,"effective":35,"approved":false,"deleted":false,"quota":148,"owner":"north"}
+    {"record":"r037-4","entity":"e037","revision":4,"effective":21,"approved":true,"deleted":false,"quota":22,"owner":"north"}
+    {"record":"r033-3","entity":"e033","revision":3,"effective":15,"approved":false,"deleted":false,"quota":38,"owner":"east"}
+    {"record":"r058-4","entity":"e058","revision":4,"effective":28,"approved":true,"deleted":false,"quota":120,"owner":"south"}
+    {"record":"r067-3","entity":"e067","revision":3,"effective":26,"approved":true,"deleted":false,"quota":92,"owner":"east"}
+    {"record":"r025-3","entity":"e025","revision":3,"effective":31,"approved":false,"deleted":true,"quota":117,"owner":"south"}
+    {"record":"r057-1","entity":"e057","revision":1,"effective":17,"approved":true,"deleted":false,"quota":38,"owner":"east"}
+    {"record":"r043-4","entity":"e043","revision":4,"effective":20,"approved":true,"deleted":false,"quota":148,"owner":"south"}
+    {"record":"r008-1","entity":"e008","revision":1,"effective":25,"approved":true,"deleted":false,"quota":45,"owner":"south"}
+    {"record":"r076-2","entity":"e076","revision":2,"effective":17,"approved":true,"deleted":false,"quota":99,"owner":"east"}
+    {"record":"r033-1","entity":"e033","revision":1,"effective":4,"approved":true,"deleted":false,"quota":32,"owner":"north"}
+    {"record":"r001-1","entity":"e001","revision":1,"effective":20,"approved":true,"deleted":false,"quota":114,"owner":"north"}
+    {"record":"r068-3","entity":"e068","revision":3,"effective":25,"approved":true,"deleted":false,"quota":80,"owner":"north"}
+    {"record":"r047-1","entity":"e047","revision":1,"effective":29,"approved":true,"deleted":false,"quota":84,"owner":"south"}
+    {"record":"r044-2","entity":"e044","revision":2,"effective":13,"approved":false,"deleted":false,"quota":120,"owner":"north"}
+    {"record":"r063-3","entity":"e063","revision":3,"effective":15,"approved":true,"deleted":false,"quota":96,"owner":"north"}
+    {"record":"r069-1","entity":"e069","revision":1,"effective":31,"approved":true,"deleted":false,"quota":144,"owner":"north"}
+    {"record":"r076-4","entity":"e076","revision":4,"effective":33,"approved":false,"deleted":false,"quota":47,"owner":"east"}
+    {"record":"r045-3","entity":"e045","revision":3,"effective":29,"approved":true,"deleted":false,"quota":108,"owner":"north"}
+    {"record":"r055-3","entity":"e055","revision":3,"effective":30,"approved":true,"deleted":false,"quota":132,"owner":"south"}
+    {"record":"r047-2","entity":"e047","revision":2,"effective":3,"approved":false,"deleted":false,"quota":15,"owner":"north"}
+    {"record":"r034-3","entity":"e034","revision":3,"effective":23,"approved":true,"deleted":false,"quota":117,"owner":"north"}
+    {"record":"r075-1","entity":"e075","revision":1,"effective":11,"approved":true,"deleted":false,"quota":37,"owner":"east"}
+    {"record":"r030-1","entity":"e030","revision":1,"effective":29,"approved":true,"deleted":false,"quota":68,"owner":"south"}
+    {"record":"r075-4","entity":"e075","revision":4,"effective":19,"approved":true,"deleted":false,"quota":94,"owner":"south"}
+    {"record":"r045-2","entity":"e045","revision":2,"effective":4,"approved":true,"deleted":false,"quota":34,"owner":"north"}
+    {"record":"r049-4","entity":"e049","revision":4,"effective":35,"approved":true,"deleted":false,"quota":49,"owner":"north"}
+    {"record":"r077-2","entity":"e077","revision":2,"effective":13,"approved":false,"deleted":false,"quota":107,"owner":"north"}
+    {"record":"r034-1","entity":"e034","revision":1,"effective":20,"approved":true,"deleted":false,"quota":50,"owner":"north"}
+    {"record":"r016-1","entity":"e016","revision":1,"effective":32,"approved":true,"deleted":false,"quota":60,"owner":"south"}
+    {"record":"r039-3","entity":"e039","revision":3,"effective":27,"approved":true,"deleted":false,"quota":146,"owner":"east"}
+    {"record":"r069-4","entity":"e069","revision":4,"effective":15,"approved":true,"deleted":false,"quota":119,"owner":"east"}
+    {"record":"r035-3","entity":"e035","revision":3,"effective":9,"approved":true,"deleted":false,"quota":141,"owner":"north"}
+    {"record":"r013-1","entity":"e013","revision":1,"effective":34,"approved":true,"deleted":false,"quota":103,"owner":"north"}
+    {"record":"r042-3","entity":"e042","revision":3,"effective":17,"approved":true,"deleted":false,"quota":66,"owner":"south"}
+    {"record":"r006-2","entity":"e006","revision":2,"effective":26,"approved":true,"deleted":false,"quota":57,"owner":"east"}
+    {"record":"r009-4","entity":"e009","revision":4,"effective":29,"approved":false,"deleted":true,"quota":93,"owner":"north"}
+    {"record":"r063-1","entity":"e063","revision":1,"effective":14,"approved":true,"deleted":false,"quota":23,"owner":"east"}
+    {"record":"r031-4","entity":"e031","revision":4,"effective":11,"approved":false,"deleted":false,"quota":103,"owner":"east"}
+    {"record":"r060-4","entity":"e060","revision":4,"effective":25,"approved":true,"deleted":false,"quota":37,"owner":"south"}
+    {"record":"r040-2","entity":"e040","revision":2,"effective":19,"approved":true,"deleted":false,"quota":91,"owner":"south"}
+    {"record":"r033-4","entity":"e033","revision":4,"effective":32,"approved":true,"deleted":false,"quota":63,"owner":"north"}
+    {"record":"r040-3","entity":"e040","revision":3,"effective":5,"approved":false,"deleted":false,"quota":79,"owner":"north"}
+    {"record":"r024-3","entity":"e024","revision":3,"effective":20,"approved":true,"deleted":false,"quota":150,"owner":"south"}
+    {"record":"r052-4","entity":"e052","revision":4,"effective":6,"approved":true,"deleted":false,"quota":65,"owner":"north"}
+    {"record":"r056-1","entity":"e056","revision":1,"effective":31,"approved":true,"deleted":false,"quota":84,"owner":"south"}
+    {"record":"r061-1","entity":"e061","revision":1,"effective":32,"approved":true,"deleted":false,"quota":99,"owner":"east"}
+    {"record":"r055-1","entity":"e055","revision":1,"effective":16,"approved":true,"deleted":false,"quota":30,"owner":"south"}
+    Requested routes: ["route001", "route012", "route014", "route022", "route033", "route051", "route075"]
+    Return only the requested JSON, with no extra keys or prose. Null is allowed only where explicitly requested. All ID lists must be sorted lexicographically.
+    Explicit JSON output contract (types only): {"routes": {"route001": {"record": "string", "state": "string", "quota": "number"}, "route012": {"record": "string", "state": "string", "quota": "number"}, "route014": {"record": "string", "state": "string", "quota": "null or the value type specified in task"}, "route022": {"record": "string", "state": "string", "quota": "null or the value type specified in task"}, "route033": {"record": "string", "state": "string", "quota": "number"}, "route051": {"record": "string", "state": "string", "quota": "number"}, "route075": {"record": "string", "state": "string", "quota": "number"}}, "owner_totals": {"east": "number", "north": "number", "south": "number"}, "grand_total": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      routes:
+        route001:
+          record: r001-1
+          state: active
+          quota: 114
+        route012:
+          record: r012-2
+          state: active
+          quota: 13
+        route014:
+          record: r014-4
+          state: deleted
+          quota: null
+        route022:
+          record: r022-4
+          state: deleted
+          quota: null
+        route033:
+          record: r033-2
+          state: active
+          quota: 81
+        route051:
+          record: r051-1
+          state: active
+          quota: 65
+        route075:
+          record: r075-4
+          state: active
+          quota: 94
+      owner_totals:
+        east: 13
+        north: 114
+        south: 240
+      grand_total: 367
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original ceiling-v5; LiveBench: https://github.com/LiveBench/LiveBench ; NoLiMa: https://github.com/adobe-research/NoLiMa
+    (objective synthesis and indirect retrieval design only)'
+  description: Compositional challenge; deterministic oracle in hard_cases.py. Difficulty awaits fresh model calibration.
+  max_tokens: 16384
+  metadata:
+    family: R8A-H5-NR-revision
+    cohort: rigorous-v9
+    original_anchor_id: H5-NR-revision-16
+  rubric:
+  - {id: 'json:routes.route001.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route001.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route001.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route012.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route012.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route012.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route014.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route014.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route014.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route022.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route022.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route022.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route033.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route033.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route033.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route051.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route051.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route051.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route075.record', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route075.state', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:routes.route075.quota', weight: 0.047619047619047616, group: routes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:owner_totals.east', weight: 0.3333333333333333, group: owner_totals, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:owner_totals.north', weight: 0.3333333333333333, group: owner_totals, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:owner_totals.south', weight: 0.3333333333333333, group: owner_totals, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:grand_total', weight: 1.0, group: grand_total, mandatory: true, critical: false, dimension: content}

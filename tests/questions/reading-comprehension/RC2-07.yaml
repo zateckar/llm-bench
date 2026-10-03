@@ -1,0 +1,36 @@
+- id: RC2-07
+  category: Reading Comprehension
+  prompt: |-
+    An invoice buys 3 items at 1999 cents each and 2 at 1250 cents each. Apply a
+    15% merchandise-only coupon, rounding the DISCOUNT to nearest cent, half up.
+    Shipping is free only when merchandise AFTER the rounded discount is at least
+    7500 cents; otherwise shipping is 650 cents. Tax is 8.25% of discounted merchandise
+    plus shipping, rounded to nearest cent, half up. Round only the discount and tax.
+    Return JSON of integer cents: subtotal, discount, shipping, tax, total.
+
+    Explicit JSON output contract (types only): {"subtotal": "number", "discount": "number", "shipping": "number", "tax": "number", "total": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      subtotal: 8497
+      discount: 1275
+      shipping: 650
+      tax: 649
+      total: 8521
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Invoice ordering, threshold basis, and explicit cent rounding
+  max_tokens: 8192
+  metadata:
+    family: R8A-RC2-07
+    cohort: rigorous-v9
+    original_anchor_id: RC2-07
+  rubric:
+  - {id: 'json:subtotal', weight: 1.0, group: subtotal, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:discount', weight: 1.0, group: discount, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:shipping', weight: 1.0, group: shipping, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:tax', weight: 1.0, group: tax, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:total', weight: 1.0, group: total, mandatory: true, critical: false, dimension: content}

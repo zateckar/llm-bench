@@ -39,12 +39,6 @@ ALLOWED_IMPORTS = [
     "abc", "dataclasses", "enum", "textwrap", "operator", "statistics",
     "decimal", "fractions", "uuid", "base64", "struct", "numbers",
     "unicodedata", "contextlib", "warnings",
-    # Data science
-    "numpy", "pandas", "scipy", "sklearn", "pytz", "dateutil", "pyarrow",
-    # Cloud / IoT
-    "boto3", "botocore",
-    # Common utilities
-    "requests", "httpx",
 ]
 
 # Modules that must never be importable, even if something (a helper, a future
@@ -68,6 +62,13 @@ PER_TEST_TIMEOUT = 6
 # an extra file that could be imported accidentally.
 _CHILD_SOURCE = r'''
 import builtins, json, sys
+
+def _input_snapshot(value):
+    if isinstance(value, dict):
+        return ('dict', tuple((k, _input_snapshot(v)) for k, v in value.items()))
+    if isinstance(value, (list, tuple)):
+        return (type(value).__name__, tuple(_input_snapshot(v) for v in value))
+    return (type(value).__name__, repr(value))
 
 def _read_job():
     return json.loads(sys.stdin.read())
@@ -215,7 +216,12 @@ def main():
             results.append({"ok": False, "error": "%r is not callable" % fn_name})
             continue
         try:
+            before = _input_snapshot((args, kwargs)) if t.get("preserve_inputs") else None
             out = _run_with_limit(func, args, kwargs, per_test_timeout)
+            if before is not None and _input_snapshot((args, kwargs)) != before:
+                results.append({"ok": False, "error": "function mutated its inputs",
+                                "reason_code": "input_mutation"})
+                continue
             results.append({"ok": True, "value": _encode(out), "repr": repr(out)[:400]})
         except _Timeout as e:
             results.append({"ok": False, "error": "timeout: %s" % e})

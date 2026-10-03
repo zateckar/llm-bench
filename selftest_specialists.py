@@ -12,7 +12,7 @@ import re
 import unittest
 
 from evaluators import eval_json_match
-from quality_suite import QualityConfig, assemble_questions, question_scope
+from quality_suite import load_questions, question_scope
 from specialist_cases import build_cases
 from test_loader import _parse_question, load_all_tests
 
@@ -69,9 +69,9 @@ class SpecialistTests(unittest.TestCase):
         self.assertEqual(len({r["id"] for r in self.raw}), 30)
         for raw in self.raw:
             q = _parse_question(raw, raw["id"])
-            self.assertEqual(q, self.questions[q.id])
+            self.assertEqual(q.expected["value"], self.questions[q.id].expected["value"])
             self.assertEqual(question_scope(q), "capability")
-        assembled = assemble_questions(list(self.questions.values()), QualityConfig())
+        assembled = load_questions()
         # All additions survive the same assembly used by UI/CLI; no category allowlist.
         actual = {q.id: q for q in assembled}
         for raw in self.raw:

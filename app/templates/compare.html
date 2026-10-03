@@ -112,26 +112,12 @@
     </div>
     {% endif %}
 
-    <section class="card p-5 space-y-3">
-        <h2 class="text-lg font-semibold text-white">Capability, cost, and latency</h2>
-        <table class="w-full text-sm"><thead><tr><th>Run</th><th>Balanced capability</th><th>Stretch-v6</th><th>Hardening-v7</th><th>95% interval</th><th>Quality cost estimate</th><th>p50 task latency</th></tr></thead><tbody>
-        {% for run in selected_runs %}{% if run.quality %}{% set s = run.quality.summary %}
-        <tr><td>#{{ run.id }} {{ run.model_name }}</td><td>{{ '%.1f%%'|format(s.category_balanced*100) if s.category_balanced is not none else 'n/a' }}</td>
-            <td>{% if s.get('stretch', {}).get('count', 0) %}{{ '%.1f%%'|format(s.stretch.category_balanced*100) }} ({{ s.stretch.passes }}/{{ s.stretch.count }}){% else %}n/a{% endif %}</td>
-            <td>{% if s.get('hardening', {}).get('count', 0) %}{{ '%.1f%%'|format(s.hardening.category_balanced*100) }} ({{ s.hardening.passes }}/{{ s.hardening.count }}){% else %}n/a{% endif %}</td>
-            <td>{% if s.category_balanced_ci95 %}{{ '%.1f'|format(s.category_balanced_ci95[0]*100) }}–{{ '%.1f'|format(s.category_balanced_ci95[1]*100) }}%{% else %}n/a{% endif %}</td>
-            <td>{{ '$%.6f'|format(s.estimated_cost_usd) if s.estimated_cost_usd is not none else 'Not configured' }}</td>
-            <td>{{ '%.0f ms'|format(s.latency_p50_ms) if s.latency_p50_ms is not none else 'n/a' }}</td></tr>
-        {% endif %}{% endfor %}</tbody></table>
-        {% for row in quality_comparisons %}{% set c = row.comparison %}
-        <p class="text-sm text-slate-300">#{{ row.right }} minus #{{ row.left }}:
-            {% if c.compatible %}{{ '%+.1f'|format(c.balanced_difference*100) }} percentage points
-            {% if c.ci95 %}(95% paired interval {{ '%+.1f'|format(c.ci95[0]*100) }} to {{ '%+.1f'|format(c.ci95[1]*100) }}){% endif %};
-            {{ c.paired }} identical questions scored by both; {{ c.excluded_pairs }} pairs excluded; {{ c.left_unmatched }}/{{ c.right_unmatched }} unmatched.
-            {% else %}{{ c.reason }}{% endif %}
-        </p>{% endfor %}
-        <p class="text-xs text-slate-500">Intervals resample question families within categories; variants are clustered together. They do not measure run-to-run variability. Cost estimates use supplied rates and fresh quality calls only. Older runs have no quality diagnostics.</p>
-    </section>
+    <section class="card p-5 space-y-3"><h2 class="text-lg font-semibold">Strict task success</h2>
+<table class="w-full text-sm"><thead><tr><th>Run</th><th>Balanced strict success</th><th>95% interval</th><th>Partial achievement</th><th>Evaluated</th></tr></thead><tbody>
+{% for run in selected_runs %}{% if run.quality.get('schema_version') == 3 %}{% set s = run.quality.summary %}<tr><td>#{{ run.id }} {{ run.model_name }}</td><td>{{ '%.1f%%'|format(s.category_balanced*100) if s.category_balanced is not none else 'n/a' }}</td><td>{% if s.category_balanced_ci95 %}{{ '%.1f'|format(s.category_balanced_ci95[0]*100) }}–{{ '%.1f'|format(s.category_balanced_ci95[1]*100) }}%{% else %}n/a{% endif %}</td><td>{{ '%.1f%%'|format(s.category_balanced_criterion_achievement*100) if s.category_balanced_criterion_achievement is not none else 'n/a' }}</td><td>{{ s.scored }}/{{ s.total }}</td></tr>{% endif %}{% endfor %}
+</tbody></table>
+{% for row in quality_comparisons %}{% set c = row.comparison %}<p class="text-sm text-slate-300">#{{ row.right }} minus #{{ row.left }}: {% if c.compatible %}{{ '%+.1f'|format(c.balanced_difference*100) }} percentage points{% if c.ci95 %} (95% paired interval {{ '%+.1f'|format(c.ci95[0]*100) }} to {{ '%+.1f'|format(c.ci95[1]*100) }}){% endif %} · {{ c.paired }} identical tasks, {{ c.excluded_pairs }} excluded pairs.{% else %}{{ c.reason }}{% endif %}</p>{% endfor %}
+<p class="text-xs text-slate-500">Intervals resample families within categories; they do not measure run-to-run variability. Earlier suite scores are not comparable to the current strict protocol.</p></section>
 
     <!-- Radar Chart Overlay -->
     <div class="card p-5">
@@ -198,19 +184,9 @@
                     {% for run in selected_runs %}
                     <td class="text-center">
                         <span class="text-sm font-bold {% if run.avg_score >= 0.7 %}text-emerald-400{% elif run.avg_score >= 0.5 %}text-yellow-400{% else %}text-red-400{% endif %}">
-                            {{ "%.1f"|format(run.avg_score * 100) }}%
+                            {{ "%.1f"|format(run.avg_score * 100) ~ "%" if run.scored_questions else "n/a" }}
                         </span>
                         <span class="text-xs text-slate-500 ml-1">({{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }})</span>
-                    </td>
-                    {% endfor %}
-                </tr>
-                <!-- Difficulty-weighted row: a model that only clears the easy
-                     questions scores visibly lower here than on the raw average. -->
-                <tr>
-                    <td class="text-slate-400">Weighted</td>
-                    {% for run in selected_runs %}
-                    <td class="text-center text-sm text-slate-300">
-                        {% if run.weighted_score %}{{ "%.1f"|format(run.weighted_score * 100) }}%{% else %}-{% endif %}
                     </td>
                     {% endfor %}
                 </tr>

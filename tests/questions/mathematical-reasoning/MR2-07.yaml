@@ -1,0 +1,31 @@
+- id: MR2-07
+  category: Mathematical Reasoning
+  prompt: |-
+    Roll four independent fair six-sided dice. Event E means their sum is at
+    least 17 AND exactly three distinct face values appear. Let F mean at least
+    one die shows 6. Compute P(E) and P(F|E).
+    Return JSON {"event_probability": [numerator,denominator],
+    "six_given_event": [numerator,denominator]}, with fractions in lowest terms.
+
+    Explicit JSON output contract (types only): {"event_probability": {"array_items": "number"}, "six_given_event": {"array_items": "number"}}
+  evaluator: json_match
+  expected:
+    value:
+      event_probability: [4, 27]
+      six_given_event: [15, 16]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Conditional dice probability with multiplicities
+  max_tokens: 8192
+  metadata:
+    family: R8A-MR2-07
+    cohort: rigorous-v9
+    original_anchor_id: MR2-07
+  rubric:
+  - {id: 'json:event_probability[0]', weight: 0.5, group: event_probability, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:event_probability[1]', weight: 0.5, group: event_probability, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:six_given_event[0]', weight: 0.5, group: six_given_event, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:six_given_event[1]', weight: 0.5, group: six_given_event, mandatory: true, critical: false, dimension: content}

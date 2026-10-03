@@ -1,0 +1,47 @@
+- id: TU2-04
+  category: Tool Using
+  prompt: |-
+    All data has ALREADY been fetched. Rows (id,net,completed_count) are
+    (u3,80,2),(u1,100,1),(u2,100,2),(u4,60,3). Include only count>=2;
+    rank net descending then ID ascending, and export the first two.
+    Available tools: query_rows(filter), export_rows(ids,columns,destination,overwrite).
+    Export columns exactly ["id","net"] to audit.csv. Existing files must not be
+    overwritten. The export preserves the order of the supplied IDs.
+
+    This is an offline planning exercise, not a request to call real tools.
+    Return ONLY a JSON array of the required REMAINING calls in execution order,
+    each {"tool": "name", "args": {exact parameter names and values}}. Do not
+    repeat completed calls, add explanations, or include unnecessary calls.
+
+    Explicit JSON output contract (types only): {"array_items": {"tool": "string", "args": {"ids": {"array_items": "string"}, "columns": {"array_items": "string"}, "destination": "string", "overwrite": "boolean"}}}
+  evaluator: json_match
+  expected:
+    value:
+    - tool: export_rows
+      args:
+        ids: [u2, u3]
+        columns: [id, net]
+        destination: audit.csv
+        overwrite: false
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: hard
+  source: challenge-v2
+  description: Filter, rank, and export exact IDs with stable tie handling
+  metadata:
+    family: R8A-TU2-04
+    cohort: rigorous-v9
+    original_anchor_id: TU2-04
+  rubric:
+  - {id: 'json:[0].tool', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[0].args.ids[0]', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[0].args.ids[1]', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[0].args.columns[0]', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:[0].args.columns[1]', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:[0].args.destination', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:[0].args.overwrite', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false,
+    dimension: content}

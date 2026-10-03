@@ -2,13 +2,12 @@
 
 import json
 import logging
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 
 from app.auth import get_current_user, require_admin
-from app.database import execute, execute_transaction, fetch_all, fetch_one
+from app.database import execute_transaction, fetch_all, fetch_one
 from app.templates_config import templates
 
 logger = logging.getLogger(__name__)
@@ -25,98 +24,34 @@ async def run_report_download(request: Request, run_id: int):
     run = await load_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    return HTMLResponse(render_report([run]), headers={
-        "Content-Disposition": f'attachment; filename="run-{run_id}.html"',
-        "Cache-Control": "no-store",
-    })
+    return HTMLResponse(
+        render_report([run]),
+        headers={
+            "Content-Disposition": f'attachment; filename="run-{run_id}.html"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get("/runs/{run_id}/quality.json")
 async def quality_download(request: Request, run_id: int):
     if not await get_current_user(request):
-        return RedirectResponse(url="/login",status_code=302)
-    row = await fetch_one("SELECT quality_json FROM test_runs WHERE id=?",(run_id,))
-    if not row or not row.get('quality_json'):
-        raise HTTPException(status_code=404,detail='No quality report for this run')
-    return JSONResponse(json.loads(row['quality_json']),headers={
-        'Content-Disposition':f'attachment; filename="run-{run_id}.quality.json"'})
-
-
-def _is_evaluator_error(detail: str) -> bool:
-    """Check if a result detail indicates an evaluator error."""
-    return detail.startswith("Evaluator error:") or detail.startswith("Unknown evaluator:")
-
-
-# Keys the detail page assumes exist on the perf report. Runs benchmarked
-# before a given field was added lack it entirely; filling the defaults here
-# keeps the template from special-casing every perf_json schema era.
-_EMPTY_LATENCY_STATS: dict = {
-    "count": 0,
-    "mean_ms": None,
-    "stdev_ms": None,
-    "min_ms": None,
-    "p50_ms": None,
-    "p90_ms": None,
-    "p95_ms": None,
-    "p99_ms": None,
-    "max_ms": None,
-}
-
-_PERF_DEFAULTS: dict = {
-    "slo_capacity": None,
-    "capacity_users": None,
-    "cache_probe": None,
-    "slo_ttft_p95_ms": 2000.0,
-    "slo_stream_tps_p50": 15.0,
-    "slo_error_rate": 0.01,
-    "requests_per_user_hour": 60.0,
-}
-
-_CONCURRENCY_POINT_DEFAULTS: dict = {
-    "stream_tps": lambda: dict(_EMPTY_LATENCY_STATS),
-    "task_stats": dict,
-}
+        return RedirectResponse(url="/login", status_code=302)
+    row = await fetch_one("SELECT quality_json FROM test_runs WHERE id=?", (run_id,))
+    if not row or not row.get("quality_json"):
+        raise HTTPException(status_code=404, detail="No quality report for this run")
+    return JSONResponse(
+        json.loads(row["quality_json"]),
+        headers={"Content-Disposition": f'attachment; filename="run-{run_id}.quality.json"'},
+    )
 
 
 def _parse_perf(raw: str | None) -> dict | None:
-    """Decode the stored performance report, tolerating a partial/failed write
-    and upgrading older reports to the current schema."""
-    if not raw:
-        return None
     try:
-        data = json.loads(raw)
+        data = json.loads(raw or "null")
     except (TypeError, ValueError):
-        logger.warning("Could not decode perf_json for a run; ignoring it")
         return None
-    if not isinstance(data, dict):
-        return None
-    for key, fallback in _PERF_DEFAULTS.items():
-        data.setdefault(key, fallback)
-    points = data.get("concurrency")
-    if isinstance(points, list):
-        for point in points:
-            if not isinstance(point, dict):
-                continue
-            for key, factory in _CONCURRENCY_POINT_DEFAULTS.items():
-                point.setdefault(key, factory())
-    return data
-
-
-def _context_points(perf: dict | None) -> list[dict]:
-    """Return the context-scalability entries stored alongside the perf report.
-
-    Sorted by (size, level): a context x concurrency grid stores several
-    points per size and the table groups them visually by size.
-    """
-    if not perf:
-        return []
-    points = perf.get("context_sweep")
-    if isinstance(points, list):
-        rows = [p for p in points if isinstance(p, dict)]
-        return sorted(
-            rows, key=lambda p: (p.get("context_tokens") or 0, p.get("concurrency") or 0)
-        )
-    return []
+    return data if isinstance(data, dict) and data.get("schema_version") == 3 else None
 
 
 @router.get("/runs")
@@ -139,7 +74,8 @@ async def runs_list(request: Request):
     )
 
     return templates.TemplateResponse(
-        request, "runs_list.html",
+        request,
+        "runs_list.html",
         {"runs": runs},
     )
 
@@ -166,8 +102,6 @@ async def run_detail(request: Request, run_id: int):
                   SUM(COALESCE(quality_scored, request_ok)) as scored,
                   SUM(passed) as passed,
                   AVG(CASE WHEN COALESCE(quality_scored, request_ok) = 1 THEN score END) as avg_score,
-                  SUM(CASE WHEN COALESCE(quality_scored, request_ok) = 1 THEN score * weight END) /
-                      NULLIF(SUM(CASE WHEN COALESCE(quality_scored, request_ok) = 1 THEN weight END), 0) as weighted_score,
                   AVG(latency_ms) as avg_latency_ms,
                   MAX(latency_ms) as max_latency_ms
            FROM test_results WHERE run_id = ?
@@ -211,26 +145,24 @@ async def run_detail(request: Request, run_id: int):
         (run_id,),
     )
 
-    difficulty_rows = await fetch_all(
-        """SELECT difficulty,
-                  COUNT(*) as total,
-                  SUM(COALESCE(quality_scored, request_ok)) as scored,
-                  SUM(passed) as passed,
-                  AVG(CASE WHEN COALESCE(quality_scored, request_ok) = 1 THEN score END) as avg_score
-           FROM test_results WHERE run_id = ?
-           GROUP BY difficulty""",
-        (run_id,),
-    )
-    tier_order = {"easy": 0, "medium": 1, "hard": 2, "expert": 3}
-    difficulty_rows.sort(key=lambda r: tier_order.get(r["difficulty"], 9))
-
     perf_data = _parse_perf(run.get("perf_json"))
     try:
         quality_data = json.loads(run.get("quality_json") or "null")
-    except (ValueError,TypeError):
+    except (ValueError, TypeError):
         quality_data = None
+    if quality_data and quality_data.get("schema_version") == 3:
+        for category in categories:
+            summary = quality_data["summary"]["categories"].get(category["category"])
+            if summary:
+                category["avg_score"] = summary["score"]
+    from app.services.html_reports import performance_view
+
+    performance = performance_view(
+        [{"label": f"#{run_id} · {run['model_name']}", "perf": perf_data or {}}]
+    )
     return templates.TemplateResponse(
-        request, "run_detail.html",
+        request,
+        "run_detail.html",
         {
             "run": run,
             "quality": quality_data,
@@ -238,9 +170,8 @@ async def run_detail(request: Request, run_id: int):
             "results_by_category": results_by_category,
             "evaluator_errors": evaluator_errors,
             "transport_errors": transport_errors,
-            "difficulty_rows": difficulty_rows,
             "perf": perf_data,
-            "context_points": _context_points(perf_data),
+            "performance": performance,
         },
     )
 
@@ -309,57 +240,22 @@ async def delete_run(request: Request, run_id: int):
     return RedirectResponse(url="/runs", status_code=302)
 
 
-@router.post("/runs/{run_id}/rerun-failed")
-async def rerun_failed(request: Request, run_id: int):
-    """Create a new run with only the failed questions from a previous run."""
+@router.post("/runs/{run_id}/rerun")
+async def rerun(request: Request, run_id: int):
+    """Queue the complete current suite with the model and run mode."""
     try:
         user = await require_admin(request)
     except HTTPException:
         return RedirectResponse(url="/login", status_code=302)
-
-    # Get the original run
-    original_run = await fetch_one(
-        """SELECT tr.*, m.name as model_name, m.model_id
-           FROM test_runs tr JOIN models m ON tr.model_id = m.id
-           WHERE tr.id = ?""",
-        (run_id,),
-    )
-    if not original_run:
+    original = await fetch_one("SELECT * FROM test_runs WHERE id = ?", (run_id,))
+    if not original:
         return RedirectResponse(url="/runs", status_code=302)
-
-    # Re-running an in-flight run would spawn a duplicate concurrent benchmark.
-    if original_run["status"] in ("running", "pending"):
-        logger.warning("Refused to rerun failed questions of run %d while its status is '%s'", run_id, original_run["status"])
+    if original["status"] in ("running", "pending"):
         return RedirectResponse(url=f"/runs/{run_id}?error=rerun-running", status_code=302)
+    from app.services import run_submission
 
-    # Re-run only the questions that failed for an infrastructure reason - an
-    # evaluator crash or a transport error - never questions the model got wrong.
-    error_results = await fetch_all(
-        """SELECT DISTINCT test_id FROM test_results
-           WHERE run_id = ?
-             AND (request_ok = 0
-                  OR detail LIKE 'Evaluator error:%'
-                  OR detail LIKE 'Unknown evaluator:%')""",
-        (run_id,),
+    prepared = await run_submission.validated_specs(
+        json.dumps([run_submission.spec_from_run(original)])
     )
-
-    if not error_results:
-        return RedirectResponse(url=f"/runs/{run_id}", status_code=302)
-
-    error_test_ids = [r["test_id"] for r in error_results]
-
-    # Create new run; its parameters are persisted with it so the queue
-    # dispatcher can start it whenever the single-run slot is free.
-    new_run_id = await execute(
-        """INSERT INTO test_runs
-               (model_id, status, created_by, quality_config_json, run_options_json, created_at)
-           VALUES (?, 'pending', ?, ?, ?, ?)""",
-        (original_run["model_id"], user["id"], original_run.get("quality_config_json"),
-         json.dumps({"test_ids": error_test_ids}), datetime.now(timezone.utc).isoformat()),
-    )
-
-    from app.services import run_queue
-
-    run_queue.enqueue_run(new_run_id)
-
-    return RedirectResponse(url=f"/admin/run/{new_run_id}/progress", status_code=302)
+    _, run_ids = await run_submission.submit_runs(None, user["id"], None, prepared)
+    return RedirectResponse(url=f"/admin/run/{run_ids[0]}/progress", status_code=302)

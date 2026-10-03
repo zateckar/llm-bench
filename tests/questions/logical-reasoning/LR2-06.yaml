@@ -1,0 +1,35 @@
+- id: LR2-06
+  category: Logical Reasoning
+  prompt: |-
+    Boolean variables A,B,C,D,E,F satisfy every constraint below:
+    A implies B; B implies C; not both C and D; D or E (inclusive);
+    E is true if and only if exactly one of A and F is true;
+    exactly three of the six variables are true.
+    Return JSON with count (satisfying assignments), always_true (variables true
+    in every satisfying assignment), and always_false (variables false in every
+    satisfying assignment). Sort both arrays alphabetically.
+
+    Explicit JSON output contract (types only): {"count": "number", "always_true": {"array_items": "string"}, "always_false": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      count: 2
+      always_true: [E, F]
+      always_false: [A, B]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Satisfiability versus entailment across all models
+  max_tokens: 8192
+  metadata:
+    family: R8A-LR2-06
+    cohort: rigorous-v9
+    original_anchor_id: LR2-06
+  rubric:
+  - {id: 'json:count', weight: 1.0, group: count, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:always_true[0]', weight: 0.5, group: always_true, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:always_true[1]', weight: 0.5, group: always_true, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:always_false[0]', weight: 0.5, group: always_false, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:always_false[1]', weight: 0.5, group: always_false, mandatory: true, critical: false, dimension: content}

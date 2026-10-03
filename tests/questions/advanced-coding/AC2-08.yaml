@@ -1,0 +1,106 @@
+- id: AC2-08
+  category: Advanced Coding
+  prompt: |
+    Implement glob_match(pattern, text) -> bool for full-string, case-sensitive
+        matching. Unescaped ? matches exactly one character; unescaped * matches any
+        sequence including empty. Backslash escapes the very next character, whatever
+        it is (so \q matches q); a trailing unmatched backslash makes the pattern
+        invalid and returns False. An escaped * or ? is literal. A backslash can itself
+        be escaped. Wildcards can match newlines. Inputs have length <=100; do not use
+        filesystem globbing. Empty pattern matches only empty text.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: glob_match
+    args: ['', '']
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: ['', a]
+    expected: false
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args:
+    - '*'
+    - |-
+      a
+      b
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args:
+    - a?b
+    - |-
+      a
+      b
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [a*b, ab]
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [a\*b, a*b]
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [a\*b, axxb]
+    expected: false
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: ['\?*', '?abc']
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [abc\, abc]
+    expected: false
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [\\, \]
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [\q, q]
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: ['a**?b', acb]
+    expected: true
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: [a*b, abx]
+    expected: false
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: ['?', '']
+    expected: false
+    relative: 0
+    tolerance: 0
+  - function: glob_match
+    args: ['*?*?', a]
+    expected: false
+    relative: 0
+    tolerance: 0
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Wildcard matching with escaped metacharacters and full-string semantics
+  max_tokens: 4096
+  metadata:
+    family: R8A-AC2-08
+    cohort: rigorous-v9
+    original_anchor_id: AC2-08

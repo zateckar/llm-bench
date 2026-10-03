@@ -1,0 +1,34 @@
+- id: MR2-09
+  category: Mathematical Reasoning
+  prompt: |-
+    Integers x,y,z each lie between 0 and 12 inclusive and obey
+    2*x+3*y+z=24 and x+y+z>=10.
+    Minimize 3*x^2+2*y^2+z^2-2*x*y-4*y*z.
+    Return JSON {"minimum": ..., "minimizers": [[x,y,z], ...]} containing EVERY
+    minimizing triple in lexicographic order.
+
+    Explicit JSON output contract (types only): {"minimum": "number", "minimizers": {"array_items": {"array_items": "number"}}}
+  evaluator: json_match
+  expected:
+    value:
+      minimum: -49
+      minimizers: [[0, 5, 9]]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Integer quadratic optimization with coupled constraints
+  max_tokens: 8192
+  metadata:
+    family: R8A-MR2-09
+    cohort: rigorous-v9
+    original_anchor_id: MR2-09
+  rubric:
+  - {id: 'json:minimum', weight: 1.0, group: minimum, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:minimizers[0][0]', weight: 0.3333333333333333, group: minimizers, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:minimizers[0][1]', weight: 0.3333333333333333, group: minimizers, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:minimizers[0][2]', weight: 0.3333333333333333, group: minimizers, mandatory: true, critical: false,
+    dimension: content}

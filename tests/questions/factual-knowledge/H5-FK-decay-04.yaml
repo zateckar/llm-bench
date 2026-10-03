@@ -1,0 +1,62 @@
+- id: H5-FK-decay-04
+  category: Factual Knowledge
+  prompt: |-
+    Reference-grounded scientific knowledge: a simplified discrete decay chain
+    A->B->C conserves nuclei; C is stable. In each step HALF the A present at START
+    becomes B, and ONE QUARTER of the B present at START becomes C. Newly created B
+    cannot decay again in the same step. Initial (A,B,C)=(640,0,0). These are expected
+    populations, so fractional counts are valid. Run five steps. A detector then records
+    each C nucleus with efficiency 2/3; it records
+    neither A nor B. Counts lost to inefficiency do not imply physical nuclei vanished.
+    An analyst substitutes sequential in-place updates allowing newborn B to decay in
+    the same step. Decide whether that matches the stipulated model. Do not assume
+    that an observed detector count identifies all three populations without the model.
+    Return {"A":fraction,"B":fraction,"C":fraction,"detected_C":fraction,
+    "conserved_total":integer,"in_place_update_valid":bool,
+    "one_count_alone_identifies_three_populations":bool}. Each fraction has exactly
+    "numerator" and "denominator", reduced with positive denominator, including integers.
+    Return only the requested JSON, with no extra keys or prose. Null is allowed only where explicitly requested. All ID lists must be sorted lexicographically.
+    Explicit JSON output contract (types only): {"A": {"numerator": "number", "denominator": "number"}, "B": {"numerator": "number", "denominator": "number"}, "C": {"numerator": "number", "denominator": "number"}, "detected_C": {"numerator": "number", "denominator": "number"}, "conserved_total": "number", "in_place_update_valid": "boolean", "one_count_alone_identifies_three_populations": "boolean"}
+  evaluator: json_match
+  expected:
+    value:
+      A:
+        numerator: 20
+        denominator: 1
+      B:
+        numerator: 1055
+        denominator: 4
+      C:
+        numerator: 1425
+        denominator: 4
+      detected_C:
+        numerator: 475
+        denominator: 2
+      conserved_total: 640
+      in_place_update_valid: false
+      one_count_alone_identifies_three_populations: false
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original ceiling-v5; BBEH: https://github.com/google-deepmind/bbeh (compositional reasoning design only)'
+  description: Compositional challenge; deterministic oracle in hard_cases.py. Difficulty awaits fresh model calibration.
+  max_tokens: 16384
+  metadata:
+    family: R8A-H5-FK-decay
+    cohort: rigorous-v9
+    original_anchor_id: H5-FK-decay-04
+  rubric:
+  - {id: 'json:A.numerator', weight: 0.5, group: A, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:A.denominator', weight: 0.5, group: A, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:B.numerator', weight: 0.5, group: B, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:B.denominator', weight: 0.5, group: B, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:C.numerator', weight: 0.5, group: C, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:C.denominator', weight: 0.5, group: C, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:detected_C.numerator', weight: 0.5, group: detected_C, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:detected_C.denominator', weight: 0.5, group: detected_C, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:conserved_total', weight: 1.0, group: conserved_total, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:in_place_update_valid', weight: 1.0, group: in_place_update_valid, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:one_count_alone_identifies_three_populations', weight: 1.0, group: one_count_alone_identifies_three_populations,
+    mandatory: true, critical: false, dimension: content}

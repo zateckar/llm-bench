@@ -1,0 +1,56 @@
+- id: SP1-LE-02
+  category: Legal
+  prompt: |-
+    Patent claim-chart/FTO exercise. Apply the following simplified literal-scope rules,
+    not unstated doctrines of equivalents. An active granted patent blocks an unlicensed
+    product in its territory iff every element of at least one claim is present.
+    An expired patent blocks nothing; pending claims do not establish a current block.
+    A product's own patent does not establish clearance against other patents.
+    Products: X={motor,sensor,controller}; Y={motor,controller}; Z={motor,sensor,optical}.
+    P1 active DE, claims {motor,sensor}; P2 active CZ, claims {motor,controller};
+    P3 expired DE, claims {motor}; P4 pending DE, claims {motor,controller};
+    P5 active DE, owned by X's maker, claims {motor,sensor,controller}.
+    X's maker licenses P1 for Germany only. Y and Z have no licenses. P5 is licensed
+    to neither Y nor Z. For each product list confirmed blocking IDs in DE and CZ.
+    Return {X:{DE:[],CZ:[]},Y:{DE:[],CZ:[]},Z:{DE:[],CZ:[]},
+    X_worldwide_clearance_established:bool,P4_current_block_established:bool}.
+    ID lists sorted. No facts about other jurisdictions or patents are supplied.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"X": {"DE": "array (element type and order specified in task)", "CZ": {"array_items": "string"}}, "Y": {"DE": "array (element type and order specified in task)", "CZ": {"array_items": "string"}}, "Z": {"DE": {"array_items": "string"}, "CZ": "array (element type and order specified in task)"}, "X_worldwide_clearance_established": "boolean", "P4_current_block_established": "boolean"}
+  evaluator: json_match
+  expected:
+    value:
+      X:
+        DE: []
+        CZ: [P2]
+      Y:
+        DE: []
+        CZ: [P2]
+      Z:
+        DE: [P1]
+        CZ: []
+      X_worldwide_clearance_established: false
+      P4_current_block_established: false
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'WIPO patent FAQ: https://www.wipo.int/en/web/patents/faq_patents ; simplified literal-scope exercise'
+  description: Element-by-element territorial chart; licensed P1 and owned P5 do not clear Czech P2 or unknown worldwide
+    rights.
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-LE-02
+    cohort: rigorous-v9
+    original_anchor_id: SP1-LE-02
+  rubric:
+  - {id: 'json:X.DE', weight: 0.5, group: X, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:X.CZ[0]', weight: 0.5, group: X, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:Y.DE', weight: 0.5, group: Y, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:Y.CZ[0]', weight: 0.5, group: Y, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:Z.DE[0]', weight: 0.5, group: Z, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:Z.CZ', weight: 0.5, group: Z, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:X_worldwide_clearance_established', weight: 1.0, group: X_worldwide_clearance_established, mandatory: true,
+    critical: false, dimension: content}
+  - {id: 'json:P4_current_block_established', weight: 1.0, group: P4_current_block_established, mandatory: true,
+    critical: false, dimension: content}

@@ -1,0 +1,70 @@
+- id: S6-eventsummary-01
+  category: Summarization
+  prompt: |-
+    Produce a compact structured reconciliation of the delivered event log. Process in listed
+    order. Globally deduplicate by event id before doing anything else: first delivery wins even
+    if a later payload differs. issue creates an invoice with its customer and gross amount.
+    pay adds cash; refund subtracts cash; credit reduces gross amount. void sets gross to zero
+    and closes the invoice, WITHOUT returning any cash. All later events for a void invoice are
+    ignored. Every non-issue references an already issued invoice; no invoice is issued twice.
+    For each customer, open counts nonvoid invoices, receivable sums gross-minus-cash on NONVOID
+    invoices (allow negatives), and cash sums net cash on ALL invoices including void ones.
+    Log: [{"id":"e0a","invoice":"I0","op":"issue","customer":"K0","amount":56},{"id":"e0b","invoice":"I0","op":"pay","amount":15},{"id":"e0c","invoice":"I0","op":"credit","amount":8},{"id":"e1a","invoice":"I1","op":"issue","customer":"K1","amount":38},{"id":"e1b","invoice":"I1","op":"pay","amount":22},{"id":"e1c","invoice":"I1","op":"credit","amount":24},{"id":"e2a","invoice":"I2","op":"issue","customer":"K2","amount":58},{"id":"e2b","invoice":"I2","op":"pay","amount":28},{"id":"e0b","invoice":"I0","op":"pay","amount":999},{"id":"e2c","invoice":"I2","op":"credit","amount":15},{"id":"e3a","invoice":"I3","op":"issue","customer":"K0","amount":75},{"id":"e3b","invoice":"I3","op":"pay","amount":43},{"id":"e3c","invoice":"I3","op":"credit","amount":22},{"id":"e4a","invoice":"I4","op":"issue","customer":"K1","amount":57},{"id":"e4b","invoice":"I4","op":"pay","amount":22},{"id":"e4c","invoice":"I4","op":"credit","amount":20},{"id":"e5a","invoice":"I5","op":"issue","customer":"K2","amount":80},{"id":"e5b","invoice":"I5","op":"pay","amount":41},{"id":"e5c","invoice":"I5","op":"credit","amount":11},{"id":"e6a","invoice":"I6","op":"issue","customer":"K0","amount":78},{"id":"e6b","invoice":"I6","op":"pay","amount":65},{"id":"e6c","invoice":"I6","op":"credit","amount":15},{"id":"e7a","invoice":"I7","op":"issue","customer":"K1","amount":69},{"id":"e7b","invoice":"I7","op":"pay","amount":61},{"id":"e7c","invoice":"I7","op":"credit","amount":21},{"id":"e8a","invoice":"I8","op":"issue","customer":"K2","amount":61},{"id":"e8b","invoice":"I8","op":"pay","amount":46},{"id":"e8c","invoice":"I8","op":"credit","amount":24},{"id":"void1","invoice":"I1","op":"void"},{"id":"late1","invoice":"I1","op":"pay","amount":40},{"id":"refund2","invoice":"I2","op":"refund","amount":12},{"id":"void4","invoice":"I4","op":"void"},{"id":"late4","invoice":"I4","op":"credit","amount":20}]
+    Return customers (K0,K1,K2 each with open,receivable,cash), ignored (event IDs in delivery
+    order, one entry per ignored delivery, whether duplicate or post-void), and void_invoices
+    (sorted invoice IDs). Do not summarize by mentioning keywords; reconcile the actual totals.
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above; do not add prose.
+    Explicit JSON output contract (types only): {"customers": {"K0": {"open": "number", "receivable": "number", "cash": "number"}, "K1": {"open": "number", "receivable": "number", "cash": "number"}, "K2": {"open": "number", "receivable": "number", "cash": "number"}}, "ignored": {"array_items": "string"}, "void_invoices": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      customers:
+        K0:
+          open: 3
+          receivable: 41
+          cash: 123
+        K1:
+          open: 1
+          receivable: -13
+          cash: 105
+        K2:
+          open: 3
+          receivable: 46
+          cash: 103
+      ignored: [e0b, late1, late4]
+      void_invoices: [I1, I4]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  max_tokens: 65536
+  metadata:
+    family: R8A-S6-eventsummary
+    cohort: rigorous-v9
+    original_anchor_id: S6-eventsummary-01
+  rubric:
+  - {id: 'json:customers.K0.open', weight: 0.1111111111111111, group: customers, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:customers.K0.receivable', weight: 0.1111111111111111, group: customers, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:customers.K0.cash', weight: 0.1111111111111111, group: customers, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:customers.K1.open', weight: 0.1111111111111111, group: customers, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:customers.K1.receivable', weight: 0.1111111111111111, group: customers, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:customers.K1.cash', weight: 0.1111111111111111, group: customers, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:customers.K2.open', weight: 0.1111111111111111, group: customers, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:customers.K2.receivable', weight: 0.1111111111111111, group: customers, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:customers.K2.cash', weight: 0.1111111111111111, group: customers, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:ignored[0]', weight: 0.3333333333333333, group: ignored, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:ignored[1]', weight: 0.3333333333333333, group: ignored, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:ignored[2]', weight: 0.3333333333333333, group: ignored, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:void_invoices[0]', weight: 0.5, group: void_invoices, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:void_invoices[1]', weight: 0.5, group: void_invoices, mandatory: true, critical: false, dimension: content}

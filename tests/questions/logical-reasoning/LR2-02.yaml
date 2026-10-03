@@ -1,0 +1,37 @@
+- id: LR2-02
+  category: Logical Reasoning
+  prompt: |-
+    Six speakers A through F are each either truthful (every claim true) or lying
+    (every claim false). They make exactly these claims about their types:
+    A: "Exactly one of B and C is truthful."
+    B: "A is truthful and D is lying."
+    C: "Exactly two of A, B, D are truthful."
+    D: "C and E have the same type."
+    E: "F is lying or B is truthful" (inclusive or).
+    F: "D and A have different types."
+    Find ALL consistent type assignments. Return JSON {"models": [...], "count": ...}.
+    Each model is a six-character T/F string in A,B,C,D,E,F order. Sort the strings
+    lexicographically with F before T. Do not assume the solution is unique.
+
+    Explicit JSON output contract (types only): {"models": {"array_items": "string"}, "count": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      models: [FFFFTF, FFFTFT, TFTTTF]
+      count: 3
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Enumerate fixed points of mutually referring truth claims
+  max_tokens: 8192
+  metadata:
+    family: R8A-LR2-02
+    cohort: rigorous-v9
+    original_anchor_id: LR2-02
+  rubric:
+  - {id: 'json:models[0]', weight: 0.3333333333333333, group: models, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:models[1]', weight: 0.3333333333333333, group: models, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:models[2]', weight: 0.3333333333333333, group: models, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:count', weight: 1.0, group: count, mandatory: true, critical: false, dimension: content}

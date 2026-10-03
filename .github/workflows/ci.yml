@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # setup-uv publishes no major rolling tag beyond v7, so pin the exact version.
+      # Pin the dependency installer version.
       - name: Install uv
         uses: astral-sh/setup-uv@v9.0.0
 
@@ -46,23 +46,11 @@ jobs:
       - name: Verify criterion-level evaluation diagnostics
         run: uv run python selftest_granular.py
 
-      - name: Verify empirical difficulty calibration
-        run: uv run python selftest_calibration.py
-
-      - name: Verify category-wide hardening backlog
-        run: uv run python selftest_hardening.py
-
-      - name: Verify hardening profile release gate
-        run: uv run python selftest_hardening_release.py
-
-      - name: Verify historical review queue
-        run: uv run python selftest_review_queue.py
+      - name: Verify rigorous challenges and precision regressions
+        run: uv run python selftest_rigorous.py
 
       - name: Verify challenge answers and reject near misses
         run: uv run python selftest_challenges.py
-
-      - name: Verify reliability tasks and database regression cases
-        run: uv run python selftest_reliability.py
 
       - name: Verify specialist answers, translations, and repository reviews
         run: uv run python selftest_specialists.py
@@ -76,11 +64,22 @@ jobs:
       - name: Verify generated, interactive, and long-context evaluation
         run: uv run python selftest_quality.py
 
-      - name: Self-test performance and report compatibility
+      - name: Verify saved answers and benchmark failure reporting
+        run: uv run python selftest_benchmark_runner.py
+
+      - name: Verify fixed performance measurements
         run: uv run python selftest_perf.py
+
+      - name: Verify independent v10 oracles and review regressions
+        run: uv run python selftest_frontier.py
 
       - name: Verify portable HTML reports and comparisons
         run: uv run python selftest_reports.py
+
+      - name: Verify simplified run options and queue lifecycle
+        run: |
+          uv run python selftest_run_options.py
+          uv run python selftest_run_queue.py
 
       - name: Lint
         run: uvx ruff check .

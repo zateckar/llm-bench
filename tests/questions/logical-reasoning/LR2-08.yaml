@@ -1,0 +1,31 @@
+- id: LR2-08
+  category: Logical Reasoning
+  prompt: |-
+    A diagnostic path alarms if and only if at least one component on it is faulty.
+    Components have fixed states across tests, with no masking or test errors.
+    Paths ABC, BDE, CEF, ADG, EFG alarm; the single-component path D is quiet.
+    Identify the minimum possible number of faulty components and EVERY faulty set
+    of that size consistent with the evidence. Return JSON {"faults": integer,
+    "explanations": [...]}. Encode a set as alphabetically sorted letters without
+    spaces, and sort the explanations lexicographically.
+
+    Explicit JSON output contract (types only): {"faults": "number", "explanations": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      faults: 2
+      explanations: [AE]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Minimum fault diagnosis with positive and negative evidence
+  max_tokens: 8192
+  metadata:
+    family: R8A-LR2-08
+    cohort: rigorous-v9
+    original_anchor_id: LR2-08
+  rubric:
+  - {id: 'json:faults', weight: 1.0, group: faults, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:explanations[0]', weight: 1.0, group: explanations, mandatory: true, critical: false, dimension: content}

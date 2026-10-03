@@ -1,0 +1,48 @@
+- id: SP1-FI-03
+  category: Finances
+  prompt: |-
+    Loan interest and covenant exercise. Simple interest at 6% annual ACT/360.
+    Accrual days are supplied: principal 1200000 for 30 days, then 800000 for 15 days.
+    No compounding/fees. At reporting time interest is unpaid. Contract defines covenant
+    debt as principal PLUS accrued interest PLUS lease debt 250000. Eligible cash is
+    bank cash 210000 LESS restricted cash 60000. Covenant EBITDA is 260000; maximum
+    (covenant debt - eligible cash)/EBITDA is 3.50 inclusive. No other adjustments.
+    Return {interest,covenant_debt,eligible_cash,net_debt,ratio:{numerator,denominator},
+    compliant:bool,extra_unrestricted_cash_needed}. Ratio must be a reduced exact fraction;
+    last field is the smallest nonnegative cash injection restoring compliance, debt fixed.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"interest": "number", "covenant_debt": "number", "eligible_cash": "number", "net_debt": "number", "ratio": {"numerator": "number", "denominator": "number"}, "compliant": "boolean", "extra_unrestricted_cash_needed": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      interest: 8000
+      covenant_debt: 1058000
+      eligible_cash: 150000
+      net_debt: 908000
+      ratio:
+        numerator: 227
+        denominator: 65
+      compliant: true
+      extra_unrestricted_cash_needed: 0
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original synthetic exercise
+  description: Interest is 6000+2000; net leverage 908000/260000 is just below 3.50, despite gross debt exceeding
+    it.
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-FI-03
+    cohort: rigorous-v9
+    original_anchor_id: SP1-FI-03
+  rubric:
+  - {id: 'json:interest', weight: 1.0, group: interest, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:covenant_debt', weight: 1.0, group: covenant_debt, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:eligible_cash', weight: 1.0, group: eligible_cash, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:net_debt', weight: 1.0, group: net_debt, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:ratio.numerator', weight: 0.5, group: ratio, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:ratio.denominator', weight: 0.5, group: ratio, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:compliant', weight: 1.0, group: compliant, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:extra_unrestricted_cash_needed', weight: 1.0, group: extra_unrestricted_cash_needed, mandatory: true,
+    critical: false, dimension: content}

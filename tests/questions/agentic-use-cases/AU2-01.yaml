@@ -1,0 +1,44 @@
+- id: AU2-01
+  category: Agentic Use Cases
+  prompt: |-
+    A service starts with 4 old ready instances and 0 new. The target is 0 old
+    and exactly 4 new. Old instances consume 2 resource units each, new ones 3.
+    Every state must have at least 3 ready instances and use at most 12 resource
+    units. An action either adds 1 or 2 new instances, or removes 1 or 2 old
+    instances. Added instances become ready atomically; each action costs one step.
+    You cannot add old instances or remove new ones. Never exceed 4 new instances.
+    Find the shortest valid plan. Break ties lexicographically over the sequence
+    of [action,count] pairs, with add < remove and 1 < 2.
+    Return JSON {"steps": ..., "plan": [["add" or "remove", count], ...]}.
+
+    Explicit JSON output contract (types only): {"steps": "number", "plan": {"array_items": "array (element types and order specified in task)"}}
+  evaluator: json_match
+  expected:
+    value:
+      steps: 6
+      plan: [[remove, 1], [add, 2], [remove, 2], [add, 1], [remove, 1], [add, 1]]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Find a safe minimal rolling deployment under two resource constraints
+  max_tokens: 8192
+  metadata:
+    family: R8A-AU2-01
+    cohort: rigorous-v9
+    original_anchor_id: AU2-01
+  rubric:
+  - {id: 'json:steps', weight: 1.0, group: steps, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:plan[0][0]', weight: 0.08333333333333333, group: plan, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:plan[0][1]', weight: 0.08333333333333333, group: plan, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:plan[1][0]', weight: 0.08333333333333333, group: plan, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:plan[1][1]', weight: 0.08333333333333333, group: plan, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:plan[2][0]', weight: 0.08333333333333333, group: plan, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:plan[2][1]', weight: 0.08333333333333333, group: plan, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:plan[3][0]', weight: 0.08333333333333333, group: plan, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:plan[3][1]', weight: 0.08333333333333333, group: plan, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:plan[4][0]', weight: 0.08333333333333333, group: plan, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:plan[4][1]', weight: 0.08333333333333333, group: plan, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:plan[5][0]', weight: 0.08333333333333333, group: plan, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:plan[5][1]', weight: 0.08333333333333333, group: plan, mandatory: true, critical: false, dimension: content}

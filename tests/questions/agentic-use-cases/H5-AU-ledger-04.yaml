@@ -1,0 +1,127 @@
+- id: H5-AU-ledger-04
+  category: Agentic Use Cases
+  prompt: |-
+    Audit this transactional tool-service event log. Each call commits atomically.
+    Initial balances: {"A": 46, "B": 68, "C": 48, "D": 66}; every account version starts at zero.
+    Each row is [idempotency_key,source,destination,positive_integer_amount,expected_source_version].
+    Apply these checks IN ORDER: (1) if key is already committed, return replay for the
+    same (source,destination,amount), otherwise key_conflict; expected version is NOT
+    part of this identity. (2) reject stale source version as stale. (3) reject insufficient
+    source funds as insufficient. (4) atomically transfer, increment BOTH account versions,
+    record the key, and return applied. Rejections do not record keys or change state.
+    Rows are the complete serialized execution order, not concurrent starts. An earlier
+    failure therefore does not prevent later reuse of its key. No fee or overdraft.
+    Events: [["k00", "D", "C", 52, 0], ["k01", "C", "D", 43, 1], ["k02", "B", "D", 17, 0], ["k01", "C", "D", 43, 1], ["k04", "C", "D", 8, 2], ["k05", "D", "A", 12, 3], ["k01", "C", "D", 44, 1], ["k07", "C", "D", 43, 3], ["k08", "C", "B", 34, 4], ["k09", "D", "A", 48, 5], ["k04", "C", "D", 8, 2], ["k11", "C", "B", 16, 4], ["k12", "D", "B", 10, 6], ["k13", "C", "A", 38, 4], ["k14", "B", "A", 51, 2], ["k07", "C", "D", 44, 3], ["k16", "B", "C", 20, 3], ["k17", "D", "C", 50, 7], ["k18", "B", "A", 22, 3], ["k19", "A", "D", 49, 2], ["k20", "C", "D", 44, 4], ["k07", "C", "D", 44, 102], ["k22", "D", "A", 56, 9], ["k23", "C", "D", 40, 5]]
+    Return {"decisions":[one status per input row],"balances":{account:integer},
+    "versions":{account:integer},"committed_keys":[IDs]}.
+    Return only the requested JSON, with no extra keys or prose. Null is allowed only where explicitly requested. All ID lists must be sorted lexicographically.
+    Explicit JSON output contract (types only): {"decisions": {"array_items": "string"}, "balances": {"A": "number", "B": "number", "C": "number", "D": "number"}, "versions": {"A": "number", "B": "number", "C": "number", "D": "number"}, "committed_keys": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      decisions: [applied, applied, applied, replay, applied, stale, key_conflict, applied, insufficient, applied,
+        replay, insufficient, applied, insufficient, applied, key_conflict, insufficient, applied, insufficient,
+        applied, stale, key_conflict, applied, applied]
+      balances:
+        A: 152
+        B: 10
+        C: 16
+        D: 50
+      versions:
+        A: 4
+        B: 3
+        C: 6
+        D: 11
+      committed_keys: [k00, k01, k02, k04, k07, k09, k12, k14, k17, k19, k22, k23]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original ceiling-v5; BBEH: https://github.com/google-deepmind/bbeh (compositional reasoning design only)'
+  description: Compositional challenge; deterministic oracle in hard_cases.py. Difficulty awaits fresh model calibration.
+  max_tokens: 16384
+  metadata:
+    family: R8A-H5-AU-ledger
+    cohort: rigorous-v9
+    original_anchor_id: H5-AU-ledger-04
+  rubric:
+  - {id: 'json:decisions[0]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[1]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[2]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[3]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[4]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[5]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[6]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[7]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[8]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[9]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[10]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[11]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[12]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[13]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[14]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[15]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[16]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[17]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[18]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[19]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[20]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[21]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[22]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:decisions[23]', weight: 0.041666666666666664, group: decisions, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:balances.A', weight: 0.25, group: balances, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:balances.B', weight: 0.25, group: balances, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:balances.C', weight: 0.25, group: balances, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:balances.D', weight: 0.25, group: balances, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:versions.A', weight: 0.25, group: versions, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:versions.B', weight: 0.25, group: versions, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:versions.C', weight: 0.25, group: versions, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:versions.D', weight: 0.25, group: versions, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:committed_keys[0]', weight: 0.08333333333333333, group: committed_keys, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:committed_keys[1]', weight: 0.08333333333333333, group: committed_keys, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:committed_keys[2]', weight: 0.08333333333333333, group: committed_keys, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:committed_keys[3]', weight: 0.08333333333333333, group: committed_keys, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:committed_keys[4]', weight: 0.08333333333333333, group: committed_keys, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:committed_keys[5]', weight: 0.08333333333333333, group: committed_keys, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:committed_keys[6]', weight: 0.08333333333333333, group: committed_keys, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:committed_keys[7]', weight: 0.08333333333333333, group: committed_keys, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:committed_keys[8]', weight: 0.08333333333333333, group: committed_keys, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:committed_keys[9]', weight: 0.08333333333333333, group: committed_keys, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:committed_keys[10]', weight: 0.08333333333333333, group: committed_keys, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:committed_keys[11]', weight: 0.08333333333333333, group: committed_keys, mandatory: true, critical: false,
+    dimension: content}

@@ -466,10 +466,16 @@ def _load_json(text):
     def invalid(value):
         raise ValueError(f"non-finite JSON number: {value}")
 
-    return json.loads(text, object_pairs_hook=pairs, parse_constant=invalid)
+    def finite_float(value):
+        result = float(value)
+        if not math.isfinite(result):
+            invalid(value)
+        return result
+
+    return json.loads(text, object_pairs_hook=pairs, parse_constant=invalid, parse_float=finite_float)
 
 
-def extract_json(response: str, *, strict: bool = False) -> tuple[Any, str | None]:
+def extract_json(response: str, *, strict: bool = False, allow_fence: bool = True) -> tuple[Any, str | None]:
     """Pull the first plausible JSON document out of a response.
 
     Returns ``(value, None)`` or ``(None, reason)``.
@@ -477,7 +483,7 @@ def extract_json(response: str, *, strict: bool = False) -> tuple[Any, str | Non
     # Parse complete JSON before touching markup. A JSON string may legitimately
     # contain '<think>...</think>'; those bytes are data, not a reasoning channel.
     raw = response.strip()
-    raw_fence = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n?```", raw, re.DOTALL | re.IGNORECASE)
+    raw_fence = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n?```", raw, re.DOTALL | re.IGNORECASE) if allow_fence else None
     try:
         return _load_json(raw_fence[1] if raw_fence else raw), None
     except ValueError:
@@ -487,7 +493,7 @@ def extract_json(response: str, *, strict: bool = False) -> tuple[Any, str | Non
     if strict:
         # One complete document, optionally in a single Markdown fence. Do not
         # cherry-pick a correct object from contradictory prose or alternatives.
-        fence = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n?```", text, re.DOTALL | re.IGNORECASE)
+        fence = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n?```", text, re.DOTALL | re.IGNORECASE) if allow_fence else None
         try:
             return _load_json(fence[1] if fence else text), None
         except ValueError as exc:
@@ -754,37 +760,6 @@ def _extract_code(response: str, fixture_names: set[str] | None = None) -> str |
     return None
 
 
-def _strip_disallowed_imports(code: str) -> str:
-    """Remove import lines for modules outside the sandbox allowlist.
-
-    LLMs sometimes add unnecessary imports (``import numpy as np`` for a
-    fibonacci function). Those would fail at the sandbox's import gate, so
-    stripping them lets the core logic run instead of failing for an unrelated
-    reason. Imports the solution actually needs will surface as a NameError.
-    """
-    from code_runner import ALLOWED_IMPORTS
-
-    allowed = set(ALLOWED_IMPORTS)
-    out = []
-    for line in code.splitlines():
-        stripped = line.strip()
-        m = re.match(r"^import\s+(\S+)", stripped)
-        if m:
-            if m.group(1).split(".")[0] not in allowed:
-                continue
-            out.append(line)
-            continue
-        m = re.match(r"^from\s+(\S+)\s+import", stripped)
-        if m:
-            root = m.group(1).split(".")[0]
-            if root and root not in allowed and not m.group(1).startswith("."):
-                continue
-            out.append(line)
-            continue
-        out.append(line)
-    return "\n".join(out)
-
-
 # ---------------------------------------------------------------------------
 # Evaluators
 # ---------------------------------------------------------------------------
@@ -882,7 +857,7 @@ def eval_contains_keywords(response: str, expected: Any, **_) -> tuple[float, st
 
     Without ``partial``, the score is binary: every requirement met or 0.
     """
-    text = strip_think_blocks(response).lower()
+    text = strip_think_blocks(response).lower().translate(str.maketrans({"\u2010":"-", "\u2011":"-"}))
 
     if isinstance(expected, dict):
         spec = expected
@@ -1064,7 +1039,8 @@ def eval_code_exec(response: str, expected: Any, **kwargs) -> tuple[float, str]:
                 "reason_code": "missing_code_block",
             }]
         return 0.0, "No code block found"
-    code = _strip_disallowed_imports(code)
+    # Evaluate the submitted program as written. Silently deleting forbidden
+    # imports could turn a program violating the contract into a false pass.
 
     helper_name = helper_override or next(
         (f["function"] for f in fixtures if f.get("function") in TEST_HELPERS), None
@@ -1078,6 +1054,7 @@ def eval_code_exec(response: str, expected: Any, **kwargs) -> tuple[float, str]:
             "function": f["function"],
             "args": f.get("args") or [],
             "kwargs": f.get("kwargs") or {},
+            "preserve_inputs": f.get("preserve_inputs", False),
         }
         for f in fixtures
     ]
@@ -1120,11 +1097,11 @@ def eval_code_exec(response: str, expected: Any, **kwargs) -> tuple[float, str]:
             details.append(f"#{i} ERROR: {res.get('error')}")
             fixture_criteria.append({
                 "id": fixture_id,
-                "status": "error",
+                "status": "fail" if res.get("reason_code") == "input_mutation" else "error",
                 "earned": 0.0,
                 "possible": 1.0,
-                "dimension": "execution",
-                "reason_code": "fixture_error",
+                "dimension": "content" if res.get("reason_code") == "input_mutation" else "execution",
+                "reason_code": res.get("reason_code", "fixture_error"),
                 "evidence": {"fixture_index": i, "message": str(res.get("error"))[:240]},
             })
             continue
@@ -1300,9 +1277,14 @@ def eval_format_check(response: str, expected: Any, **kwargs) -> tuple[float, st
         elif ctype == "count_occurrences":
             pattern = compile_or_none(str(check.get("pattern", value)), re.IGNORECASE)
             n = len(pattern.findall(text)) if pattern else -1
-            want = int(check.get("count", 0))
-            ok = n == want
-            note = f"Occurrences of [{check.get('pattern', value)}] {n} == {want}: {'PASS' if ok else 'FAIL'}"
+            if "min_count" in check or "max_count" in check:
+                lower, upper = check.get("min_count", 0), check.get("max_count")
+                ok = n >= lower and (upper is None or n <= upper)
+                bounds = f">= {lower}" + (f" and <= {upper}" if upper is not None else "")
+            else:
+                want = int(check.get("count", 0))
+                ok, bounds = n == want, f"== {want}"
+            note = f"Occurrences of [{check.get('pattern', value)}] {n} {bounds}: {'PASS' if ok else 'FAIL'}"
         elif ctype == "line_count":
             actual = len(non_empty_lines(text))
             ok = actual == int(value)
@@ -1854,18 +1836,37 @@ def _json_mismatches(
                 "detail": f"expected array, got {type(got).__name__}",
             }]
         if len(got) != len(target):
-            return [{
+            problems = [{
                 "path": path or "root",
                 "reason_code": "length_mismatch",
                 "detail": f"length {len(got)} != {len(target)}",
             }]
-        problems = []
+        else:
+            problems = []
         for i, sub in enumerate(target):
-            problems += _json_mismatches(
-                got[i], sub, f"{path}[{i}]", mode=mode, ignore_keys=ignore_keys,
-                aliases=aliases, relative=relative, tolerance=tolerance,
-            )
+            child = f"{path}[{i}]"
+            if i >= len(got):
+                problems.append({"path": child, "reason_code": "missing_key", "detail": "missing array item"})
+            else:
+                problems += _json_mismatches(
+                    got[i], sub, child, mode=mode, ignore_keys=ignore_keys,
+                    aliases=aliases, relative=relative, tolerance=tolerance,
+                )
         return problems
+    def scalar_kind(value):
+        if value is None:
+            return "null"
+        if isinstance(value, bool):
+            return "boolean"
+        if isinstance(value, (int, float)):
+            return "number"
+        return type(value).__name__
+
+    if scalar_kind(got) != scalar_kind(target):
+        return [{
+            "path": path or "root", "reason_code": "type_mismatch",
+            "detail": f"expected {scalar_kind(target)}, got {scalar_kind(got)}",
+        }]
     if not values_equal(got, target, rel=relative, abs_tol=tolerance):
         return [{
             "path": path or "root",
@@ -1906,7 +1907,7 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
     ignore_keys = {str(k) for k in (spec.get("ignore_keys") or [])}
     aliases = spec.get("value_aliases", {})
 
-    doc, err = extract_json(response, strict=spec.get("strict_json", False))
+    doc, err = extract_json(response, strict=spec.get("strict_json", False), allow_fence=spec.get("allow_fence", True))
     if err:
         if diagnostic_sink is not None:
             diagnostic_sink["contract_score"] = 0.0
@@ -1939,7 +1940,7 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
             blocking = next(
                 (
                 candidate for candidate in problems
-                    if candidate["reason_code"] in {"type_mismatch", "length_mismatch", "missing_key"}
+                    if candidate["reason_code"] in {"type_mismatch", "missing_key"}
                     and (
                         candidate["path"] == "root"
                         or
@@ -1977,7 +1978,7 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
                 "status": "fail",
                 "earned": 0.0,
                 "possible": 1.0,
-                "dimension": "contract" if mismatch["reason_code"] in {"type_mismatch", "length_mismatch", "unexpected_keys"} else "content",
+                "dimension": "contract" if mismatch["reason_code"] in {"type_mismatch", "length_mismatch", "unexpected_keys", "missing_key"} else "content",
                 "reason_code": mismatch["reason_code"],
                 "evidence": {"path": path, "detail": mismatch["detail"]},
             })
@@ -2116,9 +2117,11 @@ EVALUATORS: dict[str, Callable] = {
 # Bump only the evaluator whose behavior changed. This lets a rescore explain
 # why a saved answer differs while leaving prompt/suite fingerprints intact.
 EVALUATOR_VERSIONS = {
-    "json_match": "2",
-    "code_exec": "2",
-    "format_check": "2",
+    "interactive_state": "2",
+    "json_match": "4",
+    "code_exec": "3",
+    "format_check": "3",
+    "contains_keywords": "2",
     "security_analysis": "2",
     "file_content_match": "2",
     "command_correctness": "2",

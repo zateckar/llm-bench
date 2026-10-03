@@ -1,0 +1,36 @@
+- id: LR2-05
+  category: Logical Reasoning
+  prompt: |-
+    Players alternate removing 1, 3, or 4 stones from one pile. A move cannot use
+    the same number as the immediately previous move (by either player). Taking
+    the last stone loses immediately. A player with no legal move also loses.
+    Initially there is no previous move. Both players play optimally.
+    Return JSON with winning_first_moves (all winning moves from 23 stones, sorted)
+    and losing_sizes (all initial pile sizes from 1 through 24 where the first
+    player loses, sorted). A move removing more stones than remain is illegal.
+
+    Explicit JSON output contract (types only): {"winning_first_moves": {"array_items": "number"}, "losing_sizes": {"array_items": "number"}}
+  evaluator: json_match
+  expected:
+    value:
+      winning_first_moves: [1]
+      losing_sizes: [1, 6, 11, 16, 21]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Misere game with history-dependent legal moves
+  max_tokens: 8192
+  metadata:
+    family: R8A-LR2-05
+    cohort: rigorous-v9
+    original_anchor_id: LR2-05
+  rubric:
+  - {id: 'json:winning_first_moves[0]', weight: 1.0, group: winning_first_moves, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:losing_sizes[0]', weight: 0.2, group: losing_sizes, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:losing_sizes[1]', weight: 0.2, group: losing_sizes, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:losing_sizes[2]', weight: 0.2, group: losing_sizes, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:losing_sizes[3]', weight: 0.2, group: losing_sizes, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:losing_sizes[4]', weight: 0.2, group: losing_sizes, mandatory: true, critical: false, dimension: content}

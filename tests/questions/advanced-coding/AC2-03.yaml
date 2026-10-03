@@ -1,0 +1,72 @@
+- id: AC2-03
+  category: Advanced Coding
+  prompt: |
+    Implement dependency_batches(nodes, edges). nodes is a list of distinct strings;
+        edges contains [prerequisite,dependent] pairs referring to those nodes. Duplicate
+        edges and self-loops are allowed. At each round remove ALL currently zero-incoming
+        nodes simultaneously, sorted lexicographically. Their removal takes effect only
+        for the next round. Return {"batches": list of rounds, "blocked": sorted nodes
+        remaining when no progress is possible}. Blocked includes downstream dependents
+        of cycles, not just cycle members. Empty input returns both arrays empty.
+
+    Return only Python code defining the function. Standard library only.
+  evaluator: code_exec
+  expected:
+  - function: dependency_batches
+    args: [[], []]
+    expected:
+      batches: []
+      blocked: []
+    relative: 0
+    tolerance: 0
+  - function: dependency_batches
+    args: [[a, b, c, d], [[a, c], [b, c], [c, d]]]
+    expected:
+      batches: [[a, b], [c], [d]]
+      blocked: []
+    relative: 0
+    tolerance: 0
+  - function: dependency_batches
+    args: [[a, b, c, d, e], [[a, b], [b, a], [b, c], [d, e]]]
+    expected:
+      batches: [[d], [e]]
+      blocked: [a, b, c]
+    relative: 0
+    tolerance: 0
+  - function: dependency_batches
+    args: [[x, y], [[x, x], [x, y]]]
+    expected:
+      batches: []
+      blocked: [x, y]
+    relative: 0
+    tolerance: 0
+  - function: dependency_batches
+    args: [[z, a, m], []]
+    expected:
+      batches: [[a, m, z]]
+      blocked: []
+    relative: 0
+    tolerance: 0
+  - function: dependency_batches
+    args: [[a, b], [[a, b], [a, b]]]
+    expected:
+      batches: [[a], [b]]
+      blocked: []
+    relative: 0
+    tolerance: 0
+  - function: dependency_batches
+    args: [[a], []]
+    expected:
+      batches: [[a]]
+      blocked: []
+    relative: 0
+    tolerance: 0
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Dependency levels with cycles and downstream blocked nodes
+  max_tokens: 4096
+  metadata:
+    family: R8A-AC2-03
+    cohort: rigorous-v9
+    original_anchor_id: AC2-03

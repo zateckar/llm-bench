@@ -1,0 +1,34 @@
+- id: RC2-02
+  category: Reading Comprehension
+  prompt: |-
+    A fictional rate ledger records (effective day, recorded day, rate):
+    (1,1,100),(5,8,120),(5,12,110),(10,10,150),(10,15,140).
+    To answer "rate for service day D as known on day K", use only records with
+    effective<=D and recorded<=K. Choose the greatest effective day, then the
+    greatest recorded day. Later corrections do not change what was known earlier.
+    Answer (D,K) queries in order: (6,7),(6,9),(6,13),(11,11),(11,14),(11,16).
+    Return JSON {"rates": [six integers]}.
+
+    Explicit JSON output contract (types only): {"rates": {"array_items": "number"}}
+  evaluator: json_match
+  expected:
+    value:
+      rates: [100, 120, 110, 150, 150, 140]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: 'Bitemporal reading: effective dates differ from known-at dates'
+  max_tokens: 8192
+  metadata:
+    family: R8A-RC2-02
+    cohort: rigorous-v9
+    original_anchor_id: RC2-02
+  rubric:
+  - {id: 'json:rates[0]', weight: 0.16666666666666666, group: rates, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rates[1]', weight: 0.16666666666666666, group: rates, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rates[2]', weight: 0.16666666666666666, group: rates, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rates[3]', weight: 0.16666666666666666, group: rates, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rates[4]', weight: 0.16666666666666666, group: rates, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:rates[5]', weight: 0.16666666666666666, group: rates, mandatory: true, critical: false, dimension: content}

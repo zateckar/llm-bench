@@ -1,0 +1,31 @@
+- id: LR2-12
+  category: Logical Reasoning
+  prompt: |-
+    Assign each worker A,B,C,D,E to a different job 1,2,3,4,5. Costs by job are:
+    A: 9,2,7,8,6; B: 6,4,3,7,5; C: 5,8,1,8,3;
+    D: 7,6,9,4,2; E: 8,5,2,9,7.
+    A cannot take job 2; C cannot take job 3; B's job number must be smaller than E's.
+    Minimize total cost. Return JSON {"cost": ..., "assignments": [...]} containing
+    EVERY optimum as a five-digit string listing jobs for A,B,C,D,E. Sort the strings.
+
+    Explicit JSON output contract (types only): {"cost": "number", "assignments": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      cost: 21
+      assignments: ['42153', '52143']
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Assignment optimization with forbidden pairs and coupled constraint
+  max_tokens: 8192
+  metadata:
+    family: R8A-LR2-12
+    cohort: rigorous-v9
+    original_anchor_id: LR2-12
+  rubric:
+  - {id: 'json:cost', weight: 1.0, group: cost, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:assignments[0]', weight: 0.5, group: assignments, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:assignments[1]', weight: 0.5, group: assignments, mandatory: true, critical: false, dimension: content}

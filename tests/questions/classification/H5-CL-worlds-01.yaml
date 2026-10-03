@@ -1,0 +1,79 @@
+- id: H5-CL-worlds-01
+  category: Classification
+  prompt: |-
+    Evaluate claims against a closed fictional evidence dossier. There are ten
+    Boolean propositions X1..X10. Every satisfying assignment is a possible world;
+    absence of a proposition does not make it false. The dossier supplies clauses in
+    signed-integer notation: [2,-5,7] means X2 OR NOT X5 OR X7, inclusive OR.
+    ALL clauses must hold. Do not read a disjunction as exclusive or an implication
+    as a biconditional. The dossier is consistent.
+    Clauses: [[9, -8, 6], [6, 5, 2], [4, -1, 6], [3, -9, 1], [-10, 6], [-1, -2], [5, -8, 1], [-10, -1], [8, 3], [8, -2, 6], [1, 5], [6, 10], [-7, -2, -9], [10, 1], [4, -6, 5], [4, -9, -10], [-4, 9, -5], [4, 8, 3], [1, -9], [-8, 6], [10, -4, -9], [6, 4], [3, 6, 8]]
+    Claims are CONJUNCTIONS of their signed literals, unlike the dossier clauses:
+    [[1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [1, -4], [-2, 8], [3, 9], [-6, -10]]
+    Return {"world_count":integer,"support_counts":[number of possible worlds satisfying
+    each claim],"labels":[SUPPORTED if all worlds satisfy it, CONTRADICTED if none,
+    UNKNOWN otherwise]}. Labels are JSON strings, including "UNKNOWN"; never null.
+    Return only the requested JSON, with no extra keys or prose. Null is allowed only where explicitly requested. All ID lists must be sorted lexicographically.
+    Explicit JSON output contract (types only): {"world_count": "number", "support_counts": {"array_items": "number"}, "labels": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      world_count: 30
+      support_counts: [18, 6, 20, 6, 24, 30, 15, 20, 6, 12, 12, 16, 4, 0]
+      labels: [UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN, SUPPORTED, UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN,
+        UNKNOWN, UNKNOWN, CONTRADICTED]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original ceiling-v5; BBEH: https://github.com/google-deepmind/bbeh (compositional reasoning design only)'
+  description: Compositional challenge; deterministic oracle in hard_cases.py. Difficulty awaits fresh model calibration.
+  max_tokens: 16384
+  metadata:
+    family: R8A-H5-CL-worlds
+    cohort: rigorous-v9
+    original_anchor_id: H5-CL-worlds-01
+  rubric:
+  - {id: 'json:world_count', weight: 1.0, group: world_count, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:support_counts[0]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[1]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[2]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[3]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[4]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[5]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[6]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[7]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[8]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[9]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[10]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[11]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[12]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:support_counts[13]', weight: 0.07142857142857142, group: support_counts, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:labels[0]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[1]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[2]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[3]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[4]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[5]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[6]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[7]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[8]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[9]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[10]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[11]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[12]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:labels[13]', weight: 0.07142857142857142, group: labels, mandatory: true, critical: false, dimension: content}

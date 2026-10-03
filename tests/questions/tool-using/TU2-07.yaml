@@ -1,0 +1,49 @@
+- id: TU2-07
+  category: Tool Using
+  prompt: |-
+    User authorized a PREVIEW of removing expired, unpinned objects in tenant t2.
+    Expired means expires_at <= current time 50. Listing is ALREADY complete:
+    (id,tenant,expires_at,pinned,version):
+    (k1,t2,49,true,2),(k2,t2,50,false,8),(k3,t1,10,false,4),
+    (k4,t2,51,false,1),(k5,t2,12,false,3).
+    Tool: delete_object(id,if_version,dry_run). Preview requires dry_run=true;
+    use the listed version. Process qualifying objects in ID order.
+
+    This is an offline planning exercise, not a request to call real tools.
+    Return ONLY a JSON array of the required REMAINING calls in execution order,
+    each {"tool": "name", "args": {exact parameter names and values}}. Do not
+    repeat completed calls, add explanations, or include unnecessary calls.
+
+    Explicit JSON output contract (types only): {"array_items": {"tool": "string", "args": {"id": "string", "if_version": "number", "dry_run": "boolean"}}}
+  evaluator: json_match
+  expected:
+    value:
+    - tool: delete_object
+      args:
+        id: k2
+        if_version: 8
+        dry_run: true
+    - tool: delete_object
+      args:
+        id: k5
+        if_version: 3
+        dry_run: true
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: hard
+  source: challenge-v2
+  description: Apply all deletion predicates while honoring preview-only authorization
+  metadata:
+    family: R8A-TU2-07
+    cohort: rigorous-v9
+    original_anchor_id: TU2-07
+  rubric:
+  - {id: 'json:[0].tool', weight: 0.125, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[0].args.id', weight: 0.125, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[0].args.if_version', weight: 0.125, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[0].args.dry_run', weight: 0.125, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].tool', weight: 0.125, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].args.id', weight: 0.125, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].args.if_version', weight: 0.125, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].args.dry_run', weight: 0.125, group: answer, mandatory: true, critical: false, dimension: content}

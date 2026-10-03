@@ -99,12 +99,15 @@
                         </div>
                     </div>
                     <div class="text-right">
-                        {% if run.status == 'completed' %}
+                        {% if run.status == 'completed' and run.total_questions == 0 %}
+                        <span class="badge-pass rounded px-2 py-1 text-xs">Performance complete</span>
+                        {% elif run.status == 'completed' and run.scored_questions == 0 %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-fail">No scored answers</span>
+                        {% elif run.status == 'completed' %}
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-pass">
-                            {{ run.passed_questions }}/{{ run.scored_questions or run.total_questions }} passed · {{ "%.0f"|format(run.avg_score * 100) }}% average
+                            {{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }} passed · {{ "%.0f"|format(run.avg_score * 100) }}% average
                         </span>
                         <p class="text-xs text-slate-500 mt-1">
-                            {%- if run.weighted_score %}{{ "%.0f"|format(run.weighted_score * 100) }}% weighted{% endif %}
                             {%- if run.latency_p50_ms %} &middot; p50 {{ "%.0f"|format(run.latency_p50_ms) }} ms{% endif %}
                             {%- if run.output_tokens_per_sec %} &middot; {{ "%.0f"|format(run.output_tokens_per_sec) }} tok/s{% endif %}
                         </p>

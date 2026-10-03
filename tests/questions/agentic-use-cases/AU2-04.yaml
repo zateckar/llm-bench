@@ -1,0 +1,41 @@
+- id: AU2-04
+  category: Agentic Use Cases
+  prompt: |-
+    Choose integer counts of instance types A,B,C. Their (CPU,RAM,daily cost) are
+    A=(3,2,8), B=(5,4,13), C=(9,5,21). Availability: A<=8, B<=6, C<=4.
+    Need CPU>=32, RAM>=21, at most 8 total instances, and at least 2 instances of
+    types B or C combined. Minimize daily cost; break ties by fewest instances,
+    then lexicographically smallest [A,B,C] count vector.
+    Return JSON with cost, instances, allocation ([A,B,C]), cpu, and ram.
+
+    Explicit JSON output contract (types only): {"cost": "number", "instances": "number", "allocation": {"array_items": "number"}, "cpu": "number", "ram": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      cost: 81
+      instances: 5
+      allocation: [0, 3, 2]
+      cpu: 33
+      ram: 22
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Capacity optimization with CPU, RAM, inventory, and instance-count constraints
+  max_tokens: 8192
+  metadata:
+    family: R8A-AU2-04
+    cohort: rigorous-v9
+    original_anchor_id: AU2-04
+  rubric:
+  - {id: 'json:cost', weight: 1.0, group: cost, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:instances', weight: 1.0, group: instances, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:allocation[0]', weight: 0.3333333333333333, group: allocation, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:allocation[1]', weight: 0.3333333333333333, group: allocation, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:allocation[2]', weight: 0.3333333333333333, group: allocation, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:cpu', weight: 1.0, group: cpu, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:ram', weight: 1.0, group: ram, mandatory: true, critical: false, dimension: content}

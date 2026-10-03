@@ -1,0 +1,42 @@
+- id: MR2-03
+  category: Mathematical Reasoning
+  prompt: |-
+    Select urn A with probability 1/4, otherwise urn B. A has 4 red and 2 blue
+    balls; B has 2 red and 5 blue. Draw three balls without replacement.
+    An observer sends a report with probability 1 if exactly two draws are red,
+    probability 1/3 if exactly one is red, and probability 0 otherwise.
+    The report reveals nothing besides the fact that it was sent.
+    Return JSON with report_probability, urn_A_given_report, two_red_given_report.
+    Express every probability as [numerator,denominator] in lowest terms.
+
+    Explicit JSON output contract (types only): {"report_probability": {"array_items": "number"}, "urn_A_given_report": {"array_items": "number"}, "two_red_given_report": {"array_items": "number"}}
+  evaluator: json_match
+  expected:
+    value:
+      report_probability: [5, 12]
+      urn_A_given_report: [2, 5]
+      two_red_given_report: [108, 175]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Bayesian conditioning on a selective reporting process
+  max_tokens: 8192
+  metadata:
+    family: R8A-MR2-03
+    cohort: rigorous-v9
+    original_anchor_id: MR2-03
+  rubric:
+  - {id: 'json:report_probability[0]', weight: 0.5, group: report_probability, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:report_probability[1]', weight: 0.5, group: report_probability, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:urn_A_given_report[0]', weight: 0.5, group: urn_A_given_report, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:urn_A_given_report[1]', weight: 0.5, group: urn_A_given_report, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:two_red_given_report[0]', weight: 0.5, group: two_red_given_report, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:two_red_given_report[1]', weight: 0.5, group: two_red_given_report, mandatory: true, critical: false,
+    dimension: content}

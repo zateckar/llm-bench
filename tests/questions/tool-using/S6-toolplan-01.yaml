@@ -1,0 +1,38 @@
+- id: S6-toolplan-01
+  category: Tool Using
+  prompt: |-
+    Plan calls for a read-only evidence collection job. Initially only token auth is available.
+    Each call may run at most once and only when ALL its required tokens already exist. It adds
+    all its produced tokens; tokens are never consumed. No parallel calls. The final state must
+    contain a,b,c,d,e,f,receipt. A produced receipt does not remove the other requirements.
+    Minimize total cost; break ties by fewer calls, then lexicographically smallest sequence of
+    call IDs. Ignore tools not listed. Calls: [{"id":"C0","requires":["auth"],"produces":["snapshot"],"cost":2},{"id":"C1","requires":["snapshot"],"produces":["a","b"],"cost":4},{"id":"C2","requires":["snapshot"],"produces":["c","d"],"cost":4},{"id":"C3","requires":["a"],"produces":["e"],"cost":2},{"id":"C4","requires":["b","c"],"produces":["e","f"],"cost":5},{"id":"C5","requires":["auth"],"produces":["b","d"],"cost":6},{"id":"C6","requires":["d"],"produces":["c","f"],"cost":2},{"id":"C7","requires":["e","f"],"produces":["receipt"],"cost":3},{"id":"C8","requires":["a","d"],"produces":["receipt"],"cost":7},{"id":"C9","requires":["auth"],"produces":["a","c","e"],"cost":11}]
+    Return {"cost":integer,"call_count":integer,"calls":[IDs in execution order]}.
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above; do not add prose.
+    Explicit JSON output contract (types only): {"cost": "number", "call_count": "number", "calls": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      cost: 17
+      call_count: 6
+      calls: [C0, C1, C2, C3, C6, C7]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/LiveBench/LiveBench'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  max_tokens: 65536
+  metadata:
+    family: R8A-S6-toolplan
+    cohort: rigorous-v9
+    original_anchor_id: S6-toolplan-01
+  rubric:
+  - {id: 'json:cost', weight: 1.0, group: cost, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:call_count', weight: 1.0, group: call_count, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:calls[0]', weight: 0.16666666666666666, group: calls, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:calls[1]', weight: 0.16666666666666666, group: calls, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:calls[2]', weight: 0.16666666666666666, group: calls, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:calls[3]', weight: 0.16666666666666666, group: calls, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:calls[4]', weight: 0.16666666666666666, group: calls, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:calls[5]', weight: 0.16666666666666666, group: calls, mandatory: true, critical: false, dimension: content}

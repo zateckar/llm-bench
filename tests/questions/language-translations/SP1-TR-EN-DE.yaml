@@ -1,0 +1,48 @@
+- id: SP1-TR-EN-DE
+  category: Language Translations
+  prompt: |-
+    Translate/review English into German. For EACH source passage choose ALL candidate translations that preserve its entire meaning: modality, negation, conditions, actors, quantities, and dates. Several phrasings may be faithful; do not reject synonyms or word order merely for style. Do not silently repair a candidate. Letters restart for each passage. Return an object with keys "1","2","3", each an alphabetically sorted array of accepted letters.
+
+    Passage 1 (English): The controller shall retain the last valid reading unless both sensors fail. Failure of one sensor alone must not erase that reading.
+    A. Die Steuerung muss den letzten gültigen Messwert behalten, es sei denn, beide Sensoren fallen aus. Der Ausfall nur eines Sensors darf diesen Messwert nicht löschen.
+    B. Die Steuerung darf den letzten gültigen Messwert behalten, wenn beide Sensoren ausfallen. Schon ein Ausfall muss ihn löschen.
+    C. Die Steuerung muss den letzten gültigen Messwert behalten, außer wenn beide Sensoren ausfallen. Ein einzelner Sensorausfall darf nicht zum Löschen dieses Werts führen.
+    D. Die Steuerung muss den letzten gültigen Messwert löschen, sobald mindestens ein Sensor ausfällt.
+
+    Passage 2 (English): Actual production was 1,200 units, 20% below the forecast, not 20% of it. The revised forecast applies from July onward only.
+    A. Die aktuelle Produktion betrug 1.200 Einheiten, also 20 % der Prognose. Die neue Prognose gilt rückwirkend ab Juni.
+    B. Die tatsächliche Produktion lag bei 1.200 Einheiten, 20 % unter der Prognose und nicht bei 20 % davon. Die revidierte Prognose gilt erst ab Juli.
+    C. Die tatsächliche Produktion lag bei 1.200 Einheiten, 20 % über der Prognose. Die neue Prognose gilt nur im Juli.
+    D. Tatsächlich wurden 1.200 Einheiten produziert, also 20 % weniger als prognostiziert, nicht 20 % der Prognose. Die überarbeitete Prognose gilt ausschließlich für die Zeit ab Juli.
+
+    Passage 3 (English): We cannot rule out a leak, but no leak has been confirmed. Do not describe the test as proving the system leak-free.
+    A. Wir können ein Leck ausschließen, obwohl es bestätigt wurde. Der Test beweist die Dichtheit.
+    B. Wir haben ein Leck bestätigt, aber es lässt sich nicht lokalisieren. Der Test beweist keine Dichtheit.
+    C. Ein Leck lässt sich nicht ausschließen, doch bislang wurde keines bestätigt. Stellen Sie den Test nicht als Beweis dafür dar, dass das System leckfrei ist.
+    D. Ein Leck ist unmöglich, aber noch nicht bestätigt. Beschreiben Sie den Test als Dichtheitsnachweis.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"1": {"array_items": "string"}, "2": {"array_items": "string"}, "3": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      '1': [A, C]
+      '2': [B, D]
+      '3': [C]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original parallel passages; semantic fidelity selection, not free-form fluency
+  description: 'English to German: all and only meaning-preserving translations, including alternative faithful
+    phrasings.'
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-TR-EN-DE
+    cohort: rigorous-v9
+    original_anchor_id: SP1-TR-EN-DE
+  rubric:
+  - {id: 'json:1[0]', weight: 0.5, group: '1', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:1[1]', weight: 0.5, group: '1', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:2[0]', weight: 0.5, group: '2', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:2[1]', weight: 0.5, group: '2', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:3[0]', weight: 1.0, group: '3', mandatory: true, critical: false, dimension: content}

@@ -1,0 +1,62 @@
+- id: AU2-05
+  category: Agentic Use Cases
+  prompt: |-
+    Order o-31 must now be cancelled. Completed evidence: reservation r-81 is active;
+    charge ch-19 for 7200 cents succeeded; the local charge call timed out, but a
+    later lookup confirmed success. Shipment creation failed with a documented
+    no-effect error and returned no shipment ID. No compensation has run.
+    Policy: cancel active reservations first; refund successful charges second;
+    mark the order cancelled last. Do not compensate operations that had no effect.
+    Tools and exact parameters:
+      cancel_reservation(reservation_id)
+      refund(charge_id, amount, key) -- key must be "refund:" followed by order ID
+      cancel_shipment(shipment_id)
+      charge(order_id, amount, key)
+      mark_order(order_id, state)
+    Assume all recovery calls succeed. Return JSON {"calls": [{"tool": name,
+    "args": object}, ...], "net_charged": final charged cents minus refunded cents}.
+
+    Explicit JSON output contract (types only): {"calls": "array (element types and order specified in task)", "net_charged": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      calls:
+      - tool: cancel_reservation
+        args:
+          reservation_id: r-81
+      - tool: refund
+        args:
+          charge_id: ch-19
+          amount: 7200
+          key: refund:o-31
+      - tool: mark_order
+        args:
+          order_id: o-31
+          state: cancelled
+      net_charged: 0
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: hard
+  source: challenge-v2
+  description: Saga compensation from observed effects rather than attempted calls
+  metadata:
+    family: R8A-AU2-05
+    cohort: rigorous-v9
+    original_anchor_id: AU2-05
+  rubric:
+  - {id: 'json:calls[0].tool', weight: 0.1111111111111111, group: calls, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:calls[0].args.reservation_id', weight: 0.1111111111111111, group: calls, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:calls[1].tool', weight: 0.1111111111111111, group: calls, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:calls[1].args.charge_id', weight: 0.1111111111111111, group: calls, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:calls[1].args.amount', weight: 0.1111111111111111, group: calls, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:calls[1].args.key', weight: 0.1111111111111111, group: calls, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:calls[2].tool', weight: 0.1111111111111111, group: calls, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:calls[2].args.order_id', weight: 0.1111111111111111, group: calls, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:calls[2].args.state', weight: 0.1111111111111111, group: calls, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:net_charged', weight: 1.0, group: net_charged, mandatory: true, critical: false, dimension: content}

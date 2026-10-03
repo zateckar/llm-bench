@@ -1,22 +1,62 @@
 {% extends "base.html" %}
-{% block title %}Run Benchmark - LLM Bench{% endblock %}
+{% block title %}{{ heading }} - LLM Bench{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl mx-auto space-y-6">
+<div class="max-w-3xl mx-auto space-y-6"
+     x-data="{
+        specTemplate: {{ spec_defaults | tojson | forceescape }},
+        runs: [],
+        scheduledAt: '',
+        initialSchedule: '',
+        initialOffset: null,
+        nextKey: 1,
+        init() {
+            const scheduled = {{ scheduled_utc | tojson | forceescape }};
+            if (scheduled) {
+                const date = new Date(scheduled);
+                this.scheduledAt = this.localInput(date);
+                this.initialSchedule = this.scheduledAt;
+                this.initialOffset = date.getTimezoneOffset();
+            }
+            const prefill = {{ prefill | tojson | forceescape }};
+            const source = prefill && prefill.length ? prefill : [this.specTemplate];
+            this.runs = source.map(s => this._newRun(s));
+        },
+        _newRun(src) {
+            const r = JSON.parse(JSON.stringify(src));
+            r._key = this.nextKey++;
+            return r;
+        },
+        setModel(run, el) {
+            const v = el.value;
+            run.model_id = v === '' ? null : parseInt(v, 10);
+        },
+        addRun() { if (this.runs.length < 50) this.runs.push(this._newRun(this.specTemplate)); },
+        localInput(date) {
+            return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        },
+        validateSchedule(el) {
+            const date = new Date(el.value);
+            const valid = !el.value || (!isNaN(date.getTime()) && this.localInput(date) === el.value);
+            el.setCustomValidity(valid ? '' : 'This local time does not exist in your timezone. Choose another time.');
+        },
+        timezoneOffset() {
+            if (this.scheduledAt === this.initialSchedule && this.initialOffset !== null) return String(this.initialOffset);
+            return this.scheduledAt ? String(new Date(this.scheduledAt).getTimezoneOffset()) : '';
+        },
+        removeRun(i) { if (this.runs.length > 1) this.runs.splice(i, 1); },
+        missingModelIndexes() {
+            return this.runs.map((r, i) => (r.model_id == null ? i + 1 : null)).filter(v => v !== null);
+        },
+        payload() { return JSON.stringify(this.runs.map(({_key, ...rest}) => rest)); }
+     }">
     <div>
-        <h1 class="text-2xl font-bold text-white">Run Benchmark</h1>
-        <p class="text-slate-400 mt-1">
-            Start a new benchmark run against an LLM model
-            {% if question_count %}&mdash; {{ question_count }} static questions, plus the generated tasks selected below{% endif %}
-        </p>
+        <h1 class="text-2xl font-bold text-white">{{ heading }}</h1>
+        <p class="text-slate-400 mt-1">Select a model and start now, or choose a start time. Add runs to compare several models. Runs execute one at a time, in the order listed.</p>
     </div>
 
-    {% if suite_error %}
-    <div class="card p-4 bg-red-900/20 border border-red-800/50">
-        <p class="text-sm font-medium text-red-400">The test suite failed to load</p>
-        <pre class="mt-2 text-xs text-slate-300 whitespace-pre-wrap">{{ suite_error }}</pre>
-    </div>
-    {% endif %}
+    <p class="text-sm text-slate-400">One fixed suite of {{ question_count }} questions with strict evaluations and partial-credit diagnostics. Includes interactive tasks and 8k / 32k context accuracy checks.</p>
+    {% if suite_error %}<p class="text-red-400">{{ suite_error }}</p>{% endif %}
 
     {% if not models %}
     <div class="card p-8 text-center">
@@ -24,273 +64,64 @@
         <a href="/admin/models" class="mt-3 inline-block text-sm text-blue-400 hover:text-blue-300">Add a model</a>
     </div>
     {% else %}
-    <form method="POST" action="/admin/run" class="card p-6 space-y-5"
-          x-data="{
-            perf: false,
-            context: false,
-            concurrency: '1,2,4,8',
-            contextSizes: '{{ default_context_sizes }}',
-            contextConcurrency: '4',
-            maxLevel: {{ max_concurrency }},
-            get levels() {
-                return this.concurrency.split(',')
-                    .map(p => parseInt(p.trim(), 10))
-                    .filter(n => Number.isInteger(n) && n >= 1 && n <= this.maxLevel)
-                    .filter((n, i, a) => a.indexOf(n) === i)
-                    .sort((a, b) => a - b);
-            },
-            get rejected() {
-                return this.concurrency.split(',').map(p => p.trim()).filter(p => p.length)
-                    .filter(p => {
-                        const n = parseInt(p, 10);
-                        return !Number.isInteger(n) || n < 1 || n > this.maxLevel;
-                    });
-            },
-            /* Mirrors PerfConfig.total_requests(): warm-up + latency + decode +
-               prefill + max(level * 2, 8) per level. */
-            get estimatedRequests() {
-                return 2 + 8 + 3 + 3 +
-                    this.levels.reduce((sum, n) => sum + Math.max(n * 2, 8), 0);
-            }
-          }">
-        <div>
-            <label class="block text-sm font-medium text-slate-300 mb-1">Model</label>
-            <select name="model_id" required class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
-                {% for model in models %}
-                <option value="{{ model.id }}">{{ model.name }} ({{ model.model_id }})</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <form method="POST" action="{{ action }}" class="space-y-5">
+        <div class="card p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-                <label class="block text-sm font-medium text-slate-300 mb-1">Category Filter</label>
-                <select name="category" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
-                    <option value="">All Categories</option>
-                    {% for category in categories %}
-                    <option value="{{ category }}">{{ category }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-1">Difficulty Filter</label>
-                <select name="difficulty" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
-                    <option value="">All Difficulties</option>
-                    {% for difficulty in difficulties %}
-                    <option value="{{ difficulty }}">{{ difficulty }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-1">Question Limit</label>
-                <input type="number" name="limit" value="0" min="0"
-                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                       placeholder="0 = no limit">
-                <p class="text-xs text-slate-500 mt-1">0 runs every matching question</p>
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-1">Concurrent Workers</label>
-                <input type="number" name="workers" value="1" min="1" max="16"
+                <label class="block text-sm font-medium text-slate-300 mb-1">Name (optional)</label>
+                <input type="text" name="name" value="{{ submission_name }}" placeholder="e.g. nightly sweep"
                        class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Schedule for (optional)</label>
+                <input type="datetime-local" name="scheduled_at" x-model="scheduledAt" @input="validateSchedule($el)"
+                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                <input type="hidden" name="tz_offset" :value="timezoneOffset()">
                 <p class="text-xs text-slate-500 mt-1">
-                    Above 1 the run finishes sooner, but per-question latency then includes
-                    server-side queueing. Use the performance suite for clean latency figures.
+                    Empty = start as soon as the queue is free. Enter the time in
+                    <span class="text-slate-300">your browser's local timezone</span>
+                    (<span x-text="'UTC offset ' + (-(parseInt(timezoneOffset()||0))/60) + 'h'"></span>);
+                    it is stored as UTC.
                 </p>
             </div>
         </div>
 
-        <fieldset class="card p-4 space-y-3">
-            <legend class="text-sm font-semibold text-white">Quality evaluation</legend>
-            <p class="text-xs text-slate-400">By default, add four generated reasoning families, three interactive tool tasks, and stronger code tests. Use the same seeds and settings for every model.</p>
-            <div class="grid grid-cols-2 gap-3">
-                <label class="text-sm text-slate-300">Question seeds
-                    <input name="suite_seeds" value="1729" required class="w-full bg-slate-800 rounded px-2 py-1" aria-label="Question seeds">
-                </label>
-                <label class="text-sm text-slate-300">Variant set
-                    <select name="suite_split" class="w-full bg-slate-800 rounded px-2 py-1">
-                        <option value="development">Development</option><option value="evaluation">Evaluation holdout</option>
-                    </select>
-                </label>
-                <label class="text-sm text-slate-300">Quality profile
-                    <select name="quality_profile" class="w-full bg-slate-800 rounded px-2 py-1">
-                        <option value="v6" selected>Frozen v6 anchor</option>
-                        <option value="hardening">v6 + hardening-v7 candidates</option>
-                        <option value="hardening-only">Hardening-v7 candidates only</option>
-                    </select>
-                    <span class="block text-xs text-slate-500 mt-1">Hardening profiles require fresh matched calibration; they do not alter historical v6 runs.</span>
-                </label>
-                <label class="text-sm text-slate-300">Variants per family and seed
-                    <input name="variants" type="number" min="1" max="10" value="1" class="w-full bg-slate-800 rounded px-2 py-1">
-                </label>
-                <label class="text-sm text-slate-300">Long-context accuracy sizes
-                    <input name="quality_context_sizes" placeholder="8192,32768,131072" class="w-full bg-slate-800 rounded px-2 py-1">
-                </label>
-                <label class="text-sm text-slate-300">Quality output token limit (including reasoning)
-                    <input name="quality_max_tokens" type="number" min="1024" max="{{ max_max_tokens }}" value="{{ default_max_tokens }}" class="w-full bg-slate-800 rounded px-2 py-1">
-                </label>
-                <label class="text-sm text-slate-300">Input $ / million tokens
-                    <input name="input_price" type="number" min="0" step="any" placeholder="Optional" class="w-full bg-slate-800 rounded px-2 py-1">
-                </label>
-                <label class="text-sm text-slate-300">Output $ / million tokens
-                    <input name="output_price" type="number" min="0" step="any" placeholder="Optional" class="w-full bg-slate-800 rounded px-2 py-1">
-                </label>
-            </div>
-            <p class="text-xs text-slate-500">Context sizes count cl100k_base tokens; reports also show the server's token count when available. Blank skips long-context accuracy tests. These add token spend separately from the performance sweep. Supply both prices to estimate cost.</p>
-            <label class="flex gap-2 text-sm text-slate-300"><input name="static_only" type="checkbox" value="1">Static suite only (disable generated reasoning, interactive tasks, and extra code tests)</label>
-        </fieldset>
-
-        <div class="border-t border-slate-700 pt-5 space-y-3">
-            <label class="flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" name="run_perf" value="1" x-model="perf"
-                       class="mt-1 rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-blue-500">
-                <span>
-                    <span class="text-sm font-medium text-slate-300">Also run the performance suite</span>
-                    <span class="block text-xs text-slate-500 mt-0.5">
-                        Measures latency distribution, time to first token, single-stream decode rate,
-                        prefill rate, and a concurrency sweep reporting aggregate throughput and error
-                        rate under load.
-                    </span>
-                </span>
-            </label>
-
-            <div x-show="perf" x-collapse>
-                <label class="block text-sm font-medium text-slate-300 mb-1">Concurrency Levels</label>
-                <input type="text" name="concurrency" x-model="concurrency"
-                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500">
-                <p class="text-xs text-slate-500 mt-1">
-                    Comma-separated, each between 1 and {{ max_concurrency }}. Include level 1 to get a
-                    scaling-efficiency figure &mdash; it is the baseline the others are compared against.
-                </p>
-
-                <div class="mt-2 flex flex-wrap items-center gap-2">
-                    <span class="text-xs text-slate-500">Presets:</span>
-                    {% for preset in concurrency_presets %}
-                    <button type="button" @click="concurrency = '{{ preset }}'"
-                            class="px-2 py-0.5 rounded text-xs font-mono bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors"
-                            :class="concurrency === '{{ preset }}' ? 'ring-1 ring-blue-500 text-blue-300' : ''">{{ preset }}</button>
-                    {% endfor %}
+        <template x-for="(run, i) in runs" :key="run._key">
+            <div class="card p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-semibold text-white">Run <span x-text="i + 1"></span></h2>
+                    <button type="button" x-show="runs.length > 1" @click="removeRun(i)"
+                            class="text-xs text-red-400 hover:text-red-300">Remove</button>
                 </div>
-
-                <p class="text-xs mt-2" :class="rejected.length ? 'text-amber-400' : 'text-slate-500'">
-                    <template x-if="rejected.length">
-                        <span>Ignoring <span x-text="rejected.join(', ')"></span> &mdash; outside 1&ndash;<span x-text="maxLevel"></span>. </span>
-                    </template>
-                    <span>
-                        Will measure <span class="text-slate-300" x-text="levels.length"></span> level(s)
-                        using about <span class="text-slate-300" x-text="estimatedRequests"></span> requests.
-                    </span>
-                </p>
-
-                <p x-show="levels.some(n => n > 64)" x-collapse
-                   class="text-xs text-amber-400/90 mt-2 rounded bg-amber-900/20 border border-amber-800/40 p-2">
-                    Above 64 in-flight requests the load generator's own thread scheduling and socket
-                    handling start to show up in the latency figures, so those rows are a lower bound on
-                    the endpoint's capacity rather than an exact measurement. The run also holds one
-                    socket per in-flight request, so make sure the host's file-descriptor limit allows it.
-                </p>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-700/60">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-sm font-medium text-slate-300 mb-1">Workload mix</label>
-                        <select name="workload_mix"
-                                class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
-                            <option value="uniform">Uniform (count-to-80 probes)</option>
-                            <option value="mixed">Realistic mix (chat / summarize / codegen)</option>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Model</label>
+                        <select x-model.number="run.model_id" @change="setModel(run, $el)" required
+                                class="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm">
+                            <option value="" selected disabled>Select a model</option>
+                            {% for model in models %}
+                            <option value="{{ model.id }}" :selected="run.model_id === {{ model.id }}">{{ model.name }} ({{ model.model_id }})</option>
+                            {% endfor %}
                         </select>
-                        <p class="text-xs text-slate-500 mt-1">Mixed models what an organisation actually sends, so per-task stats show which shape trips the SLO first.</p>
                     </div>
-                    <div class="flex items-start gap-3 pt-6">
-                        <input type="checkbox" name="shared_prefix" value="1" id="shared_prefix"
-                               class="mt-1 rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-blue-500">
-                        <label for="shared_prefix" class="text-sm text-slate-300 cursor-pointer">
-                            Shared prompt prefix
-                            <span class="block text-xs text-slate-500 mt-0.5">Reuse one preamble on every probe so prefix-caching stacks serve the way they will in production.</span>
-                        </label>
-                    </div>
+                    <div><label class="block text-xs text-slate-400">Mode</label><select x-model="run.mode" class="bg-slate-800 rounded px-3 py-2 w-full"><option value="both">Quality + performance</option><option value="quality">Quality</option><option value="performance">Performance</option></select></div>
+                    <div><label class="block text-xs text-slate-400">Maximum concurrency</label><input type="number" min="1" max="{{ max_concurrency }}" x-model.number="run.max_concurrency" class="bg-slate-800 rounded px-3 py-2 w-full" required></div>
                 </div>
-
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-700/60">
-                    <div>
-                        <label class="block text-xs font-medium text-slate-400 mb-1">p95 TTFT ≤ ms</label>
-                        <input type="number" name="slo_ttft_ms" value="{{ slo_defaults.ttft_ms }}" min="0" step="50"
-                               class="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-400 mb-1">Per-stream ≥ tok/s</label>
-                        <input type="number" name="slo_tps" value="{{ slo_defaults.tps }}" min="0" step="1"
-                               class="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-400 mb-1">Errors ≤ %</label>
-                        <input type="number" name="slo_errors" value="{{ slo_defaults.errors_pct }}" min="0" max="100" step="0.5"
-                               class="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-400 mb-1">Req / user / h</label>
-                        <input type="number" name="req_per_user_h" value="{{ slo_defaults.req_per_user_h }}" min="1"
-                               class="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500">
-                    </div>
-                </div>
-                <p class="text-xs text-slate-500 mt-1">SLO thresholds for the capacity verdict. A level fails when p95 time-to-first-token, per-stream decode, or error rate breaches its budget.</p>
+                <p class="text-xs text-slate-400">The full fixed quality suite uses up to four workers. Performance load levels are chosen automatically.</p>
             </div>
-        </div>
+        </template>
 
-        <div class="border-t border-slate-700 pt-5 space-y-3">
-            <label class="flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" name="run_context" value="1" x-model="context"
-                       class="mt-1 rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-blue-500">
-                <span>
-                    <span class="text-sm font-medium text-slate-300">Also run the context-length scalability sweep</span>
-                    <span class="block text-xs text-slate-500 mt-0.5">
-                        Measures time-to-first-token and latency at increasing prompt sizes so you can see
-                        where prefill cost and rate limits take over. Sizes below 192k get a small concurrent
-                        burst; larger sizes are sampled serially to keep token use bounded.
-                    </span>
-                </span>
-            </label>
+        <button type="button" @click="addRun()" :disabled="runs.length >= 50" class="btn-ghost w-full text-sm">+ Add another run</button>
 
-            <div x-show="context" x-collapse>
-                <label class="block text-sm font-medium text-slate-300 mb-1">Context sizes (tokens)</label>
-                <input type="text" name="context_sizes" x-model="contextSizes"
-                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500">
-                <p class="text-xs text-slate-500 mt-1">
-                    Comma-separated token counts. The default spans 32k&ndash;1M.
-                </p>
+        <p x-show="missingModelIndexes().length" class="text-sm text-amber-400 text-center">
+            Run <span x-text="missingModelIndexes().join(', ')"></span>
+            <span x-text="missingModelIndexes().length > 1 ? 'need' : 'needs'"></span> a model selected before submitting.
+        </p>
 
-                <div class="mt-3">
-                    <label class="block text-sm font-medium text-slate-300 mb-1">Concurrency levels</label>
-                    <input type="text" name="context_concurrency" x-model="contextConcurrency"
-                           class="w-40 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500">
-                    <p class="text-xs text-slate-500 mt-1">
-                        Comma-separated, each 1&ndash;64. A single value keeps the classic sweep: sizes below
-                        192k get one burst of max(concurrency, 3) probes and larger sizes one serial probe.
-                        Several values (e.g. <code>1,4,8</code>) measure every size at every level - a
-                        context &times; concurrency grid; levels on large sizes are clamped to 4.
-                    </p>
-                </div>
-            </div>
-        </div>
+        <input type="hidden" name="runs_json" :value="payload()">
 
-        <div class="border-t border-slate-700 pt-5">
-            <label class="block text-sm font-medium text-slate-300 mb-1">Schedule for later (optional)</label>
-            <input type="datetime-local" name="scheduled_at"
-                   class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
-            <p class="text-xs text-slate-500 mt-1">
-                Leave empty to start as soon as the queue is free. Scheduled runs execute one at a time,
-                in order &mdash; the time is the server's local time.
-            </p>
-        </div>
-
-        <button type="submit" class="btn-primary w-full" {% if suite_error %}disabled{% endif %}>Start Benchmark</button>
+        <button type="submit" class="btn-primary w-full" :disabled="missingModelIndexes().length > 0">{{ submit_label }}</button>
         <p class="text-xs text-slate-500 text-center">
-            If another benchmark is running, this run is queued and starts automatically when it finishes.
-            Group several runs with a schedule on the
-            <a href="/admin/plans/new" class="text-blue-400 hover:text-blue-300">plan builder</a>.
+            Runs join one queue and execute one at a time. Leave the start time empty to run as soon as the queue is free.
         </p>
     </form>
     {% endif %}

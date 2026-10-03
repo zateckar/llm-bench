@@ -1,0 +1,49 @@
+- id: SP1-LE-03
+  category: Legal
+  prompt: |-
+    US trademark screening exercise, evidence closed as of 2026-01-15.
+    Rules for this exercise: similarity of marks AND related goods/services create a
+    screening conflict, not a final adjudication. Nice class equality alone does not
+    prove relatedness; different classes do not rule it out. No search result does not
+    prove clearance. Stipulated evidence supplies similarity and relatedness separately.
+    Applicant NOVARA, vehicle diagnostic software, class 9. Search results:
+    T1 NOVARRA diagnostic SaaS class 42: similar sound; goods/services related by evidence.
+    T2 NOVARA industrial abrasive wheels class 7: identical mark; relatedness unknown.
+    T3 LUMEN desktop themes class 9: marks stipulated dissimilar; relatedness unknown.
+    T4 NOVARA downloadable vehicle diagnostic tools class 9: identical, related.
+    For T1..T4 classify as conflict, no_conflict_under_rules, or unresolved.
+    Also classify these assertions as supported, refuted, or unresolved:
+    A different classes exclude T1; B registration is guaranteed if T1 and T4 are removed;
+    C identical spelling by itself resolves T2 as a conflict;
+    D this screen establishes whether any unregistered user has priority.
+    Return {screen:[four classifications],assertions:[four classifications]}.
+    For B and D classify the claimed guarantee/establishment, not whether registration
+    will ultimately occur or whether an unregistered user actually exists.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"screen": {"array_items": "string"}, "assertions": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      screen: [conflict, unresolved, no_conflict_under_rules, conflict]
+      assertions: [refuted, refuted, refuted, refuted]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'USPTO likelihood of confusion: https://www.uspto.gov/trademarks/search/likelihood-confusion ; stipulated
+    screening rule'
+  description: Relatedness and similarity are separate; class shortcuts and guarantees exceed the evidence.
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-LE-03
+    cohort: rigorous-v9
+    original_anchor_id: SP1-LE-03
+  rubric:
+  - {id: 'json:screen[0]', weight: 0.25, group: screen, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:screen[1]', weight: 0.25, group: screen, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:screen[2]', weight: 0.25, group: screen, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:screen[3]', weight: 0.25, group: screen, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:assertions[0]', weight: 0.25, group: assertions, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:assertions[1]', weight: 0.25, group: assertions, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:assertions[2]', weight: 0.25, group: assertions, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:assertions[3]', weight: 0.25, group: assertions, mandatory: true, critical: false, dimension: content}

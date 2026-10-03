@@ -1,10 +1,4 @@
-"""Background benchmark runner for the web app.
-
-Runs in a daemon thread and writes progress and results straight to SQLite. It
-shares the request layer (``llm_client.ChatClient``) and the scoring rules
-(``models.Result``) with the CLI runner, so the two cannot drift apart in how
-latency is measured or how a pass is decided.
-"""
+"""One benchmark pipeline shared with the CLI; SQLite lifecycle for web runs."""
 
 from __future__ import annotations
 
@@ -12,91 +6,28 @@ import json
 import logging
 import re
 import sqlite3
-import sys
 import threading
 import time
-from dataclasses import replace
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Callable
 
-# Add the project root to sys.path so the shared benchmark modules import cleanly
-# whether the app is started from the repo root or from inside a container.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
-from llm_client import ChatClient, ClientConfig  # noqa: E402
-from models import LatencyStats, Question, Result  # noqa: E402
-from quality_suite import QualityConfig, assemble_questions, suite_hash as quality_suite_hash
-from quality_execution import execute_question
-from quality_report import make_report as make_quality_report, result_record
+from llm_client import ClientConfig
+from models import LatencyStats, Result
+from perf import DEFAULT_MAX_CONCURRENCY, PerfConfig, run_perf_suite
+from quality_execution import run_quality
+from quality_report import make_report as make_quality_report, result_record, summarize
+from quality_suite import MAX_OUTPUT_TOKENS, QUALITY_WORKERS, load_questions, provenance, suite_hash
 
 logger = logging.getLogger(__name__)
-
-# Generation settings for web-initiated runs. Deterministic decoding keeps runs
-# comparable; the perf suite deliberately re-measures with its own settings.
-DEFAULT_MAX_TOKENS = 4096
-DEFAULT_TEMPERATURE = 0.0
 REQUEST_TIMEOUT = 180.0
-MAX_WORKERS = 16
 
 
 def start_benchmark(
-    run_id: int,
-    model: dict,
-    category: str | None = None,
-    limit: int | None = None,
-    test_ids: list[str] | None = None,
-    difficulty: str | None = None,
-    workers: int = 1,
-    run_perf: bool = False,
-    concurrency_levels: tuple[int, ...] = (1, 2, 4, 8),
-    run_context: bool = False,
-    context_sizes: tuple[int, ...] = (),
-    context_concurrency: int | tuple[int, ...] = 4,
-    # None/empty keeps the PerfConfig default for each knob.
-    workload_mix: str = "uniform",
-    shared_prefix: bool = False,
-    slo_ttft_ms: float | None = None,
-    slo_tps: float | None = None,
-    slo_errors: float | None = None,
-    req_per_user_h: float | None = None,
-    on_finish: Callable[[int], None] | None = None,
-) -> None:
-    """Start a benchmark run in a background thread.
-
-    ``on_finish`` is called with the run id exactly once, from a finally in
-    the runner thread, so the queue dispatcher can start the next pending run.
-    """
-    thread = threading.Thread(
-        target=_run_benchmark,
-        args=(run_id, model, category, limit, test_ids, difficulty, workers,
-              run_perf, concurrency_levels, run_context, context_sizes,
-              context_concurrency,
-              workload_mix, shared_prefix, slo_ttft_ms, slo_tps,
-              slo_errors, req_per_user_h, on_finish),
-        daemon=True,
-    )
-    thread.start()
-
-
-def _coerce_context_levels(context_concurrency: int | tuple[int, ...]) -> tuple[int, ...]:
-    """Coerce the context-sweep concurrency argument into a level tuple.
-
-    Older callers pass a bare int, the run form now passes the parsed list;
-    both end up here, sorted and de-duplicated.
-    """
-    if isinstance(context_concurrency, (list, tuple)):
-        levels = [int(level) for level in context_concurrency]
-    else:
-        levels = [int(context_concurrency)]
-    return tuple(sorted({max(1, level) for level in levels}))
-
-
-# ---------------------------------------------------------------------------
-# Database helpers (each opens its own short-lived connection; sqlite3
-# connections must not be shared across threads)
-# ---------------------------------------------------------------------------
+    run_id, model, mode="both", max_concurrency=DEFAULT_MAX_CONCURRENCY, on_finish=None
+):
+    threading.Thread(
+        target=_run_benchmark, args=(run_id, model, mode, max_concurrency, on_finish), daemon=True
+    ).start()
 
 
 def _connect() -> sqlite3.Connection:
@@ -109,8 +40,12 @@ def _connect() -> sqlite3.Connection:
 
 
 def _update_progress(
-    run_id: int, current_test: str, index: int, total: int,
-    message: str = "", phase: str = "quality",
+    run_id: int,
+    current_test: str,
+    index: int,
+    total: int,
+    message: str = "",
+    phase: str = "quality",
 ) -> None:
     db = _connect()
     try:
@@ -144,13 +79,27 @@ def _store_result(run_id: int, index: int, result: Result) -> None:
                      WHERE id = ? AND status IN ('pending', 'running')
                 )""",
             (
-                run_id, q.id, q.category, q.prompt, result.response, result.score,
-                result.detail, q.evaluator, index,
-                result.tokens.prompt_tokens, result.tokens.completion_tokens,
+                run_id,
+                q.id,
+                q.category,
+                q.prompt,
+                result.response,
+                result.score,
+                result.detail,
+                q.evaluator,
+                index,
+                result.tokens.prompt_tokens,
+                result.tokens.completion_tokens,
                 1 if result.passed and result.is_scored else 0,
-                q.pass_threshold, q.difficulty, q.effective_weight,
-                result.metrics.latency_ms or None, result.metrics.ttft_ms,
-                1 if result.metrics.ok else 0, json.dumps(result_record(result)), int(result.is_scored), run_id,
+                q.pass_threshold,
+                q.difficulty,
+                q.effective_weight,
+                result.metrics.latency_ms or None,
+                result.metrics.ttft_ms,
+                1 if result.metrics.ok else 0,
+                json.dumps(result_record(result)),
+                int(result.is_scored),
+                run_id,
             ),
         )
         db.commit()
@@ -196,11 +145,27 @@ def _finish_run(
                       perf_json = ?
                 WHERE id = ? AND status IN ('pending', 'running')""",
             (
-                status, datetime.now(timezone.utc).isoformat(), total, scored, passed,
-                avg, weighted, errors, error_message, total_prompt, total_completion,
-                duration_ms, workers,
-                latency.p50, latency.p95, latency.p99, ttft.p50, ttft.p95, throughput,
-                perf_json, run_id,
+                status,
+                datetime.now(timezone.utc).isoformat(),
+                total,
+                scored,
+                passed,
+                avg,
+                weighted,
+                errors,
+                error_message,
+                total_prompt,
+                total_completion,
+                duration_ms,
+                workers,
+                latency.p50,
+                latency.p95,
+                latency.p99,
+                ttft.p50,
+                ttft.p95,
+                throughput,
+                perf_json,
+                run_id,
             ),
         )
         db.execute("DELETE FROM benchmark_progress WHERE run_id = ?", (run_id,))
@@ -217,6 +182,24 @@ def _mark_run_failed(run_id: int, message: str, workers: int = 1) -> None:
     """
     db = _connect()
     try:
+        # Answers are committed individually. Recover their summary even if
+        # report generation or the normal finalisation failed afterwards.
+        db.execute("BEGIN IMMEDIATE")
+        recorded, scored, passed, avg, weighted, errors, prompt, completion = db.execute(
+            """SELECT COUNT(*),
+                      COALESCE(SUM(COALESCE(quality_scored, request_ok)), 0),
+                      COALESCE(SUM(passed), 0),
+                      COALESCE(AVG(CASE WHEN COALESCE(quality_scored, request_ok) = 1
+                                        THEN score END), 0),
+                      COALESCE(SUM(CASE WHEN COALESCE(quality_scored, request_ok) = 1
+                                        THEN score * weight END) /
+                               NULLIF(SUM(CASE WHEN COALESCE(quality_scored, request_ok) = 1
+                                               THEN weight END), 0), 0),
+                      COUNT(*) - COALESCE(SUM(COALESCE(quality_scored, request_ok)), 0),
+                      COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0)
+                 FROM test_results WHERE run_id = ?""",
+            (run_id,),
+        ).fetchone()
         db.execute(
             """UPDATE test_runs
                   SET status = 'failed', completed_at = ?,
@@ -225,13 +208,24 @@ def _mark_run_failed(run_id: int, message: str, workers: int = 1) -> None:
                           THEN ?
                           ELSE error_message
                       END,
-                      workers = COALESCE(workers, ?)
+                      workers = COALESCE(workers, ?),
+                      total_questions = MAX(COALESCE(total_questions, 0), ?), scored_questions = ?,
+                      passed_questions = ?, avg_score = ?, weighted_score = ?, error_count = ?,
+                      total_prompt_tokens = ?, total_completion_tokens = ?
                 WHERE id = ? AND status IN ('pending', 'running')""",
             (
                 datetime.now(timezone.utc).isoformat(),
                 "",
                 message,
                 workers,
+                recorded,
+                scored,
+                passed,
+                avg,
+                weighted,
+                errors,
+                prompt,
+                completion,
                 run_id,
             ),
         )
@@ -287,447 +281,179 @@ def _build_client_config(model: dict) -> ClientConfig:
         base_url=model["base_url"],
         api_key=model["api_key"],
         model=model["model_id"],
-        max_tokens=DEFAULT_MAX_TOKENS,
-        temperature=DEFAULT_TEMPERATURE,
+        max_tokens=MAX_OUTPUT_TOKENS,
+        temperature=0,
+        seed=0,
         timeout=REQUEST_TIMEOUT,
         stream=True,
     )
 
 
-def _run_benchmark(
-    run_id: int,
-    model: dict,
-    category: str | None,
-    limit: int | None,
-    test_ids: list[str] | None,
-    difficulty: str | None,
-    workers: int,
-    run_perf: bool,
-    concurrency_levels: tuple[int, ...],
-    run_context: bool,
-    context_sizes: tuple[int, ...],
-    context_concurrency: int | tuple[int, ...],
-    workload_mix: str,
-    shared_prefix: bool,
-    slo_ttft_ms: float | None,
-    slo_tps: float | None,
-    slo_errors: float | None,
-    req_per_user_h: float | None,
-    on_finish: Callable[[int], None] | None,
-) -> None:
-    """Run a benchmark and make every unexpected failure terminal.
-
-    Keep this wrapper outside the implementation so failures during imports,
-    endpoint validation, suite hashing, or database setup cannot strand a run
-    in ``running`` before the implementation's more detailed guards begin.
-    ``on_finish`` fires exactly once no matter how the run ends, so the queue
-    dispatcher always gets its slot back.
-    """
+def _run_benchmark(run_id, model, mode, max_concurrency, on_finish: Callable[[int], None] | None):
+    workers = min(QUALITY_WORKERS, max_concurrency)
     try:
-        _run_benchmark_impl(
-            run_id, model, category, limit, test_ids, difficulty, workers,
-            run_perf, concurrency_levels, run_context, context_sizes,
-            context_concurrency, workload_mix, shared_prefix, slo_ttft_ms,
-            slo_tps, slo_errors, req_per_user_h,
-        )
-    except Exception as e:  # noqa: BLE001
-        logger.exception("Benchmark run %d failed outside the normal lifecycle", run_id)
-        _safe_mark_run_failed(run_id, str(e), workers)
+        _run_benchmark_impl(run_id, model, mode, max_concurrency)
+    except Exception as error:
+        logger.exception("Benchmark run %d failed", run_id)
+        _safe_mark_run_failed(run_id, str(error), workers)
     finally:
         if on_finish is not None:
             try:
                 on_finish(run_id)
-            except Exception:  # noqa: BLE001
-                logger.exception("on_finish callback failed for run %d", run_id)
+            except Exception:
+                logger.exception("Queue callback failed for run %d", run_id)
 
 
-def _run_benchmark_impl(
-    run_id: int,
-    model: dict,
-    category: str | None,
-    limit: int | None,
-    test_ids: list[str] | None,
-    difficulty: str | None,
-    workers: int,
-    run_perf: bool,
-    concurrency_levels: tuple[int, ...],
-    run_context: bool,
-    context_sizes: tuple[int, ...],
-    context_concurrency: int | tuple[int, ...],
-    workload_mix: str,
-    shared_prefix: bool,
-    slo_ttft_ms: float | None,
-    slo_tps: float | None,
-    slo_errors: float | None,
-    req_per_user_h: float | None,
-) -> None:
-    from app.config import TESTS_DIR
-    from app.services.url_guard import UnsafeURLError, validate_endpoint
-    from test_loader import SuiteError, load_profile_tests
+def _run_benchmark_impl(run_id, model, mode, max_concurrency):
+    from app.services.url_guard import validate_endpoint
 
-    workers = max(1, min(MAX_WORKERS, workers))
-
+    if mode not in {"both", "quality", "performance"}:
+        raise ValueError("Mode must be both, quality, or performance")
+    perf_config = PerfConfig(max_concurrency)
+    workers = min(QUALITY_WORKERS, max_concurrency)
     db = _connect()
     try:
         cursor = db.execute(
-                """UPDATE test_runs
-                  SET status = 'running', started_at = ?, workers = ?
-                WHERE id = ? AND status IN ('pending', 'running')""",
+            "UPDATE test_runs SET status='running',started_at=?,workers=? WHERE id=? AND status IN ('pending','running')",
             (datetime.now(timezone.utc).isoformat(), workers, run_id),
         )
         db.commit()
     finally:
         db.close()
-
-    # A stop request can win the race with a thread that has just been
-    # scheduled. Do not resurrect a terminal run as running.
     if cursor.rowcount != 1:
         return
-
-    empty = LatencyStats()
-
-    def fail(message: str) -> None:
-        try:
-            _finish_run(
-                run_id, total=0, scored=0, passed=0, avg=0.0, weighted=0.0, errors=0,
-                duration_ms=0.0, workers=workers, latency=empty, ttft=empty,
-                throughput=None, perf_json=None, error_message=message,
-            )
-        except Exception:  # noqa: BLE001
-            logger.exception("Normal failure finalisation failed for run %d", run_id)
-            _safe_mark_run_failed(run_id, message, workers)
-
-    # Validate the endpoint once, up front: a blocked URL should fail the run
-    # immediately rather than producing N identical per-question errors.
-    try:
-        validate_endpoint(model["base_url"])
-    except UnsafeURLError as e:
-        fail(f"Blocked endpoint: {e}")
-        return
-
-    try:
-        db = _connect()
-        try:
-            raw_options = db.execute("SELECT quality_config_json FROM test_runs WHERE id=?", (run_id,)).fetchone()[0]
-        finally:
-            db.close()
-        quality_config = QualityConfig.from_dict(json.loads(raw_options) if raw_options else {})
-        questions: list[Question] = assemble_questions(
-            load_profile_tests(
-                quality_config.profile,
-                TESTS_DIR,
-                split=quality_config.split,
-                variants=quality_config.variants,
-            ),
-            quality_config,
-        )
-    except SuiteError as e:
-        fail(f"Test suite is invalid: {e}")
-        return
-    except Exception as e:  # noqa: BLE001
-        logger.exception("Failed to load the test suite for run %d", run_id)
-        fail(f"Failed to load the test suite: {e}")
-        return
-
-    if not _run_is_active(run_id):
-        return
-
-    if test_ids:
-        wanted = set(test_ids)
-        questions = [q for q in questions if q.id in wanted]
-    else:
-        if category:
-            questions = [q for q in questions if q.category.lower() == category.lower()]
-        if difficulty:
-            questions = [q for q in questions if q.difficulty == difficulty.lower()]
-        if limit:
-            questions = questions[:limit]
-
-    if not questions:
-        fail("No questions matched the selected filters")
-        return
-
+    validate_endpoint(model["base_url"])
+    config = _build_client_config(model)
+    questions = load_questions() if mode != "performance" else []
     db = _connect()
     try:
-        db.execute("UPDATE test_runs SET test_suite_hash=? WHERE id=?", (quality_suite_hash(questions),run_id))
+        db.execute(
+            "UPDATE test_runs SET test_suite_hash=?,total_questions=?,quality_config_json=? WHERE id=? AND status='running'",
+            (
+                suite_hash(questions) if questions else None,
+                len(questions),
+                json.dumps(provenance()),
+                run_id,
+            ),
+        )
         db.commit()
     finally:
         db.close()
+    results, elapsed, message = [], 0.0, ""
+    if questions:
+        processed = 0
 
-    # A crash from here on must not leave the run in 'running' forever (the
-    # SSE progress loop would never terminate), so anything unexpected that
-    # escapes an inner guard fails the run loudly.
-    try:
-        total = len(questions)
-        config = _build_client_config(model)
-        results: list[Result | None] = [None] * total
-        completed = 0
-        progress_lock = threading.Lock()
-
-        _update_progress(run_id, "", 0, total, f"Loaded {total} questions", "quality")
-
-        def work(index: int, q: Question, client: ChatClient) -> None:
-            nonlocal completed
-            if not _run_is_active(run_id):
-                return
-            result = execute_question(q,client,cancelled=lambda:not _run_is_active(run_id))
+        def stored(index, result):
+            nonlocal processed
             if not _run_is_active(run_id):
                 return
             result.detail = _sanitize_error_detail(result.detail)
-            results[index] = result
             _store_result(run_id, index + 1, result)
-
-            with progress_lock:
-                completed += 1
-                _update_progress(
-                    run_id, f"{q.category}: {q.id}", completed, total,
-                    f"Ran {completed}/{total} questions", "quality",
-                )
-
-        started = time.perf_counter()
-        # Quality phase only; `config` is reused by the perf phase, which
-        # measures decode rate on deliberately repetitive prompts and must
-        # never have a generation cut short under it.
-        quality_config_client = replace(config, detect_repetition=True)
-        try:
-            if workers > 1:
-                with ThreadPoolExecutor(max_workers=workers) as pool:
-                    # One client per worker: requests.Session is not documented as
-                    # thread-safe, and sharing it would add contention to the very
-                    # latency numbers being recorded.
-                    local = threading.local()
-
-                    def job(idx: int, question: Question) -> None:
-                        client = getattr(local, "client", None)
-                        if client is None:
-                            client = ChatClient(quality_config_client)
-                            local.client = client
-                        work(idx, question, client)
-
-                    futures = [pool.submit(job, i, q) for i, q in enumerate(questions)]
-                    # job() writes the result row itself, so a worker exception
-                    # means a missing row; surface it by failing the run below.
-                    for future in futures:
-                        future.result()
-            else:
-                client = ChatClient(quality_config_client)
-                for i, q in enumerate(questions):
-                    if not _run_is_active(run_id):
-                        return
-                    work(i, q, client)
-        except Exception as e:  # noqa: BLE001
-            logger.exception("Benchmark run %d failed", run_id)
-            _summarise_and_finish(
-                run_id, results, total, workers,
-                (time.perf_counter() - started) * 1000.0, None, str(e),
+            processed += 1
+            _update_progress(
+                run_id,
+                f"{result.question.category}: {result.question.id}",
+                processed,
+                len(questions),
+                f"Recorded {processed}/{len(questions)} outcomes",
+                "quality",
             )
-            return
 
+        _update_progress(
+            run_id, "", 0, len(questions), f"Loaded {len(questions)} rigorous questions", "quality"
+        )
+        results, elapsed, message = run_quality(
+            questions,
+            config,
+            max_concurrency,
+            on_result=stored,
+            cancelled=lambda: not _run_is_active(run_id),
+        )
         if not _run_is_active(run_id):
             return
-
-        duration_ms = (time.perf_counter() - started) * 1000.0
-
-        perf_json: str | None = None
-        if run_perf:
-            if not _run_is_active(run_id):
-                return
-            perf_json = _run_perf_phase(
-                run_id, config, concurrency_levels,
-                workload_mix=workload_mix, shared_prefix=shared_prefix,
-                slo_ttft_ms=slo_ttft_ms, slo_tps=slo_tps,
-                slo_errors=slo_errors, req_per_user_h=req_per_user_h,
-            )
-
-        if run_context and context_sizes:
-            if not _run_is_active(run_id):
-                return
-            perf_json = _merge_context_phase(
-                run_id, config, context_sizes, context_concurrency, perf_json
-            )
-
-        if _run_is_active(run_id):
-            _summarise_and_finish(run_id, results, total, workers, duration_ms, perf_json, "")
-    except Exception as e:  # noqa: BLE001
-        logger.exception("Benchmark run %d failed", run_id)
-        fail(str(e))
-
-
-def _merge_context_phase(
-    run_id: int,
-    config: ClientConfig,
-    context_sizes: tuple[int, ...],
-    context_concurrency: int | tuple[int, ...],
-    perf_json: str | None,
-) -> str | None:
-    """Run the context-length sweep and merge the results into perf_json."""
-    from perf import ContextSweepConfig, run_context_sweep
-
-    levels = _coerce_context_levels(context_concurrency)
-    sweep = ContextSweepConfig(
-        context_sizes=tuple(sorted(set(context_sizes))),
-        # A single level keeps the pre-grid sweep exactly; only several levels
-        # turn it into a context x concurrency grid.
-        concurrency_per_size=levels[0],
-        concurrency_levels=levels if len(levels) > 1 else (),
-    )
-    expected = sweep.total_requests()
-    _update_progress(run_id, "", 0, expected, "Starting context scalability sweep", "context")
-
-    def progress(phase: str, done: int, total: int) -> None:
-        _update_progress(run_id, phase, done, total, f"Context sweep: {phase}", "context")
-
-    try:
-        points = run_context_sweep(config, sweep, progress=progress)
-    except Exception:  # noqa: BLE001
-        logger.exception("Context sweep failed for run %d", run_id)
-        points = None
-
-    base: dict = {}
-    if perf_json:
+        if not any(r.is_scored for r in results):
+            message = message or f"No questions could be scored ({len(results)} outcomes)."
+            if results:
+                message += " " + results[0].detail
+    perf_json = None
+    if mode != "quality" and not message and _run_is_active(run_id):
+        started = time.perf_counter()
         try:
-            parsed = json.loads(perf_json)
-            if isinstance(parsed, dict):
-                base = parsed
-        except json.JSONDecodeError:
-            logger.warning("perf_json for run %d was not valid JSON; replacing", run_id)
-
-    if points is None:
-        base.setdefault("context_sweep_error", "context sweep failed; see logs")
-        return json.dumps(base)
-
-    base["context_sweep"] = [p.to_dict() for p in points]
-    return json.dumps(base)
-
-
-def build_perf_config(
-    concurrency_levels: tuple[int, ...],
-    *,
-    workload_mix: str = "uniform",
-    shared_prefix: bool = False,
-    slo_ttft_ms: float | None = None,
-    slo_tps: float | None = None,
-    slo_errors: float | None = None,
-    req_per_user_h: float | None = None,
-):
-    """Assemble the PerfConfig the admin form describes.
-
-    Kept separate from the network phase so the form -> config wiring can be
-    tested without stubbing threads and sockets.
-    """
-    import perf
-    from perf import PerfConfig
-
-    kwargs: dict = {
-        "concurrency_levels": tuple(sorted(set(concurrency_levels))),
-        "shared_prefix": bool(shared_prefix),
-    }
-    if workload_mix and workload_mix != "uniform":
-        kwargs["workload_mix"] = perf.WORKLOAD_MIX
-    for key, value in (
-        ("slo_ttft_p95_ms", slo_ttft_ms),
-        ("slo_stream_tps_p50", slo_tps),
-        ("slo_error_rate", slo_errors),
-        ("requests_per_user_hour", req_per_user_h),
-    ):
-        if value is not None:
-            kwargs[key] = value
-    return PerfConfig(**kwargs)
-
-
-def _run_perf_phase(
-    run_id: int,
-    config: ClientConfig,
-    concurrency_levels: tuple[int, ...],
-    *,
-    workload_mix: str = "uniform",
-    shared_prefix: bool = False,
-    slo_ttft_ms: float | None = None,
-    slo_tps: float | None = None,
-    slo_errors: float | None = None,
-    req_per_user_h: float | None = None,
-) -> str | None:
-    """Run the performance suite, reporting progress. Never fails the whole run."""
-    from perf import run_perf_suite
-
-    perf_config = build_perf_config(
-        concurrency_levels,
-        workload_mix=workload_mix, shared_prefix=shared_prefix,
-        slo_ttft_ms=slo_ttft_ms, slo_tps=slo_tps,
-        slo_errors=slo_errors, req_per_user_h=req_per_user_h,
-    )
-    expected = perf_config.total_requests()
-    _update_progress(run_id, "", 0, expected, "Starting performance suite", "perf")
-
-    def progress(phase: str, done: int, total: int) -> None:
-        _update_progress(run_id, phase, done, total, f"Performance: {phase}", "perf")
-
-    try:
-        report = run_perf_suite(config, perf_config, progress=progress)
-    except Exception as e:  # noqa: BLE001
-        logger.exception("Performance suite failed for run %d", run_id)
-        # A perf failure must not discard the quality results already stored.
-        return json.dumps({"error": str(e)})
-    return json.dumps(report.to_dict())
+            report = run_perf_suite(
+                config,
+                perf_config,
+                progress=lambda phase, n, total: _update_progress(
+                    run_id, phase, n, total, f"{phase}: {n}/{total}", "perf"
+                ),
+                cancelled=lambda: not _run_is_active(run_id),
+            )
+            perf_json = json.dumps(report.to_dict())
+            if not any(p.requests > p.errors for p in report.concurrency):
+                message = "No performance requests completed successfully. " + " ".join(
+                    report.notes
+                )
+        except Exception as error:
+            logger.exception("Performance measurement failed for run %d", run_id)
+            message = f"Performance measurement failed: {error}"
+        if not questions:
+            elapsed = (time.perf_counter() - started) * 1000
+    if _run_is_active(run_id):
+        _summarise_and_finish(
+            run_id, results, len(questions), workers, elapsed, perf_json, message, config
+        )
 
 
 def _summarise_and_finish(
-    run_id: int,
-    results: list[Result | None],
-    total: int,
-    workers: int,
-    duration_ms: float,
-    perf_json: str | None,
-    error_message: str,
-) -> None:
+    run_id, results, total, workers, duration_ms, perf_json, error_message, client_config=None
+):
     done = [r for r in results if r is not None]
     scored = [r for r in done if r.is_scored]
-    passed = sum(1 for r in scored if r.passed)
-    errors = len(done) - len(scored)
-
-    avg = sum(r.score for r in scored) / len(scored) if scored else 0.0
-    total_weight = sum(r.question.effective_weight for r in scored)
-    weighted = (
-        sum(r.score * r.question.effective_weight for r in scored) / total_weight
-        if total_weight else 0.0
-    )
-
-    latency = LatencyStats.from_samples(
-        [r.metrics.latency_ms for r in scored if r.metrics.latency_ms]
-    )
-    ttft = LatencyStats.from_samples(
-        [r.metrics.ttft_ms for r in scored if r.metrics.ttft_ms is not None]
-    )
+    passed = sum(r.passed for r in scored)
+    avg = summarize([result_record(r) for r in done])["category_balanced"] or 0.0
+    if done:
+        try:
+            if client_config is None:
+                db = _connect()
+                try:
+                    model = db.execute(
+                        "SELECT m.model_id FROM test_runs r JOIN models m ON r.model_id=m.id WHERE r.id=?",
+                        (run_id,),
+                    ).fetchone()[0]
+                finally:
+                    db.close()
+                client_config = ClientConfig(
+                    "", "", model, max_tokens=MAX_OUTPUT_TOKENS, temperature=0, seed=0
+                )
+            report = make_quality_report(done, client_config)
+            avg = report["summary"]["category_balanced"] or 0.0
+            db = _connect()
+            try:
+                db.execute(
+                    "UPDATE test_runs SET quality_json=? WHERE id=? AND status IN ('pending','running')",
+                    (json.dumps(report), run_id),
+                )
+                db.commit()
+            finally:
+                db.close()
+        except Exception as error:
+            logger.exception("Quality report generation failed for run %d", run_id)
+            error_message = f"{error_message} Quality report generation failed: {error}".strip()
     output_tokens = sum(r.tokens.completion_tokens for r in scored)
-    throughput = output_tokens / (duration_ms / 1000.0) if duration_ms else None
-
-    db = _connect()
-    try:
-        row = db.execute("SELECT tr.quality_config_json, tr.test_suite_hash, m.model_id FROM test_runs tr "
-                         "JOIN models m ON m.id=tr.model_id WHERE tr.id=?", (run_id,)).fetchone()
-        if row:
-            options = QualityConfig.from_dict(json.loads(row[0]) if row[0] else {})
-            config = ClientConfig(base_url='',api_key='',model=row[2],max_tokens=DEFAULT_MAX_TOKENS,
-                                  temperature=DEFAULT_TEMPERATURE)
-            report = make_quality_report(done,options,config,row[1])
-            db.execute("UPDATE test_runs SET quality_json=? WHERE id=?",(json.dumps(report),run_id))
-            db.commit()
-    finally:
-        db.close()
-
     _finish_run(
         run_id,
         total=total,
         scored=len(scored),
         passed=passed,
         avg=avg,
-        weighted=weighted,
-        errors=errors,
+        weighted=avg,
+        errors=sum(r.outcome in {"endpoint_error", "unsupported_context"} for r in done),
         duration_ms=duration_ms,
         workers=workers,
-        latency=latency,
-        ttft=ttft,
-        throughput=throughput,
+        latency=LatencyStats.from_samples([r.metrics.latency_ms for r in scored]),
+        ttft=LatencyStats.from_samples(
+            [r.metrics.ttft_ms for r in scored if r.metrics.ttft_ms is not None]
+        ),
+        throughput=output_tokens * 1000 / duration_ms if duration_ms and done else None,
         perf_json=perf_json,
-        error_message=error_message,
+        error_message=_sanitize_error_detail(error_message),
     )

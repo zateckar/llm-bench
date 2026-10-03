@@ -1,0 +1,31 @@
+- id: MR2-05
+  category: Mathematical Reasoning
+  prompt: |-
+    Let S contain integers n from 1 through 5000 satisfying n mod 12 = 5,
+    n mod 18 = 11, and gcd(n,35)=1.
+    Return JSON {"count": |S|, "sum": sum of S, "smallest": min S, "largest": max S}.
+
+    Explicit JSON output contract (types only): {"count": "number", "sum": "number", "smallest": "number", "largest": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      count: 96
+      sum: 240240
+      smallest: 29
+      largest: 4997
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Non-coprime congruences plus coprimality filtering
+  max_tokens: 8192
+  metadata:
+    family: R8A-MR2-05
+    cohort: rigorous-v9
+    original_anchor_id: MR2-05
+  rubric:
+  - {id: 'json:count', weight: 1.0, group: count, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:sum', weight: 1.0, group: sum, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:smallest', weight: 1.0, group: smallest, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:largest', weight: 1.0, group: largest, mandatory: true, critical: false, dimension: content}

@@ -5,10 +5,9 @@ request code, which meant retry behaviour and (now) timing measurement could
 drift between them. Everything goes through :class:`ChatClient` so latency is
 measured the same way no matter who is calling.
 
-Streaming is used when available because it is the only way to separate
-*time to first token* (prefill + queueing) from *decode throughput*. When the
-server does not support streaming - or the caller opts out - only end-to-end
-latency is reported and ``ttft_ms`` stays ``None``.
+Streaming exposes time to first delivered content or reasoning. Provider
+buffering affects these observations. Without streaming only end-to-end
+latency is available and ``ttft_ms`` stays ``None``.
 """
 
 from __future__ import annotations
@@ -67,7 +66,7 @@ def distinct_ngram_ratio(
     words = text[-window:].split()
     if len(words) < n * 4:
         return 1.0
-    grams = [tuple(words[i:i + n]) for i in range(len(words) - n + 1)]
+    grams = [tuple(words[i : i + n]) for i in range(len(words) - n + 1)]
     return len(set(grams)) / len(grams)
 
 
@@ -146,20 +145,37 @@ class ChatClient:
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
-        return self.complete_messages(messages, max_tokens=max_tokens, stream=stream, retries=retries)
+        return self.complete_messages(
+            messages, max_tokens=max_tokens, stream=stream, retries=retries
+        )
 
     def complete_messages(
-        self, messages: list[dict], *, max_tokens: int | None = None,
-        stream: bool | None = None, retries: int | None = None,
+        self,
+        messages: list[dict],
+        *,
+        max_tokens: int | None = None,
+        stream: bool | None = None,
+        retries: int | None = None,
     ) -> tuple[str, TokenUsage, RequestMetrics]:
         """Continue a bounded conversation; callers own and retain its history."""
         cfg = self.config
         attempts_allowed = max(1, cfg.max_retries if retries is None else retries)
 
         last_error = "unknown error"
+        request_started = time.perf_counter()
+
+        def failed(attempts: int) -> tuple[str, TokenUsage, RequestMetrics]:
+            return self._error(
+                last_error,
+                attempts,
+                latency_ms=(time.perf_counter() - request_started) * 1000.0,
+            )
+
         for attempt in range(attempts_allowed):
             started = time.perf_counter()
             self._last_finish_reason = None
+            self._stream_chunks = 0
+            self._stream_span_ms = None
             # Recomputed per attempt: a fallback branch below may clear the
             # capability flags, and the next retry must honour that instead
             # of re-sending the payload that was just rejected.
@@ -187,11 +203,7 @@ class ChatClient:
                     logger.info("Endpoint rejected stream_options; disabling it")
                     self._stream_usage_supported = False
                     continue
-                if (
-                    e.status in (400, 404, 501)
-                    and want_stream
-                    and "stream" in e.body.lower()
-                ):
+                if e.status in (400, 404, 501) and want_stream and "stream" in e.body.lower():
                     # Only an endpoint actually complaining about streaming
                     # should turn streaming off for good; an unrelated 400 is
                     # just a request error.
@@ -201,17 +213,17 @@ class ChatClient:
                 if not e.retryable:
                     # A permanent 4xx (401, 403, 413, ...) will fail the same
                     # way on every attempt, so don't pay the backoff.
-                    return self._error(last_error, attempt + 1)
+                    return failed(attempt + 1)
                 if attempt < attempts_allowed - 1:
                     self._sleep_backoff(attempt, last_error)
                     continue
-                return self._error(last_error, attempt + 1)
+                return failed(attempt + 1)
             except Exception as e:  # noqa: BLE001 - transport errors of any kind
                 last_error = f"{type(e).__name__}: {e}"
                 if attempt < attempts_allowed - 1:
                     self._sleep_backoff(attempt, last_error)
                     continue
-                return self._error(last_error, attempt + 1)
+                return failed(attempt + 1)
 
             latency_ms = (time.perf_counter() - started) * 1000.0
             metrics = RequestMetrics(
@@ -225,10 +237,13 @@ class ChatClient:
                 cached_tokens=usage.cached_tokens,
                 finish_reason=self._last_finish_reason,
                 prompt_tokens_estimated=usage.prompt_tokens_estimated,
+                completion_tokens_estimated=usage.completion_tokens_estimated,
+                stream_chunks=self._stream_chunks,
+                stream_span_ms=self._stream_span_ms,
             )
             return text, usage, metrics
 
-        return self._error(last_error, attempts_allowed)
+        return failed(attempts_allowed)
 
     # -- internals ----------------------------------------------------------
 
@@ -277,6 +292,7 @@ class ChatClient:
             usage.prompt_tokens_estimated = True
         if not usage.completion_tokens and text:
             usage.completion_tokens = _estimate_tokens(text)
+            usage.completion_tokens_estimated = True
         return text, usage, None
 
     def _stream_once(
@@ -306,6 +322,7 @@ class ChatClient:
         looped = False
         ttft: float | None = None
         delta_count = 0
+        first_arrival = last_arrival = None
         usage = TokenUsage()
 
         try:
@@ -360,6 +377,10 @@ class ChatClient:
                     else:
                         continue
 
+                    arrival = time.perf_counter()
+                    if first_arrival is None:
+                        first_arrival = arrival
+                    last_arrival = arrival
                     if not self.config.detect_repetition:
                         continue
                     generated.append(piece)
@@ -376,7 +397,9 @@ class ChatClient:
                         logger.info(
                             "Stopping a looping generation after %d chars "
                             "(distinct %d-gram ratio %.3f < %.2f)",
-                            generated_chars, REPETITION_NGRAM, ratio,
+                            generated_chars,
+                            REPETITION_NGRAM,
+                            ratio,
                             self.config.repetition_threshold,
                         )
                         # Overrides any finish_reason the server has sent:
@@ -394,27 +417,35 @@ class ChatClient:
             reasoning = "".join(reasoning_chunks).strip()
             text = f"<think>{reasoning}</think>" if reasoning else ""
         if not usage.completion_tokens:
-            # Most servers emit one token per delta; fall back to that, then to
-            # a character-based estimate. Marked as an estimate by the caller.
-            usage.completion_tokens = delta_count or _estimate_tokens(text)
+            # SSE events can contain many tokens. Estimate from all delivered
+            # text instead of treating one event as one token.
+            usage.completion_tokens = _estimate_tokens("".join(chunks + reasoning_chunks))
+            usage.completion_tokens_estimated = True
         if not usage.prompt_tokens:
             usage.prompt_tokens_estimated = True
-            usage.prompt_tokens = _estimate_tokens(
-                "".join(m.get("content", "") for m in messages)
-            )
+            usage.prompt_tokens = _estimate_tokens("".join(m.get("content", "") for m in messages))
+        self._stream_chunks = delta_count
+        self._stream_span_ms = (
+            (last_arrival - first_arrival) * 1000 if first_arrival is not None else None
+        )
         return text, usage, ttft
 
     def _sleep_backoff(self, attempt: int, reason: str) -> None:
-        wait = self.config.retry_delay * (2 ** attempt)
+        wait = self.config.retry_delay * (2**attempt)
         logger.info("Request failed (%s); retrying in %.0fs", reason, wait)
         time.sleep(wait)
 
     @staticmethod
-    def _error(message: str, attempts: int) -> tuple[str, TokenUsage, RequestMetrics]:
+    def _error(
+        message: str,
+        attempts: int,
+        *,
+        latency_ms: float = 0.0,
+    ) -> tuple[str, TokenUsage, RequestMetrics]:
         return (
             f"[API ERROR: {message}]",
             TokenUsage(),
-            RequestMetrics(ok=False, error=message, attempts=attempts),
+            RequestMetrics(ok=False, error=message, attempts=attempts, latency_ms=latency_ms),
         )
 
 
@@ -463,9 +494,7 @@ def _extract_message_text(choices: list[dict]) -> str:
         content = f"<think>{reasoning}</think>" if reasoning else ""
     if isinstance(content, list):
         # Some gateways return content as a list of parts.
-        content = "".join(
-            part.get("text", "") for part in content if isinstance(part, dict)
-        )
+        content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
     return (content or "").strip()
 
 

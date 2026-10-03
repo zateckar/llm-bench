@@ -1,0 +1,47 @@
+- id: TU2-05
+  category: Tool Using
+  prompt: |-
+    Job j8 was ALREADY submitted. Current integer clock is 100. The most recent
+    poll ALREADY returned 429 with retry_after=6 seconds measured from time 100.
+    Tools: wait_until(time), poll_job(job), fetch_result(job,token), submit_job(spec).
+    Policy forbids early polling or submitting duplicates. At the first allowed
+    poll the response will be {"state":"complete","result_token":"rt4"}.
+    Fetch the result as soon as allowed; no further polls are needed.
+
+    This is an offline planning exercise, not a request to call real tools.
+    Return ONLY a JSON array of the required REMAINING calls in execution order,
+    each {"tool": "name", "args": {exact parameter names and values}}. Do not
+    repeat completed calls, add explanations, or include unnecessary calls.
+
+    Explicit JSON output contract (types only): "array (element types and order specified in task)"
+  evaluator: json_match
+  expected:
+    value:
+    - tool: wait_until
+      args:
+        time: 106
+    - tool: poll_job
+      args:
+        job: j8
+    - tool: fetch_result
+      args:
+        job: j8
+        token: rt4
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: hard
+  source: challenge-v2
+  description: Retry-After handling and asynchronous job-state branching
+  metadata:
+    family: R8A-TU2-05
+    cohort: rigorous-v9
+    original_anchor_id: TU2-05
+  rubric:
+  - {id: 'json:[0].tool', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[0].args.time', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].tool', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].args.job', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[2].tool', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[2].args.job', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[2].args.token', weight: 0.14285714285714285, group: answer, mandatory: true, critical: false, dimension: content}

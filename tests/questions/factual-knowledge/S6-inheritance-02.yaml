@@ -1,0 +1,57 @@
+- id: S6-inheritance-02
+  category: Factual Knowledge
+  prompt: |-
+    Apply the stipulated linked-locus inheritance model, with no outside population assumptions.
+    Parent 1 haplotypes are AB/ab and recombination probability is 18/100. Parent 2 haplotypes
+    are Ab/aB and recombination probability is 30/100. Each parent's two parental gametes
+    each have probability (1-r)/2; the other two gametes each have probability r/2. Gametes
+    from different parents are independent. At locus A, AA offspring survive with probability
+    1/3; Aa and aa survive with probability 1. No other viability selection occurs.
+    Among survivors phenotype is white if aa (regardless of B), dark if at least one A AND at
+    least one B, light otherwise. A double heterozygote has Aa AND Bb, irrespective of phase.
+    Return survival (probability an offspring survives), phenotypes (dark/light/white conditional
+    on survival), and double_heterozygote_given_dark (conditional on surviving AND being dark).
+    Every probability must be an exact reduced [numerator,denominator] pair with positive
+    denominator. Distinguish preselection probabilities from conditional survivor frequencies.
+    Return only one JSON object with exactly the requested keys. Arrays have the order specified above; do not add prose.
+    Explicit JSON output contract (types only): {"survival": {"array_items": "number"}, "phenotypes": {"dark": {"array_items": "number"}, "light": {"array_items": "number"}, "white": {"array_items": "number"}}, "double_heterozygote_given_dark": {"array_items": "number"}}
+    phenotypes is an object with keys dark,light,white; each value is a reduced [numerator,denominator] pair.
+  evaluator: json_match
+  expected:
+    value:
+      survival: [5, 6]
+      phenotypes:
+        dark: [499, 1000]
+        light: [201, 1000]
+        white: [3, 10]
+      double_heterozygote_given_dark: [1116, 2495]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: 'Original stretch-v6; design inspiration: https://github.com/google-deepmind/bbeh'
+  description: Compositional task with an executable oracle; difficulty needs fresh calibration.
+  max_tokens: 65536
+  metadata:
+    family: R8A-S6-inheritance
+    cohort: rigorous-v9
+    original_anchor_id: S6-inheritance-02
+  rubric:
+  - {id: 'json:survival[0]', weight: 0.5, group: survival, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:survival[1]', weight: 0.5, group: survival, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:phenotypes.dark[0]', weight: 0.16666666666666666, group: phenotypes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:phenotypes.dark[1]', weight: 0.16666666666666666, group: phenotypes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:phenotypes.light[0]', weight: 0.16666666666666666, group: phenotypes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:phenotypes.light[1]', weight: 0.16666666666666666, group: phenotypes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:phenotypes.white[0]', weight: 0.16666666666666666, group: phenotypes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:phenotypes.white[1]', weight: 0.16666666666666666, group: phenotypes, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:double_heterozygote_given_dark[0]', weight: 0.5, group: double_heterozygote_given_dark, mandatory: true,
+    critical: false, dimension: content}
+  - {id: 'json:double_heterozygote_given_dark[1]', weight: 0.5, group: double_heterozygote_given_dark, mandatory: true,
+    critical: false, dimension: content}

@@ -1,0 +1,50 @@
+- id: AU2-02
+  category: Agentic Use Cases
+  prompt: |-
+    A breaker starts closed with zero consecutive failures. In closed state, a
+    success resets that counter; three consecutive admitted failures open it for
+    5 seconds. Requests at times strictly before the open-until time are skipped
+    and have no effect. At or after that time the first request is a half-open
+    probe: success closes/reset; failure reopens for 5 seconds from probe time.
+    Requests and their outcomes IF admitted (time, S=success/F=failure):
+    (0,F),(1,F),(2,S),(3,F),(4,F),(5,F),(7,S),(10,F),(11,S),
+    (15,S),(16,F),(17,F),(18,S). Outcomes are instantaneous.
+    Return JSON with admitted and skipped (arrays of times in request order), state after the last
+    request (closed/open), and consecutive_failures after the last request.
+
+    Explicit JSON output contract (types only): {"admitted": {"array_items": "number"}, "skipped": {"array_items": "number"}, "state": "string", "consecutive_failures": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      admitted: [0, 1, 2, 3, 4, 5, 10, 15, 16, 17, 18]
+      skipped: [7, 11]
+      state: closed
+      consecutive_failures: 0
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Circuit-breaker replay with half-open probes and exact cooldown boundaries
+  max_tokens: 8192
+  metadata:
+    family: R8A-AU2-02
+    cohort: rigorous-v9
+    original_anchor_id: AU2-02
+  rubric:
+  - {id: 'json:admitted[0]', weight: 0.09090909090909091, group: admitted, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:admitted[1]', weight: 0.09090909090909091, group: admitted, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:admitted[2]', weight: 0.09090909090909091, group: admitted, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:admitted[3]', weight: 0.09090909090909091, group: admitted, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:admitted[4]', weight: 0.09090909090909091, group: admitted, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:admitted[5]', weight: 0.09090909090909091, group: admitted, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:admitted[6]', weight: 0.09090909090909091, group: admitted, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:admitted[7]', weight: 0.09090909090909091, group: admitted, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:admitted[8]', weight: 0.09090909090909091, group: admitted, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:admitted[9]', weight: 0.09090909090909091, group: admitted, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:admitted[10]', weight: 0.09090909090909091, group: admitted, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:skipped[0]', weight: 0.5, group: skipped, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:skipped[1]', weight: 0.5, group: skipped, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:state', weight: 1.0, group: state, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:consecutive_failures', weight: 1.0, group: consecutive_failures, mandatory: true, critical: false,
+    dimension: content}

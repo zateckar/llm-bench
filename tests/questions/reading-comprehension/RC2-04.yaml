@@ -1,0 +1,36 @@
+- id: RC2-04
+  category: Reading Comprehension
+  prompt: |-
+    A store starts with 37 sellable units and no reservations. In chronological
+    order: receive 18 sellable units; reserve 20; ship 12 of those reserved units;
+    cancel reservations for 3 unshipped units; receive 7 returned units, of which
+    only 4 pass inspection and enter sellable stock (the other 3 never enter it);
+    remove 6 damaged units from the unreserved sellable stock; reserve 9 more units.
+    Reserving/cancelling changes reservations, not physical stock. Shipping reduces
+    both. Available equals physical sellable stock minus outstanding reservations.
+    Return JSON with physical_sellable, reserved, available, and damaged_removed
+    (only the units removed from stock, excluding returns rejected at inspection).
+
+    Explicit JSON output contract (types only): {"physical_sellable": "number", "reserved": "number", "available": "number", "damaged_removed": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      physical_sellable: 41
+      reserved: 14
+      available: 27
+      damaged_removed: 6
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: hard
+  source: challenge-v2
+  description: Separate physical stock, reservations, returns, and availability
+  metadata:
+    family: R8A-RC2-04
+    cohort: rigorous-v9
+    original_anchor_id: RC2-04
+  rubric:
+  - {id: 'json:physical_sellable', weight: 1.0, group: physical_sellable, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:reserved', weight: 1.0, group: reserved, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:available', weight: 1.0, group: available, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:damaged_removed', weight: 1.0, group: damaged_removed, mandatory: true, critical: false, dimension: content}

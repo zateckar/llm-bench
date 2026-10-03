@@ -1,0 +1,26 @@
+- id: MR2-08
+  category: Mathematical Reasoning
+  prompt: |-
+    Paths on the integer grid go from (0,0) to (7,6) using only steps (1,0) and (0,1).
+    A path must never visit (2,2), (3,4), or (5,3), must visit (4,2), and must satisfy
+    y <= x+1 at every visited point, including endpoints.
+    Return JSON {"paths": number of valid paths}.
+
+    Explicit JSON output contract (types only): {"paths": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      paths: 126
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Lattice-path counting with a corridor, obstacles, and waypoint
+  max_tokens: 8192
+  metadata:
+    family: R8A-MR2-08
+    cohort: rigorous-v9
+    original_anchor_id: MR2-08
+  rubric:
+  - {id: 'json:paths', weight: 1.0, group: paths, mandatory: true, critical: false, dimension: content}

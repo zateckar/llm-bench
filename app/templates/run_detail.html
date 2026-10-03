@@ -23,7 +23,7 @@
 
     {% if request.query_params.get('error') == 'rerun-running' %}
     <div class="p-3 bg-amber-900/50 border border-amber-700 rounded-lg text-amber-200 text-sm">
-        This run is still active; wait until it finishes before re-running errored questions.
+        This run is still active; wait until it finishes before running it again.
     </div>
     {% endif %}
 
@@ -38,14 +38,14 @@
         <div class="ml-auto flex items-center gap-3">
             <a href="/runs/{{ run.id }}/report.html" class="btn-primary" download>Download HTML</a>
             {% if run.status == 'completed' %}
+            {% if run.total_questions == 0 %}
+            <span class="badge-pass rounded px-3 py-1">Performance complete</span>
+            {% elif run.scored_questions == 0 %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-fail">No scored answers</span>
+            {% else %}
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-pass"
                   title="A question passes only when it reaches its own pass threshold, so partial credit never counts as a pass.">
-                {{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }} passed · {{ "%.1f"|format(run.avg_score * 100) }}% all-item average
-            </span>
-            {% if run.weighted_score %}
-            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-slate-800 text-slate-300"
-                  title="Average score weighted by question difficulty (easy 1.0, medium 1.5, hard 2.0, expert 3.0).">
-                {{ "%.1f"|format(run.weighted_score * 100) }}% weighted
+                {{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }} passed · {{ "%.1f"|format(run.avg_score * 100) }}% {{ "strict task success" if quality and quality.schema_version == 3 else "historical average" }}
             </span>
             {% endif %}
             {% if run.error_count %}
@@ -61,16 +61,9 @@
             {% else %}
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-pending">Pending</span>
             {% endif %}
-            {# Only infrastructure failures are re-runnable; a wrong answer is a result. #}
-            {% set rerunnable = (evaluator_errors|length) + (transport_errors|length) %}
-            {% if rerunnable and user and user.role == 'admin' %}
-            <form method="POST" action="/runs/{{ run.id }}/rerun-failed" class="inline"
-                  x-data
-                  x-on:submit.prevent="if(confirm('Re-run {{ rerunnable }} question(s) that failed for infrastructure reasons?')) $el.submit()">
-                <button type="submit" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-900/50 text-amber-400 hover:bg-amber-900/70 transition-colors">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                    Re-run Errored ({{ rerunnable }})
-                </button>
+            {% if run.status in ('completed', 'failed') and user and user.role == 'admin' %}
+            <form method="POST" action="/runs/{{ run.id }}/rerun">
+                <button type="submit" class="btn-ghost">Run again</button>
             </form>
             {% endif %}
             {% if run.status in ('running', 'pending') and user and user.role == 'admin' %}
@@ -106,338 +99,27 @@
         </div>
         <div class="card p-4">
             <p class="text-xs text-slate-500 uppercase tracking-wider">Error</p>
-            <p class="text-sm text-slate-300 mt-1 truncate">{{ run.error_message or 'None' }}</p>
+            <p class="text-sm text-slate-300 mt-1 break-words">{{ run.error_message or 'None' }}</p>
         </div>
     </div>
 
+    {% if run.status in ('completed', 'failed') and run.scored_questions == 0 and transport_errors %}
+    <div class="p-4 bg-amber-900/50 border border-amber-700 rounded-lg text-amber-200 text-sm space-y-2">
+        <p>No quality score is available. {{ transport_errors|length }} question requests failed at the endpoint.</p>
+        <p class="break-words">{{ transport_errors[0].detail }}</p>
+    </div>
+    {% endif %}
+
+    {% if quality and quality.schema_version != 3 %}<p class="text-sm text-amber-400">Historical evaluation protocol. Run the current complete suite for comparable strict scores.</p>{% endif %}
     {% include "quality_summary.html" %}
 
-    <!-- Performance measured while running the questions -->
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <div class="card p-4">
-            <p class="text-xs text-slate-500 uppercase tracking-wider">Wall Clock</p>
-            <p class="text-sm text-slate-300 mt-1">{{ ms(run.duration_ms) }}</p>
-            <p class="text-xs text-slate-500">{{ run.workers or 1 }} worker{{ 's' if (run.workers or 1) != 1 }}</p>
-        </div>
-        <div class="card p-4">
-            <p class="text-xs text-slate-500 uppercase tracking-wider">Latency p50</p>
-            <p class="text-sm text-slate-300 mt-1">{{ ms(run.latency_p50_ms) }}</p>
-        </div>
-        <div class="card p-4">
-            <p class="text-xs text-slate-500 uppercase tracking-wider">Latency p95</p>
-            <p class="text-sm text-slate-300 mt-1">{{ ms(run.latency_p95_ms) }}</p>
-        </div>
-        <div class="card p-4">
-            <p class="text-xs text-slate-500 uppercase tracking-wider">Latency p99</p>
-            <p class="text-sm text-slate-300 mt-1">{{ ms(run.latency_p99_ms) }}</p>
-        </div>
-        <div class="card p-4">
-            <p class="text-xs text-slate-500 uppercase tracking-wider">TTFT p50</p>
-            <p class="text-sm text-slate-300 mt-1">{{ ms(run.ttft_p50_ms) }}</p>
-            <p class="text-xs text-slate-500">p95 {{ ms(run.ttft_p95_ms) }}</p>
-        </div>
-        <div class="card p-4">
-            <p class="text-xs text-slate-500 uppercase tracking-wider">Run Throughput</p>
-            <p class="text-sm text-slate-300 mt-1">{{ rate(run.output_tokens_per_sec, 'tok/s') }}</p>
-            <p class="text-xs text-slate-500">output tokens / wall clock</p>
-        </div>
-    </div>
-
-    {% if perf %}
-    <!-- Dedicated performance suite -->
-    <div class="card p-5 space-y-5">
-        <div class="flex items-baseline justify-between">
-            <h2 class="text-lg font-semibold text-white">Performance Suite</h2>
-            {% if perf.streaming is defined %}
-            <span class="text-xs {% if perf.streaming %}text-slate-500{% else %}text-amber-400{% endif %}">
-                {% if perf.streaming %}streaming enabled{% else %}streaming unavailable &mdash; TTFT not measurable{% endif %}
-            </span>
-            {% endif %}
-        </div>
-
-        {% if perf.error %}
-        <p class="text-sm text-red-400">The performance suite did not complete: {{ perf.error }}</p>
-        {% else %}
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div>
-                <p class="text-xs text-slate-500 uppercase tracking-wider">Decode</p>
-                <p class="text-sm text-slate-200 mt-1">{{ rate(perf.decode_tokens_per_sec, 'tok/s') }}</p>
-                <p class="text-xs text-slate-500">single stream</p>
-            </div>
-            <div>
-                <p class="text-xs text-slate-500 uppercase tracking-wider">Prefill</p>
-                <p class="text-sm text-slate-200 mt-1">{{ rate(perf.prefill_tokens_per_sec, 'tok/s') }}</p>
-                <p class="text-xs text-slate-500">from TTFT on a long prompt</p>
-            </div>
-            <div>
-                <p class="text-xs text-slate-500 uppercase tracking-wider">Peak Output</p>
-                <p class="text-sm text-slate-200 mt-1">{{ rate(perf.peak_output_tokens_per_sec, 'tok/s') }}</p>
-                <p class="text-xs text-slate-500">aggregate under load</p>
-            </div>
-            <div>
-                <p class="text-xs text-slate-500 uppercase tracking-wider">Peak Rate</p>
-                <p class="text-sm text-slate-200 mt-1">{{ rate(perf.peak_requests_per_sec, 'req/s') }}</p>
-            </div>
-            <div>
-                <p class="text-xs text-slate-500 uppercase tracking-wider">Saturates At</p>
-                <p class="text-sm text-slate-200 mt-1">
-                    {% if perf.saturation_concurrency %}c = {{ perf.saturation_concurrency }}{% else %}n/a{% endif %}
-                </p>
-                <p class="text-xs text-slate-500">beyond this, latency only</p>
-            </div>
-            <div>
-                <p class="text-xs text-slate-500 uppercase tracking-wider">Scaling</p>
-                <p class="text-sm text-slate-200 mt-1">
-                    {% if perf.scaling_efficiency is not none %}{{ "%.0f%%"|format(perf.scaling_efficiency * 100) }}{% else %}n/a{% endif %}
-                </p>
-                <p class="text-xs text-slate-500">of linear at max c</p>
-            </div>
-            <div>
-                <p class="text-xs text-slate-500 uppercase tracking-wider">Serves</p>
-                <p class="text-sm text-slate-200 mt-1">
-                    {% if perf.slo_capacity is not none %}
-                        c = {{ perf.slo_capacity }}
-                        {% if perf.capacity_users %} &middot; ~{{ "%.0f"|format(perf.capacity_users) }} users{% endif %}
-                    {% else %}n/a{% endif %}
-                </p>
-                <p class="text-xs text-slate-500">within SLO</p>
-            </div>
-            {% if perf.cache_probe is defined and perf.cache_probe %}
-            {% set cp = perf.cache_probe %}
-            <div>
-                <p class="text-xs text-slate-500 uppercase tracking-wider">Prefix Cache</p>
-                <p class="text-sm text-slate-200 mt-1">
-                    {% if cp.cache_hit_ratio is not none %}{{ "%.0f%%"|format(cp.cache_hit_ratio * 100) }} hits
-                    {%- elif cp.ttft_speedup is not none %}{{ "%.1f"|format(cp.ttft_speedup) }}x TTFT
-                    {%- else %}measured{% endif %}
-                </p>
-                <p class="text-xs text-slate-500">
-                    {% if cp.ttft_speedup is not none and cp.cache_hit_ratio is not none %}{{ "%.1f"|format(cp.ttft_speedup) }}x TTFT
-                    {%- endif %}
-                    {% if cp.prefill_gain is not none %} &middot; {{ "%.1f"|format(cp.prefill_gain) }}x prefill{% endif %}
-                    {%- if cp.prompt_tokens %} &middot; {{ "{:,}".format(cp.prompt_tokens) }} tok{% endif %}
-                </p>
-                {% if cp.notes %}
-                <p class="text-xs text-amber-400/80 mt-1">{{ cp.notes | join(' ') }}</p>
-                {% endif %}
-            </div>
-            {% endif %}
-        </div>
-
-        {% if perf.slo_capacity is not none %}
-        <div class="rounded-lg bg-emerald-900/20 border border-emerald-800/40 p-3 flex flex-wrap items-baseline gap-x-6 gap-y-1">
-            <p class="text-sm text-emerald-300 font-medium">
-                Meets SLO up to concurrency {{ perf.slo_capacity }}
-                {%- if perf.capacity_users %} &middot; ~{{ "%.0f"|format(perf.capacity_users) }} active users{% endif %}
-            </p>
-            <p class="text-xs text-slate-400">
-                SLO:
-                {%- if perf.slo_ttft_p95_ms and perf.slo_ttft_p95_ms > 0 %} p95 TTFT &le; {{ "%.0f"|format(perf.slo_ttft_p95_ms) }} ms{% endif -%}
-                {%- if perf.slo_stream_tps_p50 and perf.slo_stream_tps_p50 > 0 %} &middot; per-stream decode &ge; {{ "%.1f"|format(perf.slo_stream_tps_p50) }} tok/s{% endif -%}
-                {%- if perf.slo_error_rate and perf.slo_error_rate > 0 %} &middot; errors &le; {{ "%.0f%%"|format(perf.slo_error_rate * 100) }}{% endif -%}
-                {%- if perf.requests_per_user_hour %} &middot; {{ "%.0f"|format(perf.requests_per_user_hour) }} req/user/h{% endif %}
-            </p>
-        </div>
-        {% endif %}
-
-        <div>
-            <h3 class="text-sm font-medium text-slate-300 mb-2">Single-stream latency distribution</h3>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr>
-                            <th class="text-left">Metric</th><th class="text-left">n</th>
-                            <th class="text-left">Mean</th><th class="text-left">p50</th>
-                            <th class="text-left">p90</th><th class="text-left">p95</th>
-                            <th class="text-left">p99</th><th class="text-left">Max</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for label, stats in [('End-to-end', perf.serial_latency), ('Time to first token', perf.serial_ttft)] %}
-                        {% if stats %}
-                        <tr>
-                            <td class="text-slate-300">{{ label }}</td>
-                            <td class="text-slate-400">{{ stats.count }}</td>
-                            <td class="text-slate-400">{{ ms(stats.mean_ms) }}</td>
-                            <td class="text-slate-200">{{ ms(stats.p50_ms) }}</td>
-                            <td class="text-slate-400">{{ ms(stats.p90_ms) }}</td>
-                            <td class="text-slate-200">{{ ms(stats.p95_ms) }}</td>
-                            <td class="text-slate-400">{{ ms(stats.p99_ms) }}</td>
-                            <td class="text-slate-400">{{ ms(stats.max_ms) }}</td>
-                        </tr>
-                        {% endif %}
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        {% if perf.concurrency %}
-        <div>
-            <h3 class="text-sm font-medium text-slate-300 mb-2">Concurrency sweep</h3>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr>
-                            <th class="text-left">Concurrency</th><th class="text-left">Requests</th>
-                            <th class="text-left">Errors</th><th class="text-left">Req/s</th>
-                            <th class="text-left">Aggregate tok/s</th><th class="text-left">Per-stream tok/s</th>
-                            <th class="text-left">p50 latency</th>
-                            <th class="text-left">p95 latency</th><th class="text-left">p50 TTFT</th>
-                            <th class="text-left">SLO</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for point in perf.concurrency %}
-                        <tr>
-                            <td class="text-slate-200 font-mono">
-                                {{ point.concurrency }}
-                                {%- if point.concurrency > 64 %}
-                                <span class="text-amber-400 cursor-help"
-                                      title="Above 64 in-flight requests the load generator contributes to the measured latency; treat this row as a lower bound on capacity.">*</span>
-                                {%- endif %}
-                            </td>
-                            <td class="text-slate-400">{{ point.requests }}</td>
-                            <td class="{% if point.errors %}text-red-400{% else %}text-slate-500{% endif %}">
-                                {{ point.errors }} ({{ "%.0f%%"|format(point.error_rate * 100) }})
-                            </td>
-                            <td class="text-slate-300">{{ "%.2f"|format(point.requests_per_sec) }}</td>
-                            <td class="text-slate-200">{{ "%.1f"|format(point.output_tokens_per_sec) }}</td>
-                            <td class="text-slate-300">
-                                {% if point.stream_tps and point.stream_tps.p50_ms is not none %}
-                                    {{ "%.1f"|format(point.stream_tps.p50_ms) }}
-                                {% else %}-{% endif %}
-                            </td>
-                            <td class="text-slate-300">{{ ms(point.latency.p50_ms) }}</td>
-                            <td class="text-slate-300">{{ ms(point.latency.p95_ms) }}</td>
-                            <td class="text-slate-400">{{ ms(point.ttft.p50_ms) }}</td>
-                            <td>
-                                {% set ttft_ok = (not perf.slo_ttft_p95_ms or perf.slo_ttft_p95_ms <= 0
-                                                 or (point.ttft.p95_ms is not none and point.ttft.p95_ms <= perf.slo_ttft_p95_ms)) %}
-                                {% set tps_ok = (not perf.slo_stream_tps_p50 or perf.slo_stream_tps_p50 <= 0
-                                                or (point.stream_tps and point.stream_tps.p50_ms is not none and point.stream_tps.p50_ms >= perf.slo_stream_tps_p50)) %}
-                                {% set err_ok = (not perf.slo_error_rate or perf.slo_error_rate <= 0
-                                                or point.error_rate <= perf.slo_error_rate) %}
-                                {% if ttft_ok and tps_ok and err_ok %}
-                                    <span class="text-emerald-400" title="meets every enabled SLO criterion">meets</span>
-                                {% else %}
-                                    <span class="text-red-400" title="{% if not ttft_ok %}p95 TTFT over budget; {% endif %}{% if not tps_ok %}per-stream decode below budget; {% endif %}{% if not err_ok %}error rate above budget{% endif %}">fails</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <div style="position: relative; height: 220px;" class="mt-4"><canvas id="concurrencyChart"></canvas></div>
-        </div>
-        {% endif %}
-
-        {% if perf.notes %}
-        <div class="rounded-lg bg-amber-900/20 border border-amber-800/40 p-3">
-            <p class="text-xs font-medium text-amber-400 mb-1">Measurement notes</p>
-            <ul class="text-xs text-slate-300 space-y-1 list-disc list-inside">
-                {% for note in perf.notes %}<li>{{ note }}</li>{% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-        {% endif %}
-    </div>
-    {% endif %}
-
-    {% if context_points %}
-    <!-- Context-length scalability: one point per (prompt size, concurrency
-         level) grid cell. Skipped sizes (endpoint refused the prompt) render
-         as a table row, not a chart point. -->
-    <div class="card p-5 space-y-5">
-        <div class="flex items-baseline justify-between">
-            <h2 class="text-lg font-semibold text-white">Context Scalability</h2>
-            <span class="text-xs text-slate-500">one probe set per context size and concurrency level</span>
-        </div>
-
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead>
-                    <tr>
-                        <th class="text-left">Context</th><th class="text-left">Concurrency</th>
-                        <th class="text-left">Probes</th><th class="text-left">Errors</th>
-                        <th class="text-left">p50 latency</th><th class="text-left">p95 latency</th>
-                        <th class="text-left">TTFT mean</th><th class="text-left">Prefill tok/s</th>
-                        <th class="text-left" title="TTFT on a repeated identical prompt (cache warm)">Warm TTFT</th>
-                        <th class="text-left" title="Prefill rate on the warm repeat">Warm prefill tok/s</th>
-                        <th class="text-left" title="Server-reported prefix-cache hit tokens">Cached tok</th>
-                        <th class="text-left" title="Output tokens over total wall time; includes long-context prefill, so it is not the model's decode rate">Probe output tok/s</th><th class="text-left">Note</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {# Points arrive sorted by (size, level); a top-of-group row
-                       restarts the visual band so the levels of one size read
-                       as a block. #}
-                    {% set ns = namespace(last_size=none) %}
-                    {% for point in context_points %}
-                    <tr class="{% if point.skipped %}text-slate-500 italic{% endif %}">
-                        <td class="{% if point.skipped %}text-slate-500{% elif ns.last_size == point.context_tokens %}text-slate-600{% else %}text-slate-200 font-medium{% endif %}">
-                            {{ "{:,}".format(point.context_tokens) }}
-                        </td>
-                        {% set ns.last_size = point.context_tokens %}
-                        <td>
-                            {% if point.skipped %}-{% else %}{{ point.concurrency }}{% endif %}
-                        </td>
-                        <td class="text-slate-400">{{ point.requests }}</td>
-                        <td class="{% if point.errors %}text-red-400{% else %}text-slate-500{% endif %}">
-                            {% if point.skipped %}-{% else %}{{ point.errors }}{% endif %}
-                        </td>
-                        <td>{% if point.skipped %}-{% else %}{{ ms(point.latency.p50_ms) }}{% endif %}</td>
-                        <td>{% if point.skipped %}-{% else %}{{ ms(point.latency.p95_ms) }}{% endif %}</td>
-                        <td>{% if point.skipped %}-{% else %}{{ ms(point.ttft.mean_ms) }}{% endif %}</td>
-                        <td>{% if point.skipped %}-{% else %}{{ rate(point.prompt_tokens_per_sec, 'tok/s') }}{% endif %}</td>
-                        <td>{%- if point.skipped -%}-
-                            {%- elif point.warm_ttft is defined and point.warm_ttft.mean_ms is not none -%}
-                                {{ ms(point.warm_ttft.mean_ms) }}
-                            {%- else -%}-{%- endif -%}</td>
-                        <td>{%- if point.skipped -%}-
-                            {%- elif point.warm_prompt_tokens_per_sec is defined and point.warm_prompt_tokens_per_sec is not none -%}
-                                {{ rate(point.warm_prompt_tokens_per_sec, 'tok/s') }}
-                            {%- else -%}-{%- endif -%}</td>
-                        <td>{%- if point.skipped -%}-
-                            {%- elif point.cached_tokens -%}
-                                {{ "{:,}".format(point.cached_tokens) }}
-                            {%- else -%}-{%- endif -%}</td>
-                        <td>{% if point.skipped %}-{% else %}{{ rate(point.output_tokens_per_sec, 'tok/s') }}{% endif %}</td>
-                        <td class="text-slate-500 text-xs">
-                            {{ point.skip_reason if point.skipped else (point.notes | join('; ') if point.notes else '') }}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <div style="position: relative; height: 240px;"><canvas id="contextChart"></canvas></div>
-        <div style="position: relative; height: 220px;"><canvas id="contextPrefillChart"></canvas></div>
-    </div>
-    {% endif %}
-
-    {% if difficulty_rows %}
-    <div class="card p-5">
-        <h2 class="text-lg font-semibold text-white mb-3">By Difficulty</h2>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {% for row in difficulty_rows %}
-            <div class="rounded-lg bg-slate-800/50 p-3">
-                <p class="text-xs text-slate-500 uppercase tracking-wider">{{ row.difficulty }}</p>
-                <p class="text-lg font-semibold text-slate-200 mt-1">{{ row.passed }}/{{ row.scored if row.scored is not none else row.total }}</p>
-                <p class="text-xs text-slate-500">{{ "%.0f%%"|format((row.avg_score or 0) * 100) }} average score</p>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
+    {% if perf %}<div class="card p-5">{% include "performance_report.html" %}</div>{% endif %}
 
     {% if transport_errors %}
     <div class="card p-5 bg-amber-900/20 border border-amber-800/50">
         <h2 class="text-lg font-semibold text-amber-400 mb-2">Infrastructure Errors ({{ transport_errors|length }})</h2>
         <p class="text-sm text-slate-400 mb-3">
-            These requests never reached the model, so they are excluded from the scores above rather
-            than counted as wrong answers.
+            These outcomes could not be evaluated. Coverage and sensitivity bounds are shown above.
         </p>
         <div class="space-y-2">
             {% for r in transport_errors %}
@@ -455,7 +137,7 @@
     <!-- Evaluator Errors -->
     <div class="card p-5 bg-red-900/20 border border-red-800/50">
         <h2 class="text-lg font-semibold text-red-400 mb-3">Evaluator Errors ({{ evaluator_errors|length }})</h2>
-        <p class="text-sm text-slate-400 mb-3">These questions had errors during evaluation. Use "Re-run Errored" to retry them.</p>
+        <p class="text-sm text-slate-400 mb-3">These questions had errors during evaluation. Fix the evaluator before running the complete suite again.</p>
         <div class="space-y-2">
             {% for r in evaluator_errors %}
             <div class="flex items-center gap-3 px-3 py-2 rounded bg-slate-900/50">
@@ -509,7 +191,6 @@
                             <p class="font-medium text-slate-200">{{ cat.category }}</p>
                             <p class="text-xs text-slate-500">
                                 {{ cat.passed }}/{{ cat.scored if cat.scored is not none else cat.total }} passed
-                                {%- if cat.weighted_score is not none %} &middot; {{ "%.0f%%"|format(cat.weighted_score * 100) }} weighted{% endif %}
                                 {%- if cat.avg_latency_ms %} &middot; {{ ms(cat.avg_latency_ms) }} avg latency{% endif %}
                             </p>
                         </div>
@@ -678,178 +359,6 @@
         }
     });
 
-    {% if perf and perf.concurrency %}
-    // Throughput against latency across the concurrency sweep. The point where the
-    // throughput line flattens while the latency line keeps climbing is the
-    // saturation point.
-    const concCtx = document.getElementById('concurrencyChart').getContext('2d');
-    new Chart(concCtx, {
-        type: 'line',
-        data: {
-            labels: {{ perf.concurrency | map(attribute='concurrency') | list | tojson }},
-            datasets: [
-                {
-                    label: 'Output tokens/s (aggregate)',
-                    data: {{ perf.concurrency | map(attribute='output_tokens_per_sec') | list | tojson }},
-                    borderColor: 'rgba(16, 185, 129, 0.9)',
-                    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                    yAxisID: 'y',
-                    tension: 0.25,
-                },
-                {
-                    label: 'Per-stream decode (tok/s)',
-                    data: {{ perf.concurrency | map(attribute='stream_tps') | map(attribute='p50_ms') | list | tojson }},
-                    borderColor: 'rgba(59, 130, 246, 0.9)',
-                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                    borderDash: [5, 4],
-                    yAxisID: 'y',
-                    tension: 0.25,
-                },
-                {
-                    label: 'p95 latency (ms)',
-                    data: {{ perf.concurrency | map(attribute='latency') | map(attribute='p95_ms') | list | tojson }},
-                    borderColor: 'rgba(234, 179, 8, 0.9)',
-                    backgroundColor: 'rgba(234, 179, 8, 0.15)',
-                    yAxisID: 'y1',
-                    tension: 0.25,
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            scales: {
-                x: {
-                    title: { display: true, text: 'Concurrency', color: '#94a3b8' },
-                    grid: { color: 'rgba(148, 163, 184, 0.1)' },
-                    ticks: { color: '#94a3b8' }
-                },
-                y: {
-                    position: 'left',
-                    title: { display: true, text: 'tokens/s', color: '#10b981' },
-                    grid: { color: 'rgba(148, 163, 184, 0.1)' },
-                    ticks: { color: '#94a3b8' },
-                    beginAtZero: true
-                },
-                y1: {
-                    position: 'right',
-                    title: { display: true, text: 'ms', color: '#eab308' },
-                    grid: { drawOnChartArea: false },
-                    ticks: { color: '#94a3b8' },
-                    beginAtZero: true
-                }
-            },
-            plugins: { legend: { labels: { color: '#94a3b8' } } }
-        }
-    });
-    {% endif %}
-    {% if context_points and context_points | selectattr('skipped', 'equalto', false) | list %}
-    // TTFT, latency and prefill rate against the input context size, one series
-    // per concurrency level. A grid run measures each size at several levels;
-    // a size missing from a level's series (skipped, or not probed) is a null,
-    // and spanGaps bridges it rather than dropping the line to zero. The kink
-    // in any line is the point where prefill cost starts to dominate.
-    const cp = {{ context_points | selectattr('skipped', 'equalto', false) | list | tojson }};
-    const ctxSizes = [...new Set(cp.map(p => p.context_tokens))].sort((a, b) => a - b);
-    const ctxLevels = [...new Set(cp.map(p => p.concurrency))].sort((a, b) => a - b);
-    const ctxValueByCell = new Map(cp.map(p => [p.context_tokens + ':' + p.concurrency, p]));
-    const ctxSeriesFor = level => ctxSizes.map(s => ctxValueByCell.get(s + ':' + level) || null);
-    // Distinct colour per level; more than six levels cycle hues instead of
-    // reusing a colour the legend cannot tell apart.
-    const ctxColours = ['#3b82f6', '#10b981', '#eab308', '#ef4444', '#a78bfa', '#f472b6'];
-    const ctxColourFor = i => ctxColours[i % ctxColours.length];
-    const rgba = (hex, alpha) => {
-        const n = parseInt(hex.slice(1), 16);
-        return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-    };
-    const ctxTick = { color: '#94a3b8', callback: v => (v >= 1e6 ? (v / 1e6) + 'M' : (v / 1e3) + 'k') };
-    const ctxXScale = {
-        title: { display: true, text: 'Context size (tokens)', color: '#94a3b8' },
-        grid: { color: 'rgba(148, 163, 184, 0.1)' },
-        ticks: ctxTick
-    };
-
-    // Chart 1: timing, left axis in ms. TTFT per level is always shown; the
-    // p50 latency series start off as legend-toggles (hidden) so a wide grid
-    // stays readable until the operator opts in.
-    new Chart(document.getElementById('contextChart').getContext('2d'), {
-        type: 'line',
-        data: {
-            labels: ctxSizes,
-            datasets: ctxLevels.flatMap((level, i) => [
-                {
-                    label: 'TTFT c=' + level,
-                    data: ctxSeriesFor(level).map(p => p ? p.ttft.mean_ms : null),
-                    borderColor: rgba(ctxColourFor(i), 0.9),
-                    backgroundColor: rgba(ctxColourFor(i), 0.15),
-                    yAxisID: 'y',
-                    tension: 0.25,
-                    spanGaps: true,
-                },
-                {
-                    label: 'p50 c=' + level,
-                    data: ctxSeriesFor(level).map(p => p ? p.latency.p50_ms : null),
-                    borderColor: rgba(ctxColourFor(i), 0.9),
-                    backgroundColor: rgba(ctxColourFor(i), 0.15),
-                    borderDash: [5, 4],
-                    yAxisID: 'y',
-                    tension: 0.25,
-                    spanGaps: true,
-                    hidden: true,
-                }
-            ])
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            scales: {
-                x: ctxXScale,
-                y: {
-                    position: 'left',
-                    title: { display: true, text: 'ms', color: '#3b82f6' },
-                    grid: { color: 'rgba(148, 163, 184, 0.1)' },
-                    ticks: { color: '#94a3b8' },
-                    beginAtZero: true
-                }
-            },
-            plugins: { legend: { labels: { color: '#94a3b8' } } }
-        }
-    });
-
-    // Chart 2: server-side ingestion rate per level. Prefill throughput is
-    // derived from TTFT, so a null TTFT leaves a gap here too.
-    new Chart(document.getElementById('contextPrefillChart').getContext('2d'), {
-        type: 'line',
-        data: {
-            labels: ctxSizes,
-            datasets: ctxLevels.map((level, i) => ({
-                label: 'Prefill tok/s c=' + level,
-                data: ctxSeriesFor(level).map(p => p ? p.prompt_tokens_per_sec : null),
-                borderColor: rgba(ctxColourFor(i), 0.9),
-                backgroundColor: rgba(ctxColourFor(i), 0.15),
-                tension: 0.25,
-                spanGaps: true,
-            }))
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            scales: {
-                x: ctxXScale,
-                y: {
-                    title: { display: true, text: 'tok/s', color: '#eab308' },
-                    grid: { color: 'rgba(148, 163, 184, 0.1)' },
-                    ticks: { color: '#94a3b8' },
-                    beginAtZero: true
-                }
-            },
-            plugins: { legend: { labels: { color: '#94a3b8' } } }
-        }
-    });
-    {% endif %}
 </script>
 {% endif %}
 {% endblock %}

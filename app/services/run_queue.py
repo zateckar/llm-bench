@@ -154,8 +154,6 @@ def _try_start(run_id: int) -> bool:
         # a slow import must not hold up other dispatchers.
         _active_run_id = run_id
 
-    options["concurrency_levels"] = tuple(options.get("concurrency_levels") or (1, 2, 4, 8))
-    options["context_sizes"] = tuple(options.get("context_sizes") or ())
     try:
         _spawn_benchmark(run_id, model, options)
     except Exception as e:  # noqa: BLE001 - a spawn failure frees the slot again

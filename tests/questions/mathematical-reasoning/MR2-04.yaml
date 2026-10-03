@@ -1,0 +1,36 @@
+- id: MR2-04
+  category: Mathematical Reasoning
+  prompt: |-
+    A Markov chain has transient states A,B,C and absorbing state Z.
+    From A: B with probability 1/2, C with probability 1/2.
+    From B: A, C, Z with probability 1/3 each.
+    From C: A with probability 1/4, C with probability 1/2, Z with probability 1/4.
+    Each transition, including a self-loop or entry to Z, costs one step.
+    Return JSON with keys A,B,C giving the expected steps to first reach Z from
+    each state, each as [numerator,denominator] in lowest terms.
+
+    Explicit JSON output contract (types only): {"A": {"array_items": "number"}, "B": {"array_items": "number"}, "C": {"array_items": "number"}}
+  evaluator: json_match
+  expected:
+    value:
+      A: [17, 3]
+      B: [9, 2]
+      C: [29, 6]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: challenge-v2
+  description: Coupled expected hitting times with self-loops
+  max_tokens: 8192
+  metadata:
+    family: R8A-MR2-04
+    cohort: rigorous-v9
+    original_anchor_id: MR2-04
+  rubric:
+  - {id: 'json:A[0]', weight: 0.5, group: A, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:A[1]', weight: 0.5, group: A, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:B[0]', weight: 0.5, group: B, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:B[1]', weight: 0.5, group: B, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:C[0]', weight: 0.5, group: C, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:C[1]', weight: 0.5, group: C, mandatory: true, critical: false, dimension: content}

@@ -1,0 +1,55 @@
+- id: TU2-02
+  category: Tool Using
+  prompt: |-
+    Goal: add label red and set limit to 12 on document d4, preserving owner and
+    other labels. Your put using stale etag e8 ALREADY failed with 412 and no effects.
+    Tools: get_document(id), put_document(id,if_match,body).
+    Policy requires a fresh get after 412. That get will return etag e9 and body
+    {"owner":"Mira","labels":["blue"],"limit":8}. Apply only the requested changes;
+    labels must be deduplicated and alphabetically sorted. The subsequent put succeeds.
+
+    This is an offline planning exercise, not a request to call real tools.
+    Return ONLY a JSON array of the required REMAINING calls in execution order,
+    each {"tool": "name", "args": {exact parameter names and values}}. Do not
+    repeat completed calls, add explanations, or include unnecessary calls.
+
+    Explicit JSON output contract (types only): "array (element types and order specified in task)"
+  evaluator: json_match
+  expected:
+    value:
+    - tool: get_document
+      args:
+        id: d4
+    - tool: put_document
+      args:
+        id: d4
+        if_match: e9
+        body:
+          owner: Mira
+          labels: [blue, red]
+          limit: 12
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: hard
+  source: challenge-v2
+  description: Recover a failed compare-and-swap without overwriting concurrent changes
+  metadata:
+    family: R8A-TU2-02
+    cohort: rigorous-v9
+    original_anchor_id: TU2-02
+  rubric:
+  - {id: 'json:[0].tool', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[0].args.id', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].tool', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].args.id', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:[1].args.if_match', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:[1].args.body.owner', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:[1].args.body.labels[0]', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:[1].args.body.labels[1]', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:[1].args.body.limit', weight: 0.1111111111111111, group: answer, mandatory: true, critical: false,
+    dimension: content}

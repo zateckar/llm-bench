@@ -1,0 +1,46 @@
+- id: SP1-FI-04
+  category: Finances
+  prompt: |-
+    Treasury stress horizon is end of D2. All amounts thousands EUR. Obligations due
+    by then total 150. Sources: unrestricted bank cash 35; restricted escrow 20 (unavailable);
+    T-bill market value 80 with 5% sale haircut, sale cash arrives D2; deposit 50 matures
+    D3 and cannot be broken; undrawn committed line 70, but current covenant caps usable
+    draws at 25; uncommitted line 40 unavailable in stress. All usable sources independent.
+    Policy additionally requires 15 unrestricted cash remaining after paying obligations.
+    Return {usable_by_D2,obligation_shortfall,policy_shortfall,
+    sources_used:[IDs sorted],largest_obligation_payable_with_floor}.
+    IDs: bank,escrow,tbill,deposit,committed,uncommitted. Ignore taxes and interest.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"usable_by_D2": "number", "obligation_shortfall": "number", "policy_shortfall": "number", "sources_used": {"array_items": "string"}, "largest_obligation_payable_with_floor": "number"}
+  evaluator: json_match
+  expected:
+    value:
+      usable_by_D2: 136
+      obligation_shortfall: 14
+      policy_shortfall: 29
+      sources_used: [bank, committed, tbill]
+      largest_obligation_payable_with_floor: 121
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original synthetic exercise
+  description: Haircut 80 to 76; 35+76+25=136. Excludes future maturity and noncommitted capacity.
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-FI-04
+    cohort: rigorous-v9
+    original_anchor_id: SP1-FI-04
+  rubric:
+  - {id: 'json:usable_by_D2', weight: 1.0, group: usable_by_D2, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:obligation_shortfall', weight: 1.0, group: obligation_shortfall, mandatory: true, critical: false,
+    dimension: content}
+  - {id: 'json:policy_shortfall', weight: 1.0, group: policy_shortfall, mandatory: true, critical: false, dimension: content}
+  - {id: 'json:sources_used[0]', weight: 0.3333333333333333, group: sources_used, mandatory: true, critical: false,
+    dimension: evidence}
+  - {id: 'json:sources_used[1]', weight: 0.3333333333333333, group: sources_used, mandatory: true, critical: false,
+    dimension: evidence}
+  - {id: 'json:sources_used[2]', weight: 0.3333333333333333, group: sources_used, mandatory: true, critical: false,
+    dimension: evidence}
+  - {id: 'json:largest_obligation_payable_with_floor', weight: 1.0, group: largest_obligation_payable_with_floor,
+    mandatory: true, critical: false, dimension: content}

@@ -1,0 +1,47 @@
+- id: SP1-TR-CS-EN
+  category: Language Translations
+  prompt: |-
+    Translate/review Czech into English. For EACH source passage choose ALL candidate translations that preserve its entire meaning: modality, negation, conditions, actors, quantities, and dates. Several phrasings may be faithful; do not reject synonyms or word order merely for style. Do not silently repair a candidate. Letters restart for each passage. Return an object with keys "1","2","3", each an alphabetically sorted array of accepted letters.
+
+    Passage 1 (Czech): Dodavatel nemusí zveřejnit výkres, nesmí jej však předat třetí straně bez předchozího písemného souhlasu zákazníka.
+    A. The supplier must not publish the drawing, but may disclose it to a third party with the customer's prior written consent.
+    B. The supplier is not required to publish the drawing, but must not pass it to a third party without the customer's prior written consent.
+    C. The supplier need not publish the drawing; however, it may not give it to a third party unless the customer has consented in writing beforehand.
+    D. The supplier need not publish the drawing and may pass it to a third party unless the customer has objected in writing.
+
+    Passage 2 (Czech): Záloha ve výši 1,5 milionu Kč je splatná nejpozději 3. dubna 2027; vratná je pouze při zrušení objednávky dodavatelem.
+    A. The CZK 1.5 million advance payment is due no later than 3 April 2027; it is refundable only if the supplier cancels the order.
+    B. The CZK 1.5 million backup is due by April 3, 2027 and is refundable if either party cancels.
+    C. The CZK 15 million advance is due no later than 4 March 2027 and refundable only on supplier cancellation.
+    D. An advance of CZK 1.5 million must be paid by 3 April 2027 at the latest and can be refunded only upon cancellation of the order by the supplier.
+
+    Passage 3 (Czech): Ne všechny snímače selhaly. Ověření se týká pouze těch, které byly vyměněny po odstávce, nikoli těch vyměněných před ní.
+    A. No sensors failed. Verification concerns only those replaced after the shutdown, not before it.
+    B. Not all sensors failed. Verification concerns those replaced before or after the shutdown.
+    C. Not every sensor failed. Only sensors replaced after the shutdown are subject to verification, not those replaced before it.
+    D. Every sensor failed to some extent. Verification applies only to sensors replaced after the shutdown.
+    Return only one JSON document with exactly the requested keys. Arrays must be in the specified order. Do not add explanations or extra claims.
+    Explicit JSON output contract (types only): {"1": {"array_items": "string"}, "2": {"array_items": "string"}, "3": {"array_items": "string"}}
+  evaluator: json_match
+  expected:
+    value:
+      '1': [B, C]
+      '2': [A, D]
+      '3': [C]
+    mode: exact
+    strict_json: true
+  pass_threshold: 1.0
+  difficulty: expert
+  source: Original parallel passages; semantic fidelity selection, not free-form fluency
+  description: 'Czech to English: all and only meaning-preserving translations, including alternative faithful phrasings.'
+  max_tokens: 16384
+  metadata:
+    family: R8A-SP1-TR-CS-EN
+    cohort: rigorous-v9
+    original_anchor_id: SP1-TR-CS-EN
+  rubric:
+  - {id: 'json:1[0]', weight: 0.5, group: '1', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:1[1]', weight: 0.5, group: '1', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:2[0]', weight: 0.5, group: '2', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:2[1]', weight: 0.5, group: '2', mandatory: true, critical: false, dimension: content}
+  - {id: 'json:3[0]', weight: 1.0, group: '3', mandatory: true, critical: false, dimension: content}
