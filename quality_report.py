@@ -1,15 +1,17 @@
 """Auditable quality summaries, cluster bootstrap intervals and paired comparisons."""
 
 from collections import Counter, defaultdict
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import random
 import statistics
 
 from models import EVALUATION_SCHEMA_VERSION, percentile
 from evaluators import EVALUATOR_VERSIONS
+from llm_client import client_protocol
 from quality_suite import (
     REVISION,
     MAX_OUTPUT_TOKENS,
+    QUALITY_WORKERS,
     fingerprint,
     suite_hash,
     question_scope,
@@ -178,7 +180,7 @@ def summarize(rows):
     }
 
 
-def make_report(results, client_config, selected_hash=None):
+def make_report(results, client_config, selected_hash=None, max_concurrency=8):
     rows = [result_record(r) for r in results]
     return {
         "schema_version": 3,
@@ -193,6 +195,8 @@ def make_report(results, client_config, selected_hash=None):
             "temperature": client_config.temperature,
             "model_seed": client_config.seed,
             "max_output_tokens": MAX_OUTPUT_TOKENS,
+            "quality_workers": min(QUALITY_WORKERS, max_concurrency),
+            "client": client_protocol(replace(client_config, detect_repetition=False)),
         },
         "summary": summarize(rows),
         "results": rows,

@@ -357,14 +357,20 @@ class ReportingTests(unittest.TestCase):
                     "usage": {"prompt_tokens": 10, "completion_tokens": 5},
                 }
 
-            def iter_lines(self):
+            def iter_lines(self, **kwargs):
                 for value in [
                     {"choices": [{"delta": {"content": '{"x":1}'}, "finish_reason": None}]},
                     {"choices": [{"delta": {}, "finish_reason": "length"}]},
                     {"choices": [], "usage": {"prompt_tokens": 10, "completion_tokens": 5}},
                 ]:
                     yield ("data: " + json.dumps(value)).encode()
+                    yield b""
                 yield b"data: [DONE]"
+                yield b""
+
+            def iter_content(self, **kwargs):
+                for line in self.iter_lines():
+                    yield line + b"\n"
 
             def close(self):
                 pass

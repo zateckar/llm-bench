@@ -430,11 +430,17 @@ def check_json_match(report: Report, where: str, expected: object) -> None:
         def visit(value, path=""):
             if isinstance(value, dict):
                 for key, child in value.items():
+                    if not isinstance(key, str) or not key or any(c in key for c in ".[]"):
+                        report.error(where, f"json_match key {key!r} cannot form an unambiguous criterion path")
                     visit(child, f"{path}.{key}".lstrip("."))
             elif isinstance(value, list):
                 for i, child in enumerate(value):
                     visit(child, f"{path}[{i}]")
             else:
+                if type(value) is float and not math.isfinite(value):
+                    report.error(where, f"json_match expected value at {path!r} must be finite")
+                if value is not None and not isinstance(value, (str, int, float, bool)):
+                    report.error(where, f"json_match expected value at {path!r} must be JSON-compatible")
                 leaves[path] = value
 
         visit(expected.get("value"))

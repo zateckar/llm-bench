@@ -1,15 +1,15 @@
 # =============================================================================
 # Stage 1: Build (install production dependencies)
 # =============================================================================
-FROM python:3.14-slim AS builder
+FROM python:3.14.8-slim AS builder
 
 # Install UV for fast dependency resolution
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.12.22 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
 # Copy only dependency metadata for layer caching
-COPY pyproject.toml uv.lock* ./
+COPY pyproject.toml uv.lock ./
 
 # Install production dependencies into a venv under /app/.venv
 RUN uv sync --frozen --no-dev --no-editable
@@ -22,7 +22,7 @@ RUN .venv/bin/python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
 # =============================================================================
 # Stage 2: Runtime
 # =============================================================================
-FROM python:3.14-slim
+FROM python:3.14.8-slim
 
 # Install ca-certificates for HTTPS calls to LLM providers, and curl for
 # health-check probing. Remove apt lists to keep the image lean.

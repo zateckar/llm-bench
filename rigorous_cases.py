@@ -26,11 +26,8 @@ def schema(value):
     if isinstance(value, dict):
         return {k: schema(v) for k, v in value.items()}
     if isinstance(value, list):
-        if not value:
-            return "array (element type and order specified in task)"
-        descriptions = [schema(v) for v in value]
-        if all(d == descriptions[0] for d in descriptions):
-            return {"array_items": descriptions[0]}
+        # Inferring an item type only for nonempty answers reveals emptiness.
+        # Array element types and order must come from the task specification.
         return "array (element types and order specified in task)"
     if value is None:
         return "null or the value type specified in task"
@@ -61,13 +58,14 @@ def balanced_rubric(value, *, critical=()):
     return rubric
 
 
-def structured(family, category, variant, split, prompt, answer, *, critical=(), metadata=None):
+def structured(family, category, variant, split, prompt, answer, *, critical=(), metadata=None,
+               output_contract=None):
     return Question(
         f"Q9-{family}-{split}-v{variant + 1:02d}",
         category,
         prompt
         + "\n\nOutput contract (types, not answer values): "
-        + json.dumps(schema(answer))
+        + json.dumps(schema(answer) if output_contract is None else output_contract)
         + "\nReturn exactly one JSON object with these keys, no prose or Markdown. "
         "Keep all requested fields even when empty. Object key order is irrelevant. "
         "Do not invent additional facts. Ordering of arrays is specified in the task.",

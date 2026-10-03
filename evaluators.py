@@ -1806,6 +1806,7 @@ def _json_mismatches(
         if not isinstance(got, dict):
             return [{
                 "path": path or "root",
+                "at_root": not path,
                 "reason_code": "type_mismatch",
                 "detail": f"expected object, got {type(got).__name__}",
             }]
@@ -1824,6 +1825,7 @@ def _json_mismatches(
             if extra:
                 problems.append({
                     "path": path or "root",
+                    "at_root": not path,
                     "reason_code": "unexpected_keys",
                     "detail": f"unexpected keys {sorted(extra)[:8]}",
                 })
@@ -1832,12 +1834,14 @@ def _json_mismatches(
         if not isinstance(got, list):
             return [{
                 "path": path or "root",
+                "at_root": not path,
                 "reason_code": "type_mismatch",
                 "detail": f"expected array, got {type(got).__name__}",
             }]
         if len(got) != len(target):
             problems = [{
                 "path": path or "root",
+                "at_root": not path,
                 "reason_code": "length_mismatch",
                 "detail": f"length {len(got)} != {len(target)}",
             }]
@@ -1865,11 +1869,13 @@ def _json_mismatches(
     if scalar_kind(got) != scalar_kind(target):
         return [{
             "path": path or "root", "reason_code": "type_mismatch",
+            "at_root": not path,
             "detail": f"expected {scalar_kind(target)}, got {scalar_kind(got)}",
         }]
     if not values_equal(got, target, rel=relative, abs_tol=tolerance):
         return [{
             "path": path or "root",
+            "at_root": not path,
             "reason_code": "value_mismatch",
             "detail": f"got {describe(got, 50)}, want {describe(target, 50)}",
         }]
@@ -1926,7 +1932,7 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
         relative=spec.get("relative", 0), tolerance=spec.get("tolerance", 0),
     )
     if diagnostic_sink is not None:
-        by_path = {p["path"]: p for p in problems}
+        by_path = {p["path"]: p for p in problems if not p.get("at_root")}
         criteria = [{
             "id": "json-document",
             "status": "pass",
@@ -1942,7 +1948,7 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
                 candidate for candidate in problems
                     if candidate["reason_code"] in {"type_mismatch", "missing_key"}
                     and (
-                        candidate["path"] == "root"
+                        candidate.get("at_root", False)
                         or
                         path == candidate["path"]
                         or path.startswith(candidate["path"] + ".")
@@ -1971,10 +1977,10 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
         covered = set(_json_leaf_paths(want))
         for mismatch in problems:
             path = mismatch["path"]
-            if path in covered:
+            if path in covered and not mismatch.get("at_root"):
                 continue
             criteria.append({
-                "id": f"json:{path}",
+                "id": f"json-contract:{'document' if mismatch.get('at_root') else 'field:' + path}:{mismatch['reason_code']}",
                 "status": "fail",
                 "earned": 0.0,
                 "possible": 1.0,
@@ -2118,7 +2124,7 @@ EVALUATORS: dict[str, Callable] = {
 # why a saved answer differs while leaving prompt/suite fingerprints intact.
 EVALUATOR_VERSIONS = {
     "interactive_state": "2",
-    "json_match": "4",
+    "json_match": "5",
     "code_exec": "3",
     "format_check": "3",
     "contains_keywords": "2",

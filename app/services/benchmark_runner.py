@@ -424,7 +424,7 @@ def _summarise_and_finish(
                 client_config = ClientConfig(
                     "", "", model, max_tokens=MAX_OUTPUT_TOKENS, temperature=0, seed=0
                 )
-            report = make_quality_report(done, client_config)
+            report = make_quality_report(done, client_config, max_concurrency=workers)
             avg = report["summary"]["category_balanced"] or 0.0
             db = _connect()
             try:

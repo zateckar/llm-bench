@@ -47,10 +47,12 @@ class CriterionResult:
     def __post_init__(self) -> None:
         if self.status not in {"pass", "fail", "not_evaluated", "error"}:
             raise ValueError(f"unknown criterion status: {self.status!r}")
-        self.earned = max(0.0, float(self.earned))
-        self.possible = max(0.0, float(self.possible))
-        if self.possible and self.earned > self.possible:
-            self.earned = self.possible
+        self.earned = float(self.earned)
+        self.possible = float(self.possible)
+        if not math.isfinite(self.earned) or not math.isfinite(self.possible):
+            raise ValueError("criterion amounts must be finite")
+        if self.earned < 0 or self.possible <= 0 or self.earned > self.possible:
+            raise ValueError("criterion amounts must satisfy 0 <= earned <= positive possible")
 
     @property
     def achievement(self) -> float | None:
@@ -98,7 +100,7 @@ class EvaluationResult:
             for c in self.criteria
             if (
                 c.achievement is not None
-                or c.reason_code in {"blocked_by_structure", "blocked_by_dependency", "fixture_error", "input_mutation"}
+                or c.reason_code in {"blocked_by_structure", "blocked_by_dependency", "fixture_error", "input_mutation", "rubric_criterion_unavailable"}
             )
             and c.dimension not in {"contract", "availability", "efficiency"}
         ]
@@ -187,8 +189,8 @@ class RequestMetrics:
     """Timing for a single model call.
 
     ``ttft_ms`` (time to first token) is only available when the request was
-    streamed; it is ``None`` otherwise. ``latency_ms`` measures the successful
-    attempt, or all attempts and backoff when the request fails.
+    streamed; it is ``None`` otherwise. ``latency_ms`` includes all attempts
+    and backoff. TTFT includes earlier attempts before first successful delivery.
     """
 
     latency_ms: float = 0.0
@@ -209,6 +211,7 @@ class RequestMetrics:
 
     stream_chunks: int = 0
     stream_span_ms: float | None = None
+    successful_attempt_latency_ms: float | None = None
 
     @property
     def burst_delivery(self) -> bool:

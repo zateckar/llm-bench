@@ -1,0 +1,98 @@
+{
+  "updated": "2026-10-03",
+  "packages": [
+    {
+      "name": "@tailwindcss/browser",
+      "version": "4.3.3",
+      "source": "https://registry.npmjs.org/@tailwindcss/browser/-/browser-4.3.3.tgz",
+      "integrity": "sha512-fFaqX18SiyiukLoEI7/cVc0B65mkTslDNo2TxazSDZ9rKs5umOEoujmEkpy8z6GrMdoVzBDbWD8j5DTKLyAWWw==",
+      "license": "MIT",
+      "license_file": "licenses/tailwind.txt",
+      "files": {
+        "tailwind.js": "a60c785630a06196808cbe79e6f7bdb4abcc8f4421a47b56f29338fc84805e3b"
+      }
+    },
+    {
+      "name": "htmx.org",
+      "version": "2.0.11",
+      "source": "https://registry.npmjs.org/htmx.org/-/htmx.org-2.0.11.tgz",
+      "integrity": "sha512-Thx/WtpeOQqSrqBCw/A1cwGJGg4UrVa3+sW0GmrM3p4gJgO89ecH4qtbnyzDDWFvBTqjnIMCgELTNt636dtamA==",
+      "license": "0BSD",
+      "license_file": "licenses/htmx.txt",
+      "files": {
+        "htmx.js": "d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717"
+      }
+    },
+    {
+      "name": "htmx-ext-sse",
+      "version": "2.2.4",
+      "source": "https://registry.npmjs.org/htmx-ext-sse/-/htmx-ext-sse-2.2.4.tgz",
+      "integrity": "sha512-LJmxVhykyflBWgh5PvbRidcyuqMHlgfajmmzumvKctv9puvsufeH6OaejSMZTNTnEI8O2wXXn4ZZtBdpEMqmEQ==",
+      "license": "0BSD",
+      "license_file": "licenses/htmx-sse.txt",
+      "files": {
+        "htmx-sse.js": "3b5992a541619babefc4c169505af474df5c3039da51e59b96ccf9241ecd61d2"
+      }
+    },
+    {
+      "name": "alpinejs",
+      "version": "3.17.4",
+      "source": "https://registry.npmjs.org/alpinejs/-/alpinejs-3.17.4.tgz",
+      "integrity": "sha512-N2gsr+58XVUt7OAPKnUGiKPDtkd+xbSGTae8C8IJxeRdkkhBJPIautkJ+qcwb7lcjJ/QK3/CPVIbN20JPvtK7A==",
+      "license": "MIT",
+      "license_file": "licenses/alpine.txt",
+      "files": {
+        "alpine.min.js": "232519394c6c8fdba6f362b1d9da16106db513cdbf899011f00daab4051df31c"
+      }
+    },
+    {
+      "name": "@alpinejs/collapse",
+      "version": "3.17.4",
+      "source": "https://registry.npmjs.org/@alpinejs/collapse/-/collapse-3.17.4.tgz",
+      "integrity": "sha512-Us4cE8jHzKtRs4mYNbmX4art/Hpm90vIGH6h5Mcv1EWK9Dgg48RNzSlPFt9F/D6bk2onbdeagYayqEvzpPbqPg==",
+      "license": "MIT",
+      "license_file": "licenses/alpine-collapse.txt",
+      "files": {
+        "alpine-collapse.min.js": "c7661d4e2cf0465e3cd693190debb5f592ac72dcc4cfe650581273767558b27b"
+      }
+    },
+    {
+      "name": "chart.js",
+      "version": "4.5.1",
+      "source": "https://registry.npmjs.org/chart.js/-/chart.js-4.5.1.tgz",
+      "integrity": "sha512-GIjfiT9dbmHRiYi6Nl2yFCq7kkwdkp1W/lp2J99rX0yo9tgJGn3lKQATztIjb5tVtevcBtIdICNWqlq5+E8/Pw==",
+      "license": "MIT",
+      "license_file": "licenses/chart.txt",
+      "files": {
+        "chart.umd.min.js": "48444a82d4edcb5bec0f1965faacdde18d9c17db3063d042abada2f705c9f54a"
+      }
+    },
+    {
+      "name": "rsms/inter",
+      "version": "4.1",
+      "source": "https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip",
+      "sha256": "9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e",
+      "license": "OFL-1.1",
+      "license_file": "licenses/inter.txt",
+      "files": {
+        "fonts/inter-300.ttf": "164414f0aacbe98a7e64addc43f7b3bfd2e32f7b90e101feeab227f14c371bda",
+        "fonts/inter-400.ttf": "40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82",
+        "fonts/inter-500.ttf": "97ad806f526e41546d46365bb3a393145f75b7b1568913db74549ad8b8dba872",
+        "fonts/inter-600.ttf": "78a843fade9d4612a5567302fb595b56976eb5fcebf4fea5a5912d638bafcde3",
+        "fonts/inter-700.ttf": "288316099b1e0a47a4716d159098005eef7c0066921f34e3200393dbdb01947f"
+      }
+    },
+    {
+      "name": "JetBrains/JetBrainsMono",
+      "version": "2.304",
+      "source": "https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip",
+      "sha256": "6f6376c6ed2960ea8a963cd7387ec9d76e3f629125bc33d1fdcd7eb7012f7bbf",
+      "license": "OFL-1.1",
+      "license_file": "licenses/jetbrains-mono.txt",
+      "files": {
+        "fonts/jetbrains-mono-400.ttf": "a0bf60ef0f83c5ed4d7a75d45838548b1f6873372dfac88f71804491898d138f",
+        "fonts/jetbrains-mono-500.ttf": "31c92d01a8a08528b718a43addf0ad3df0af2ca4b7b3290a452f70f358e14d3d"
+      }
+    }
+  ]
+}

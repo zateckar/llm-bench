@@ -1,4 +1,4 @@
-"""Oracle, contract and adversarial regression tests for rigorous-v10."""
+"""Oracle, contract and adversarial regression tests for rigorous-v11."""
 
 from copy import deepcopy
 from dataclasses import replace
@@ -21,11 +21,11 @@ def score(q, answer, metrics=None):
 class RigorousTests(unittest.TestCase):
     def test_fixed_suite_covers_every_category(self):
         qs = load_questions()
-        self.assertEqual(len(qs), 275)
+        self.assertEqual(len(qs), 291)
         self.assertEqual(len({q.category for q in qs}), 30)
         self.assertEqual(len({q.id for q in qs}), len(qs))
         self.assertFalse(any(q.id.startswith("H7-") for q in qs))
-        self.assertTrue(all(q.metadata.get("cohort") == "rigorous-v10" for q in qs))
+        self.assertTrue(all(q.metadata.get("cohort") == "rigorous-v11" for q in qs))
         validation = Report()
         for q in qs:
             if not q.interaction:

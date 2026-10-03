@@ -53,9 +53,9 @@ class OptionsTests(unittest.TestCase):
 
     def test_fixed_questions_are_reproducible_and_strict(self):
         a, b = load_questions(), load_questions()
-        self.assertEqual(len(a), 275)
+        self.assertEqual(len(a), 291)
         self.assertEqual(suite_hash(a), suite_hash(b))
-        self.assertEqual(len({q.id for q in a}), 275)
+        self.assertEqual(len({q.id for q in a}), 291)
         self.assertTrue(all(q.max_tokens == 65536 and q.pass_threshold == 1 for q in a))
         self.assertEqual(sum(bool(q.interaction) for q in a), 20)
         self.assertEqual(
@@ -69,12 +69,12 @@ class OptionsTests(unittest.TestCase):
         categories, error = load_tests_from_yaml()
         self.assertIsNone(error)
         rows = [row for items in categories.values() for row in items]
-        self.assertEqual(len(rows), 275)
+        self.assertEqual(len(rows), 291)
         self.assertEqual(sum(r["evaluator"] == "interactive_state" for r in rows), 20)
 
     def test_cli_uses_full_suite_and_writes_schema_three(self):
         def quality(questions, config, maximum, **kwargs):
-            self.assertEqual(len(questions), 275)
+            self.assertEqual(len(questions), 291)
             self.assertEqual(
                 (config.max_tokens, config.temperature, config.seed, maximum), (65536, 0, 0, 8)
             )
@@ -98,7 +98,7 @@ class OptionsTests(unittest.TestCase):
             ):
                 self.assertEqual(benchmark.main(), 0)
             data = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
-            self.assertEqual(data["quality"]["summary"]["count"], 275)
+            self.assertEqual(data["quality"]["summary"]["count"], 291)
             self.assertEqual(data["quality"]["summary"]["category_balanced"], 1)
             self.assertIn("Balanced strict success", path.read_text(encoding="utf-8"))
             performance.assert_not_called()
@@ -228,7 +228,7 @@ class SubmissionTests(unittest.TestCase):
         page = self.client.get("/admin/run")
         self.assertEqual(page.status_code, 200)
         self.assertIn('action="/admin/run"', page.text)
-        self.assertIn("275 questions", page.text)
+        self.assertIn("291 questions", page.text)
         for word in (
             "Question limit",
             "Quality profile",

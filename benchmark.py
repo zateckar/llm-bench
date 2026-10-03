@@ -69,7 +69,7 @@ def main():
         results, elapsed, message = run_quality(
             questions, client, args.max_concurrency, on_result=progress
         )
-        quality = make_report(results, client, suite_hash(questions))
+        quality = make_report(results, client, suite_hash(questions), args.max_concurrency)
         lines += [markdown(quality), "", f"Quality wall time: {elapsed / 1000:.1f} seconds.", ""]
         failed = bool(message) or not any(r.is_scored for r in results)
         if message:

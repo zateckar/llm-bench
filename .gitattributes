@@ -1,0 +1,3 @@
+# Preserve upstream vendor bytes so manifest checksums survive every checkout.
+app/static/vendor/*.js -text
+app/static/vendor/fonts/*.ttf -text

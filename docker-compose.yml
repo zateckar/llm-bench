@@ -1,8 +1,5 @@
-# Development setup: builds from source and bind-mounts ./tests so new YAML
-# test files show up without a rebuild. Do NOT use this file in production:
-# the ./tests mount shadows the suite baked into the image, so the running
-# container would serve whatever (possibly stale) files sit next to this
-# file on the host. Use docker-compose.prod.yml for production instead.
+# Builds from source with the question suite baked into the image. Production
+# is the default; provide SECRET_KEY and ADMIN_PASSWORD in the environment.
 services:
   app:
     build:

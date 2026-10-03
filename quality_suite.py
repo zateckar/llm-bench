@@ -6,7 +6,7 @@ import json
 import random
 from pathlib import Path
 
-REVISION = "rigorous-v10"
+REVISION = "rigorous-v11"
 MAX_OUTPUT_TOKENS = 65536
 QUESTION_SEEDS = (19, 23)
 VARIANTS = 2
@@ -43,6 +43,7 @@ def suite_hash(questions):
 
 
 def load_questions(tests_dir=None):
+    from adversarial_cases import load_adversarial_questions
     from context_cases import FAMILIES, context_question
     from frontier_cases import load_frontier_questions
     from independent_oracles import CODE, code_cases
@@ -69,6 +70,9 @@ def load_questions(tests_dir=None):
                 for i, args in enumerate(cases[code_id])
             ]
     for q in questions:
+        if q.evaluator == "json_match":
+            q.expected.update(strict_json=True, allow_fence=False)
+            q.prompt += "\nReturn exactly one JSON document, without prose or Markdown fences."
         if q.evaluator == "code_exec":
             q.prompt += "\nDo not mutate any positional or keyword inputs."
             for fixture in q.expected:
@@ -90,6 +94,7 @@ def load_questions(tests_dir=None):
         for variant in range(VARIANTS):
             questions.extend(make_tasks(seed, variant))
             questions.extend(load_frontier_questions(seed, variant))
+            questions.extend(load_adversarial_questions(seed, variant))
     questions.extend(
         context_question(size, seed, family)
         for family in FAMILIES

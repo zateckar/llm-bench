@@ -250,6 +250,8 @@ def _parse_question(item: Any, where: str) -> Question:
 
     threshold = item.get("pass_threshold", DEFAULT_PASS_THRESHOLD)
     try:
+        if isinstance(threshold, bool):
+            raise ValueError()
         threshold = float(threshold)
     except (TypeError, ValueError):
         raise SuiteError(f"{where} ({test_id}): pass_threshold must be a number")
@@ -280,6 +282,12 @@ def _parse_question(item: Any, where: str) -> Question:
 
     if not isinstance(item.get("metadata", {}), dict):
         raise SuiteError(f"{where} ({test_id}): metadata must be a mapping")
+    family = item.get("metadata", {}).get("family")
+    if family is not None and (not isinstance(family, str) or not family.strip()):
+        raise SuiteError(f"{where} ({test_id}): metadata family must be a non-empty string")
+    for field in ("system_prompt", "source", "description"):
+        if item.get(field) is not None and not isinstance(item[field], str):
+            raise SuiteError(f"{where} ({test_id}): {field} must be a string")
 
     rubric = item.get("rubric")
     if rubric is not None:

@@ -1,5 +1,7 @@
 """Shared quality execution and failure attribution for CLI and web."""
 
+import math
+
 from evaluators import EVALUATOR_VERSIONS, EVALUATORS, extract_json, strip_think_blocks
 from llm_client import REPETITION_FINISH_REASON
 from models import CriterionResult, EvaluationResult, Result
@@ -17,10 +19,17 @@ def _evaluation_for(
     """Normalize evaluator diagnostics into the persisted evaluation schema."""
     sink = sink or {}
     raw = sink.get("criteria") or []
+    if not isinstance(raw, list):
+        raise ValueError("Evaluator criteria must be a list")
+    contract_score = sink.get("contract_score")
+    if contract_score is not None:
+        contract_score = float(contract_score)
+        if not math.isfinite(contract_score) or not 0 <= contract_score <= 1:
+            raise ValueError("Contract score must be finite and in [0, 1]")
     criteria: list[CriterionResult] = []
     for i, item in enumerate(raw, 1):
         if not isinstance(item, dict):
-            continue
+            raise ValueError("Evaluator criterion must be an object")
         criteria.append(
             CriterionResult(
                 criterion_id=str(item.get("id") or f"criterion-{i:03d}"),
@@ -82,6 +91,10 @@ def _evaluation_for(
                     reason_code="rubric_criterion_unavailable",
                 )
             )
+    for criterion in criteria:
+        criterion.__post_init__()
+        if criterion.status == "pass" and criterion.earned != criterion.possible:
+            raise ValueError("A passed criterion must earn its full possible amount")
     if not criteria:
         # Legacy evaluators remain useful and are explicitly marked as one
         # criterion rather than receiving invented sub-requirements.
@@ -96,6 +109,8 @@ def _evaluation_for(
             )
         ]
     by_id = {criterion.criterion_id: criterion for criterion in criteria}
+    if len(by_id) != len(criteria):
+        raise ValueError("Evaluator emitted duplicate criterion IDs")
     visited, visiting = set(), set()
 
     def check_dependencies(criterion):
@@ -136,7 +151,7 @@ def _evaluation_for(
         full_pass=bool(full_pass),
         outcome=outcome,
         criteria=criteria,
-        contract_score=sink.get("contract_score"),
+        contract_score=contract_score,
         evaluator_version=EVALUATOR_VERSIONS.get(q.evaluator, "1"),
     )
 
@@ -218,7 +233,11 @@ def score_response(q, response, tokens, metrics, cached=False):
         result.score, result.detail = EVALUATORS[q.evaluator](
             response, q.expected, _diagnostics=diagnostic_sink
         )
-        result.score = max(0.0, min(1.0, float(result.score)))
+        result.score = float(result.score)
+        if not math.isfinite(result.score) or not 0 <= result.score <= 1:
+            raise ValueError("Evaluator score must be finite and in [0, 1]")
+        if not isinstance(result.detail, str):
+            raise ValueError("Evaluator detail must be text")
     except Exception as exc:
         result.outcome, result.detail = "evaluator_error", f"Evaluator error: {exc}"
         result.evaluation = _availability_evaluation(q, result.outcome, result.detail)
@@ -245,13 +264,19 @@ def score_response(q, response, tokens, metrics, cached=False):
         # A wrong answer cannot establish its internal cause; do not assert that
         # every factual mistake or runtime bug is a reasoning failure.
         result.outcome = "task_failure"
-    result.evaluation = _evaluation_for(
-        q,
-        score=result.score,
-        full_pass=result.passed,
-        outcome=result.outcome,
-        sink=diagnostic_sink,
-    )
+    try:
+        result.evaluation = _evaluation_for(
+            q,
+            score=result.score,
+            full_pass=result.passed,
+            outcome=result.outcome,
+            sink=diagnostic_sink,
+        )
+    except Exception as exc:
+        result.score = 0.0
+        result.outcome, result.detail = "evaluator_error", f"Invalid evaluation diagnostics: {exc}"
+        result.evaluation = _availability_evaluation(q, result.outcome, result.detail)
+        return result
     if result.outcome == "pass" and not result.evaluation.full_pass:
         result.outcome = result.evaluation.outcome = "task_failure"
     return result
@@ -278,7 +303,9 @@ def run_quality(questions, client_config, max_concurrency=8, on_result=None, can
 
     cancelled = cancelled or (lambda: False)
     workers = min(QUALITY_WORKERS, max_concurrency)
-    config = replace(client_config, detect_repetition=True)
+    # An early repetition heuristic can abort legitimate repeated JSON/code.
+    # Canonical accuracy measures the full budget with no heuristic intervention.
+    config = replace(client_config, detect_repetition=False)
     lock = threading.Lock()
     local = threading.local()
     clients = []

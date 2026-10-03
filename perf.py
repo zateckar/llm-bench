@@ -11,10 +11,10 @@ import threading
 import time
 import uuid
 
-from llm_client import ChatClient
+from llm_client import ChatClient, client_protocol
 from models import ConcurrencyPoint, LatencyStats, PerfReport, RequestMetrics
 
-REVISION = "performance-v3"
+REVISION = "performance-v4"
 DEFAULT_MAX_CONCURRENCY = 8
 MAX_CONCURRENCY = 32
 MIN_SAMPLES = 24
@@ -181,12 +181,20 @@ def run_perf_suite(client_config, config=None, progress=None, cancelled=None):
             i, client = pair
             if cancelled():
                 return
-            _probe(client, _prompt(nonce, i + 1))
+            _, _, metrics = client.complete(_prompt(nonce, i + 1), max_tokens=OUTPUT_TOKENS, retries=3)
+            return metrics.ok
 
         with ThreadPoolExecutor(max_workers=config.max_concurrency) as pool:
-            for _ in pool.map(warm_worker, list(enumerate(clients[1:], start=1))):
+            for success in pool.map(warm_worker, list(enumerate(clients[1:], start=1))):
+                if success is False:
+                    report.notes.append("A worker connection failed warmup; its timed failures remain visible.")
                 notify("Warmup")
         report.protocol["streaming"] = warm.streaming_supported
+        report.protocol["client"] = client_protocol(measured_config)
+        report.protocol["negotiated_workers"] = [
+            {"streaming": c.streaming_supported, "stream_usage": c._stream_usage_supported}
+            for c in clients
+        ]
         start_index = config.max_concurrency + 1
         for level in config.levels:
             if cancelled():

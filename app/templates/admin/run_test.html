@@ -69,12 +69,12 @@
             <div>
                 <label class="block text-sm font-medium text-slate-300 mb-1">Name (optional)</label>
                 <input type="text" name="name" value="{{ submission_name }}" placeholder="e.g. nightly sweep"
-                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500">
             </div>
             <div>
                 <label class="block text-sm font-medium text-slate-300 mb-1">Schedule for (optional)</label>
                 <input type="datetime-local" name="scheduled_at" x-model="scheduledAt" @input="validateSchedule($el)"
-                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                       class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500">
                 <input type="hidden" name="tz_offset" :value="timezoneOffset()">
                 <p class="text-xs text-slate-500 mt-1">
                     Empty = start as soon as the queue is free. Enter the time in

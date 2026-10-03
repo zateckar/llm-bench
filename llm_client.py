@@ -14,14 +14,17 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 
 import requests
+import urllib3
 
 from models import RequestMetrics, TokenUsage
 
 logger = logging.getLogger(__name__)
+CLIENT_PROTOCOL_VERSION = "chat-client-v2"
 
 # Rough characters-per-token used only for prompt-size estimates in the perf
 # suite when the server does not report prompt_tokens.
@@ -29,11 +32,9 @@ CHARS_PER_TOKEN = 4.0
 
 # --- degenerate repetition -------------------------------------------------
 #
-# A model that has fallen into a loop emits near-zero new information and does
-# not climb back out; left alone it generates until it hits the output cap,
-# which costs minutes per question and is already scored zero. Detecting it is
-# worth doing because "the cap was too small" and "the model looped" call for
-# opposite responses from whoever reads the report.
+# This optional heuristic can stop repeated output early, but repeated code or
+# structured data can be legitimate and recovery cannot be ruled out. Canonical
+# quality and performance runs disable the intervention; the budget is fixed.
 #
 # The signal is the fraction of *distinct* word n-grams in the recent tail.
 # Exact cycle detection is not enough: real loops drift ("...pattern X true.
@@ -44,14 +45,16 @@ CHARS_PER_TOKEN = 4.0
 # flagged nothing that a model actually completed.
 REPETITION_WINDOW_CHARS = 4000
 REPETITION_NGRAM = 8
-# Never arm before this much text: short structured output (JSON rows, tables,
-# enumerations) is legitimately repetitive, and no real answer loops this early.
+# Avoid classifying short structured output as repetition.
 REPETITION_MIN_CHARS = 8000
 # Deltas between checks. Each check is O(window), so this keeps the detector
 # off the hot path of the decode loop.
 REPETITION_CHECK_EVERY = 200
 # Reported like a finish_reason so it travels with the request, not the answer.
 REPETITION_FINISH_REASON = "repetition"
+SSE_READ_BYTES = 65536
+SSE_LINE_LIMIT = 16 * 1024 * 1024
+_SSE_LINE_END = re.compile(br"\r\n|\r|\n")
 
 
 def distinct_ngram_ratio(
@@ -98,10 +101,8 @@ class ClientConfig:
     # Ask for usage in the final streaming chunk. Some gateways reject the
     # field, so the client drops it and retries once if that happens.
     request_stream_usage: bool = True
-    # Off by default, and deliberately so: the perf suite measures the server's
-    # decode rate with prompts whose output is repetitive on purpose, and
-    # cutting one short would silently corrupt a throughput number. Only the
-    # quality runners, which grade answers, switch it on.
+    # Off for both canonical protocols: heuristic early exits alter accuracy
+    # and throughput. Retained for explicit noncanonical client use.
     detect_repetition: bool = False
     repetition_threshold: float = 0.30
     extra_headers: dict = field(default_factory=dict)
@@ -225,9 +226,13 @@ class ChatClient:
                     continue
                 return failed(attempt + 1)
 
-            latency_ms = (time.perf_counter() - started) * 1000.0
+            finished = time.perf_counter()
+            latency_ms = (finished - request_started) * 1000.0
+            if ttft is not None:
+                ttft += (started - request_started) * 1000.0
             metrics = RequestMetrics(
                 latency_ms=latency_ms,
+                successful_attempt_latency_ms=(finished - started) * 1000.0,
                 ttft_ms=ttft,
                 completion_tokens=usage.completion_tokens,
                 prompt_tokens=usage.prompt_tokens,
@@ -280,18 +285,26 @@ class ChatClient:
             headers=self._headers(),
             timeout=self.config.timeout,
         )
-        if resp.status_code >= 400:
-            raise _RetryableStatus(resp.status_code, resp.text[:200])
-        data = resp.json()
-        self._last_finish_reason = (data.get("choices") or [{}])[0].get("finish_reason")
-        text = _extract_message_text(data.get("choices") or [{}])
-        usage_raw = data.get("usage") or {}
+        try:
+            if resp.status_code >= 400:
+                raise _RetryableStatus(resp.status_code, resp.text[:2000])
+            data = resp.json()
+            choices = _validated_choices(data, blocking=True)
+            self._last_finish_reason = choices[0].get("finish_reason")
+            text = _extract_message_text(choices)
+            message = choices[0]["message"]
+            delivered = _content_text(message.get("content")) + _content_text(
+                message.get("reasoning") or message.get("reasoning_content")
+            )
+            usage_raw = data.get("usage") or {}
+        finally:
+            resp.close()
         usage = _parse_usage(usage_raw)
-        if not usage.prompt_tokens:
+        if usage.prompt_tokens_estimated:
             usage.prompt_tokens = _estimate_tokens("".join(m.get("content", "") for m in messages))
             usage.prompt_tokens_estimated = True
-        if not usage.completion_tokens and text:
-            usage.completion_tokens = _estimate_tokens(text)
+        if usage.completion_tokens_estimated:
+            usage.completion_tokens = _estimate_tokens(delivered)
             usage.completion_tokens_estimated = True
         return text, usage, None
 
@@ -307,8 +320,10 @@ class ChatClient:
             stream=True,
         )
         if resp.status_code >= 400:
-            body = resp.text[:200]
-            resp.close()
+            try:
+                body = resp.text[:2000]
+            finally:
+                resp.close()
             raise _RetryableStatus(resp.status_code, body)
 
         chunks: list[str] = []
@@ -323,56 +338,61 @@ class ChatClient:
         ttft: float | None = None
         delta_count = 0
         first_arrival = last_arrival = None
-        usage = TokenUsage()
+        usage = _parse_usage({})
+        terminated = False
+        done_sent = False
 
         try:
-            # Raw bytes, decoded per line: ``decode_unicode=True`` raises
-            # UnicodeDecodeError when a multi-byte character is split across
-            # TCP chunks, aborting a healthy stream.
-            for raw_line in resp.iter_lines():
-                if time.perf_counter() - started > self.config.timeout * 2:
-                    # ``timeout`` bounds each socket op, not the whole stream;
-                    # a server trickling one byte per minute otherwise holds
-                    # the iterator open forever.
-                    resp.close()
-                    raise _StreamDeadlineExceeded(
-                        f"stream deadline exceeded after {self.config.timeout * 2:.0f}s"
-                    )
-                if not raw_line:
+            # Decode complete SSE lines, preserving UTF-8 across TCP fragments.
+            # Requests' default 512-byte buffer can delay a short first event.
+            # read1 returns available bytes without waiting to fill its buffer.
+            for payload in _sse_payloads(resp, started, self.config.timeout * 2):
+                if done_sent:
+                    raise _ProtocolError("Completion data after [DONE]")
+                if payload.strip() == "[DONE]":
+                    terminated = True
+                    done_sent = True
+                    # Finish consuming HTTP framing so the socket returns to
+                    # the pool. Closing early can make every warm request cold.
                     continue
-                line = raw_line.decode("utf-8", errors="replace")
-                if not line.startswith("data:"):
-                    continue
-                payload = line[5:].strip()
-                if payload == "[DONE]":
-                    break
                 try:
                     event = json.loads(payload)
-                except json.JSONDecodeError:
-                    continue
+                except (json.JSONDecodeError, TypeError) as error:
+                    raise _ProtocolError("Malformed JSON in completion stream") from error
+
+                choices = _validated_choices(event)
 
                 usage_raw = event.get("usage")
                 if usage_raw:
-                    usage = _parse_usage(usage_raw)
+                    update = _parse_usage(usage_raw)
+                    for field in ("prompt_tokens", "completion_tokens"):
+                        estimated = field + "_estimated"
+                        if not getattr(update, estimated):
+                            setattr(usage, field, getattr(update, field))
+                            setattr(usage, estimated, False)
+                    if isinstance(usage_raw, dict):
+                        details = usage_raw.get("prompt_tokens_details")
+                        if "prompt_cache_hit_tokens" in usage_raw or (
+                            isinstance(details, dict) and "cached_tokens" in details
+                        ):
+                            usage.cached_tokens = update.cached_tokens
 
-                for choice in event.get("choices") or []:
+                for choice in choices:
                     if choice.get("finish_reason"):
                         self._last_finish_reason = choice["finish_reason"]
+                        terminated = True
                     delta = choice.get("delta") or {}
-                    piece = delta.get("content")
-                    reasoning = delta.get("reasoning") or delta.get("reasoning_content")
-                    if piece:
+                    if not isinstance(delta, dict):
+                        raise _ProtocolError("Completion delta must be an object")
+                    piece = _content_text(delta.get("content"))
+                    reasoning = _content_text(delta.get("reasoning") or delta.get("reasoning_content"))
+                    if piece or reasoning:
                         if ttft is None:
                             ttft = (time.perf_counter() - started) * 1000.0
-                        chunks.append(piece)
-                        delta_count += 1
-                    elif reasoning:
-                        # Reasoning tokens still count as generation work, and
-                        # the first one is the real time-to-first-token.
-                        if ttft is None:
-                            ttft = (time.perf_counter() - started) * 1000.0
-                        reasoning_chunks.append(reasoning)
-                        piece = reasoning
+                        if piece:
+                            chunks.append(piece)
+                        if reasoning:
+                            reasoning_chunks.append(reasoning)
                         delta_count += 1
                     else:
                         continue
@@ -383,8 +403,8 @@ class ChatClient:
                     last_arrival = arrival
                     if not self.config.detect_repetition:
                         continue
-                    generated.append(piece)
-                    generated_chars += len(piece)
+                    generated.append(reasoning + piece)
+                    generated_chars += len(reasoning) + len(piece)
                     since_check += 1
                     if (
                         generated_chars < REPETITION_MIN_CHARS
@@ -412,16 +432,18 @@ class ChatClient:
         finally:
             resp.close()
 
+        if not terminated and not looped:
+            raise _ProtocolError("Completion stream ended without a finish reason or [DONE]")
         text = "".join(chunks).strip()
         if not text:
             reasoning = "".join(reasoning_chunks).strip()
             text = f"<think>{reasoning}</think>" if reasoning else ""
-        if not usage.completion_tokens:
+        if usage.completion_tokens_estimated:
             # SSE events can contain many tokens. Estimate from all delivered
             # text instead of treating one event as one token.
             usage.completion_tokens = _estimate_tokens("".join(chunks + reasoning_chunks))
             usage.completion_tokens_estimated = True
-        if not usage.prompt_tokens:
+        if usage.prompt_tokens_estimated:
             usage.prompt_tokens_estimated = True
             usage.prompt_tokens = _estimate_tokens("".join(m.get("content", "") for m in messages))
         self._stream_chunks = delta_count
@@ -463,23 +485,133 @@ class _StreamDeadlineExceeded(Exception):
     """The response stream stayed open past the total wall-clock deadline."""
 
 
+class _ProtocolError(Exception):
+    """An endpoint returned an invalid or incomplete completion."""
+
+
+def _response_lines(response, started, deadline):
+    """Available-byte reads, UTF-8-safe line boundaries and bounded buffering."""
+    reader = getattr(getattr(response, "raw", None), "read1", None)
+    if callable(reader):
+        def chunks():
+            while True:
+                chunk = reader(SSE_READ_BYTES, decode_content=True)
+                if not chunk:
+                    break
+                yield chunk
+        source = chunks()
+    else:
+        # Compatibility for older urllib3/custom transport adapters. One byte
+        # avoids their read-to-fill behavior, at greater Python overhead.
+        source = response.iter_content(chunk_size=1)
+    pending, skip_lf = bytearray(), False
+    for chunk in source:
+        if time.perf_counter() - started > deadline:
+            raise _StreamDeadlineExceeded(f"stream deadline exceeded after {deadline:.0f}s")
+        if not chunk:
+            continue
+        if skip_lf:
+            if chunk.startswith(b"\n"):
+                chunk = chunk[1:]
+            skip_lf = False
+        scan_from = len(pending)
+        pending.extend(chunk)
+        consumed = 0
+        for boundary in _SSE_LINE_END.finditer(pending, scan_from):
+            if boundary.start() - consumed > SSE_LINE_LIMIT:
+                raise _ProtocolError("Completion SSE line exceeds buffer limit")
+            yield bytes(pending[consumed:boundary.start()])
+            consumed = boundary.end()
+            skip_lf = boundary.group() == b"\r" and consumed == len(pending)
+        del pending[:consumed]
+        if len(pending) > SSE_LINE_LIMIT:
+            raise _ProtocolError("Completion SSE line exceeds buffer limit")
+    if pending:
+        yield bytes(pending)
+
+
+def _sse_payloads(response, started, deadline):
+    """Dispatch complete SSE events; join multiline data and ignore comments."""
+    data = []
+    data_bytes = 0
+    first_line = True
+    for raw_line in _response_lines(response, started, deadline):
+        try:
+            line = raw_line.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as error:
+            raise _ProtocolError("Invalid UTF-8 in completion stream") from error
+        if first_line:
+            line = line.removeprefix("\ufeff")
+            first_line = False
+        if not line:
+            if data:
+                yield "\n".join(data)
+                data.clear()
+                data_bytes = 0
+        elif line == "data" or line.startswith("data:"):
+            value = line[5:] if line.startswith("data:") else ""
+            data.append(value[1:] if value.startswith(" ") else value)
+            data_bytes += len(raw_line)
+            if data_bytes > SSE_LINE_LIMIT:
+                raise _ProtocolError("Completion SSE event exceeds buffer limit")
+    # A final unterminated event is not dispatched by the SSE protocol.
+    if data:
+        raise _ProtocolError("Completion stream ended inside an SSE event")
+
+
+def _validated_choices(data, *, blocking=False):
+    if not isinstance(data, dict):
+        raise _ProtocolError("Completion response must be an object")
+    if data.get("error"):
+        raise _ProtocolError("Endpoint returned an error event")
+    choices = data.get("choices")
+    if not isinstance(choices, list) or len(choices) > 1 or (blocking and not choices):
+        raise _ProtocolError("Expected one completion choice (or a streaming usage event)")
+    for choice in choices:
+        if not isinstance(choice, dict) or choice.get("index", 0) != 0:
+            raise _ProtocolError("Unexpected completion choice index")
+        if blocking and not isinstance(choice.get("message"), dict):
+            raise _ProtocolError("Completion message must be an object")
+    return choices
+
+
 def _parse_usage(usage_raw: dict) -> TokenUsage:
     """Normalise the `usage` JSON object into TokenUsage.
 
     Prefix-cache hit counts arrive in two divergent shapes: vLLM-style emits a
     top-level ``prompt_cache_hit_tokens``, OpenAI-style nests it under
     ``prompt_tokens_details.cached_tokens``. The explicit top-level field wins;
-    anything absent or malformed coerces to 0 via the existing ``or 0`` idiom.
+    Missing or invalid prompt/completion counts are marked for estimation;
+    explicit zero counts remain reported counts.
     """
+    usage_raw = usage_raw if isinstance(usage_raw, dict) else {}
+    def count(value):
+        # Optional provider telemetry must not turn a completed answer into an
+        # infrastructure error. Invalid counts become explicitly marked estimates.
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int) and value >= 0:
+            return value
+        if isinstance(value, str) and value.isascii() and value.isdecimal():
+            try:
+                return int(value)
+            except ValueError:
+                return None
+        return None
+
+    prompt = count(usage_raw.get("prompt_tokens"))
+    completion = count(usage_raw.get("completion_tokens"))
     cached = usage_raw.get("prompt_cache_hit_tokens")
     if cached is None:
         details = usage_raw.get("prompt_tokens_details")
         if isinstance(details, dict):
             cached = details.get("cached_tokens")
     return TokenUsage(
-        prompt_tokens=int(usage_raw.get("prompt_tokens") or 0),
-        completion_tokens=int(usage_raw.get("completion_tokens") or 0),
-        cached_tokens=int(cached or 0),
+        prompt_tokens=prompt or 0,
+        completion_tokens=completion or 0,
+        cached_tokens=count(cached) or 0,
+        prompt_tokens_estimated=prompt is None,
+        completion_tokens_estimated=completion is None,
     )
 
 
@@ -490,12 +622,41 @@ def _extract_message_text(choices: list[dict]) -> str:
     content = message.get("content")
     if content is None:
         # Preserve diagnostics without promoting private reasoning to an answer.
-        reasoning = message.get("reasoning") or message.get("reasoning_content") or ""
+        reasoning = _content_text(message.get("reasoning") or message.get("reasoning_content"))
         content = f"<think>{reasoning}</think>" if reasoning else ""
-    if isinstance(content, list):
-        # Some gateways return content as a list of parts.
-        content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
-    return (content or "").strip()
+    return _content_text(content).strip()
+
+
+def _content_text(content):
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list) and all(
+        isinstance(part, dict) and isinstance(part.get("text"), str) for part in content
+    ):
+        return "".join(part["text"] for part in content)
+    raise _ProtocolError("Completion content must be text or text parts")
+
+
+def client_protocol(config):
+    """Result-affecting client settings, without endpoints, headers or secrets."""
+    return {
+        "revision": CLIENT_PROTOCOL_VERSION,
+        "timeout_seconds": config.timeout,
+        "stream_deadline_seconds": config.timeout * 2,
+        "stream_requested": config.stream,
+        "stream_usage_requested": config.request_stream_usage,
+        "max_attempts": config.max_retries,
+        "retry_delay_seconds": config.retry_delay,
+        "detect_repetition": config.detect_repetition,
+        "repetition_threshold": config.repetition_threshold if config.detect_repetition else None,
+        "latency_scope": "all_attempts_and_backoff",
+        "sse_reader": "read1" if hasattr(urllib3.response.HTTPResponse, "read1") else "single_byte_fallback",
+        "sse_read_max_bytes": SSE_READ_BYTES,
+        "requests_version": requests.__version__,
+        "urllib3_version": urllib3.__version__,
+    }
 
 
 def _estimate_tokens(text: str) -> int:

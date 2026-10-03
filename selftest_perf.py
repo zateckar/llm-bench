@@ -72,7 +72,7 @@ class PerfTests(unittest.TestCase):
             all(
                 k["retries"] == 1
                 for c in FakeClient.instances
-                for k in c.calls[2 if c is FakeClient.instances[0] else 0 :]
+                for k in c.calls[2 if c is FakeClient.instances[0] else 1 :]
             )
         )
         for c in FakeClient.instances:
@@ -164,7 +164,7 @@ class PerfTests(unittest.TestCase):
         class Response:
             status_code = 200
 
-            def iter_lines(self):
+            def iter_lines(self, **kwargs):
                 yield (
                     "data: "
                     + json.dumps(
@@ -178,7 +178,13 @@ class PerfTests(unittest.TestCase):
                         }
                     )
                 ).encode()
+                yield b""
                 yield b"data: [DONE]"
+                yield b""
+
+            def iter_content(self, **kwargs):
+                for line in self.iter_lines():
+                    yield line + b"\n"
 
             def close(self):
                 pass

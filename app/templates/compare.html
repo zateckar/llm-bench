@@ -29,7 +29,7 @@
                 </div>
             </div>
             <input type="text" x-model="query" placeholder="Filter by model, id, score, hash…"
-                   class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
+                   class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-hidden focus:border-blue-500">
 
             <div class="max-h-64 overflow-y-auto rounded-lg border border-slate-700 divide-y divide-slate-800">
                 {% for run in completed_runs %}
@@ -103,7 +103,7 @@
     {% if hashes|length > 1 %}
     <div class="card p-4 bg-amber-900/30 border border-amber-700/50">
         <div class="flex items-center gap-3">
-            <svg class="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            <svg class="w-5 h-5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
             <div>
                 <p class="text-amber-400 font-medium text-sm">Different test suite versions detected</p>
                 <p class="text-amber-500 text-xs mt-0.5">These runs used different versions of the test suite. Scores may not be directly comparable.</p>

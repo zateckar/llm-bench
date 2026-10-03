@@ -448,7 +448,7 @@ class StretchTests(unittest.TestCase):
         self.assertEqual(len(new), 30)
         self.assertEqual(len({q.metadata["family"] for q in new}), 10)
         self.assertTrue(
-            all(q.metadata["cohort"] == "rigorous-v10" and q.max_tokens == 65536 for q in new)
+            all(q.metadata["cohort"] == "rigorous-v11" and q.max_tokens == 65536 for q in new)
         )
         rows = [result_record(Result(q, "", 1 if i % 3 else 0, "test")) for i, q in enumerate(new)]
         summary = summarize(rows)

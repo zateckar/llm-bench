@@ -9,7 +9,10 @@ wheels/
 # Virtual environments
 .venv
 .uv-cache/
+.uv-tools/
+.uv-python/
 .tokenizer-cache/
+.ruff_cache/
 
 # Benchmark cache
 .benchmark_cache.json
@@ -26,12 +29,8 @@ data/
 .mimocode/
 .vscode/
 .idea/
+.kilo/
 *.swp
 *.swo
 *~
 .dirac*/*
-QUALITY_AUDIT*.md
-BENCHMARK_REVIEW_V6.md
-EVALUATION_IMPROVEMENT_PLAN.md
-QUALITY_AUDIT.md
-QUALITY_REVIEW_2026-09-21.md

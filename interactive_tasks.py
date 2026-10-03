@@ -559,6 +559,7 @@ def run_interaction(q, client, cancelled=lambda: False):
         tokens.completion_tokens += usage.completion_tokens
         tokens.cached_tokens += usage.cached_tokens
         tokens.prompt_tokens_estimated |= usage.prompt_tokens_estimated
+        tokens.completion_tokens_estimated |= usage.completion_tokens_estimated
         aggregate.latency_ms += metrics.latency_ms
         aggregate.attempts += metrics.attempts
         aggregate.streamed = aggregate.streamed and metrics.streamed
@@ -623,6 +624,7 @@ def run_interaction(q, client, cancelled=lambda: False):
         tokens.completion_tokens,
     )
     aggregate.prompt_tokens_estimated = tokens.prompt_tokens_estimated
+    aggregate.completion_tokens_estimated = tokens.completion_tokens_estimated
     aggregate.cached_tokens = tokens.cached_tokens
     violations = list(verdict.get("violations", []))
     criteria = [
