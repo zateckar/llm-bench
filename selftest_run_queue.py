@@ -48,11 +48,8 @@ def check(name: str, condition: bool, detail: str = "") -> None:
 # test connections run in autocommit mode to keep them mutually visible.
 # ---------------------------------------------------------------------------
 
-# Windows keeps the SQLite file open through pooled connections well after the
-# last close, so the tempdir teardown would raise a harmless PermissionError at
-# interpreter exit. Ignoring cleanup errors removes the need for the os._exit(0)
-# this file used to end with -- that skipped the stdout flush, so every "ok"
-# line was silently dropped whenever output was piped rather than a terminal.
+# All context-managed test connections close on exit. Keep teardown tolerant of
+# late app-owned handles on Windows, without bypassing stdout flushing.
 _tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
 db_path = Path(_tmp.name) / "bench.db"
 
@@ -61,6 +58,12 @@ class _AutocommitConnection(sqlite3.Connection):
     def __init__(self, *args, **kwargs):
         kwargs.setdefault("isolation_level", None)
         super().__init__(*args, **kwargs)
+
+    def __exit__(self, *args):
+        try:
+            return super().__exit__(*args)
+        finally:
+            self.close()
 
 
 _real_connect = sqlite3.connect

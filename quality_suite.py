@@ -6,7 +6,7 @@ import json
 import random
 from pathlib import Path
 
-REVISION = "rigorous-v13"
+REVISION = "rigorous-v14"
 # Keep established instances stable when adding families or changing grading.
 # New families own their generation version, independently of the run protocol.
 GENERATION_REVISION = "rigorous-v11"
@@ -54,6 +54,7 @@ def load_questions(tests_dir=None):
     from independent_oracles import CODE, code_cases
     from interactive_tasks import make_tasks
     from rigorous_cases import load_new_questions
+    from reasoning_cases import load_reasoning_questions
     from test_loader import load_all_tests
 
     questions = load_all_tests(tests_dir or Path(__file__).parent / "tests")
@@ -102,6 +103,7 @@ def load_questions(tests_dir=None):
             questions.extend(load_adversarial_questions(seed, variant))
             questions.extend(load_compositional_questions(seed, variant))
             questions.extend(load_evidence_questions(seed, variant))
+            questions.extend(load_reasoning_questions(seed, variant))
     questions.extend(
         context_question(size, seed, family)
         for family in FAMILIES

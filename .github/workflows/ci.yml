@@ -86,6 +86,9 @@ jobs:
       - name: Verify v13 evidence sufficiency, tool traces and grading regressions
         run: uv run python selftest_evidence.py
 
+      - name: Verify v14 inference, ambiguity, execution and atomic grading
+        run: uv run python selftest_reasoning.py
+
       - name: Verify portable HTML reports and comparisons
         run: uv run python selftest_reports.py
 

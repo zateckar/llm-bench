@@ -21,7 +21,7 @@ def score(q, answer, metrics=None):
 class RigorousTests(unittest.TestCase):
     def test_fixed_suite_covers_every_category(self):
         qs = load_questions()
-        self.assertEqual(len(qs), 307)
+        self.assertEqual(len(qs), 315)
         self.assertEqual(len({q.category for q in qs}), 30)
         self.assertEqual(len({q.id for q in qs}), len(qs))
         self.assertFalse(any(q.id.startswith("H7-") for q in qs))

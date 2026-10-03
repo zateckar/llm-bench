@@ -1,8 +1,75 @@
-# Rigorous v13 design and critical review
+# Rigorous v14 design and critical review
 
 Reviewed on 2026-10-03. This document describes the current protocol.
-Historical scores are retained and are not relabelled as v13 results. The v10/v11/v12
-review records below describe earlier passes; the v13 review records the current changes.
+Historical scores are retained and are not relabelled as v14 results. The v10-v13
+review records below describe earlier passes; the v14 review records the current changes.
+
+## V14 research, question audit and repeated review
+
+This pass inspected the fixed bank's construction, typed answers, partial-credit
+rubrics, execution comparator and integration checks. The baseline's 182 regression
+tests passed. Eight existing instances were substantially revised, eight instances
+were added, and every noninteractive JSON answer key is checked through the complete
+evaluator and rubric pipeline. The static anchors and other established families
+retain their existing questions; this is a targeted hardening pass, not a claim
+that every question has been individually redesigned.
+
+New primary sources inspected on 2026-10-03 deliberately go beyond BBEH, IFEval
+and EvalPlus:
+
+| Third-party source | Observation and local application |
+|---|---|
+| [MuSiQue repository](https://github.com/StonyBrookNLP/musique) and [evaluation code](https://github.com/StonyBrookNLP/musique/blob/main/evaluate_v1.0.py) | Answer quality, support quality and answer sufficiency are distinct checks. The revised retrieval tasks require evidence for every hop and distinguish missing, deleted and cyclic paths from resolved answers. All cases occur inside a question; these are not MuSiQue scores or its paired sufficiency metric. |
+| [CRUXEval repository](https://github.com/facebookresearch/cruxeval) | Forward execution and inverse input prediction exercise different code reasoning. New original tasks require both, full-domain preimage counts and extremal inputs, and comparison with a one-line aliasing mutant. A separate heap interpreter and actual execution of trusted emitted Python agree over the entire finite input domain. |
+| [ZebraLogic evaluator in ZeroEval](https://github.com/WildEval/ZeroEval/blob/main/src/evaluation/zebra_grid_eval.py) | Correct cells and completely solved puzzles are different metrics. New grid tasks require complete solution counts, marginal position domains and canonical witnesses after removing clues. Partial cell/domain achievement stays diagnostic; the full task must be correct to pass. We use one response per task, not its best-of-N selection. |
+
+No third-party questions, dataset artifacts or evaluator code were copied. Earlier
+research references below remain the provenance of earlier revisions.
+
+| Changed family | Stronger question and grading | Independent oracle |
+|---|---|---|
+| Selective report: four revised instances | Unknown regime shared across all draws, three simultaneous selection conditions, posterior regime mass, future-tail probability and predictive covariance. Independence conditional on the regime does not imply independence after marginalizing it. Each reduced rational pair is one diagnostic quantity. | Weighted enumeration of all five draws and both regimes, without the generator's posterior shortcut |
+| Revision multihop: four revised instances | Five queries each, including revision ties, obsolete records, tombstone suppression, absent keys and cycles. IDs, record types and revisions do not label relevance. Complete path, complete evidence, status and result have equal diagnostic weight per query. | SQLite window selection plus recursive traversal; reversal and obsolete-row insertion invariance |
+| Grid ambiguity: four new instances | Three all-different groups with cross-group relational clues; solve the intact dossier and two clue-deletion scenarios. Count every assignment, identify every entity's domain and provide the first two lexicographic witnesses. Individual domains do not establish joint feasibility. | Position-to-entity backtracking with relation pruning, versus exhaustive entity-to-position enumeration |
+| Alias preimages: four new instances | Negative modulo, shared lists versus copies, sequential mutation, forward results, inverse multiplicity and boundary witnesses, and all-domain distinction from a one-line mutant. Each instance includes attainable and unattainable targets. | Actual execution of the trusted function from the prompt on all 625 inputs, versus an explicit object-reference heap |
+
+Grading and review corrections:
+
+1. **Retrieval shortcuts.** Old `L0`/`L1` answer IDs and `kind=noise` distractors
+   exposed the intended chain. The replacement uses uniform record grammars and
+   multiple outcomes. A second review found revision numbers still marked relevance;
+   the final generator updates existing selected records and gives distractors
+   equal-revision conflicts too.
+2. **Fragmentary answers earned misleading credit.** Opt-in `atomic_paths` group
+   rational pairs, complete evidence paths, domains and witness bundles. Matching
+   a denominator or part of a required proof earns no credit for that quantity.
+   Unrelated quantities retain credit. Missing structures remain in the denominator;
+   exact integer contracts, strict envelopes and full-pass requirements still apply.
+   Authoring validation rejects duplicate, overlapping, scalar and noncanonical paths.
+3. **Boolean map keys impersonated numbers.** The real code subprocess accepted
+   `{True: 'x'}` against `{1: 'x'}` because Python equates those dictionary keys.
+   Key comparison now distinguishes Boolean and numeric keys recursively through
+   map values. Exact numeric key equivalence (`1` and `1.0`) remains supported.
+4. **Atomic diagnostics needed their own adversarial review.** Descendant value
+   errors initially risked being counted again outside their grouped requirement.
+   They now contribute once. Document errors cannot be confused with a field named
+   `root`. Tests cover missing parents, extra keys, wrong lengths, empty containers,
+   type substitutions and unaffected neighboring fields.
+5. **Integration drift and test resource leak.** Full-suite CLI/browser/report
+   assertions now expect 315 questions. Queue-test SQLite context managers now close
+   their connections after transaction exit, eliminating the observed resource warnings.
+
+The suite is `rigorous-v14`, JSON evaluator version 8 and code evaluator version 6.
+The generation revision of unchanged families is preserved. Changed prompts,
+expected values and rubric grouping participate in fingerprints; historical and
+new results cannot be paired across incompatible protocols. No live model endpoint
+was called. Structural difficulty has increased; measured model separation still
+requires fresh matched runs.
+
+Review proceeds through baseline inspection, independent prompt-derived oracles,
+single-field corruption and structural attacks, then complete regressions and
+integration checks. New controls live in [selftest_reasoning.py](selftest_reasoning.py)
+and run in CI. Final verification results are recorded below after the checks finish.
 
 ## Question storage and one runtime suite
 
@@ -14,8 +81,8 @@ literal text and short arrays remain compact. The initial split preserved the
 v9 question fingerprint exactly; subsequent v10 changes deliberately revise it.
 
 [quality_suite.py](quality_suite.py) still assembles one fixed bank: 171 static
-questions, 108 generated questions, 20 interactive tasks and eight exact-length
-context questions, totalling 307 across 30 categories. Splitting source files
+questions, 116 generated questions, 20 interactive tasks and eight exact-length
+context questions, totalling 315 across 30 categories. Splitting source files
 does not introduce selectable banks, profiles or run settings. The recursive
 loader rejects duplicate IDs, duplicate YAML keys, ambiguous evaluation
 declarations, malformed fields and nonfinite weights.

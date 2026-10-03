@@ -194,11 +194,16 @@ def values_equal(
             for g, w in zip(got, want)
         )
     if isinstance(got, dict) and isinstance(want, dict):
-        if set(got.keys()) != set(want.keys()):
+        # Python aliases Boolean keys with 0/1. Preserve the benchmark's typed
+        # Boolean contract for keys as well as values; numeric int/float keys
+        # still use Python's exact key equality, never a numeric tolerance.
+        observed = {(isinstance(k, bool), k): v for k, v in got.items()}
+        expected = {(isinstance(k, bool), k): v for k, v in want.items()}
+        if observed.keys() != expected.keys():
             return False
         return all(
-            values_equal(got[k], want[k], rel=rel, abs_tol=abs_tol, unordered=unordered)
-            for k in want
+            values_equal(observed[k], expected[k], rel=rel, abs_tol=abs_tol, unordered=unordered)
+            for k in expected
         )
     if isinstance(got, Opaque):
         # A user-defined __repr__ is not a structural value and can impersonate
@@ -1962,6 +1967,17 @@ def _json_leaf_paths(value: Any, path: str = "") -> list[str]:
     return [path or "root"]
 
 
+def _json_criterion_paths(value: Any, atomic_paths=()) -> list[str]:
+    """Collapse designated compound answers into one diagnostic requirement."""
+    paths = []
+    for leaf in _json_leaf_paths(value):
+        path = next((p for p in atomic_paths if leaf == p or leaf.startswith(p + ".")
+                     or leaf.startswith(p + "[")), leaf)
+        if path not in paths:
+            paths.append(path)
+    return paths
+
+
 def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]:
     """Deep-compare the JSON in the response against an expected document.
 
@@ -1971,6 +1987,7 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
         mode: exact | subset  # subset allows extra keys (default exact)
         ignore_keys: [uuid]   # keys whose values may differ (must still exist)
         integer_paths: [count]  # opt-in integer literals; 1.0 does not satisfy count
+        atomic_paths: [ratio]   # grade a compound answer as one diagnostic unit
     """
     diagnostic_sink = kwargs.get("_diagnostics")
     spec = expected if isinstance(expected, dict) and "value" in expected else {"value": expected}
@@ -2008,8 +2025,13 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
             "dimension": "contract",
             "reason_code": "valid_json_document",
         }]
-        for path in _json_leaf_paths(want):
+        criterion_paths = _json_criterion_paths(want, spec.get("atomic_paths", []))
+        for path in criterion_paths:
             mismatch = by_path.get(path)
+            if path in spec.get("atomic_paths", []):
+                mismatch = next((p for p in problems if not p.get("at_root") and (
+                                 p["path"] == path or p["path"].startswith(path + ".")
+                                 or p["path"].startswith(path + "["))), mismatch)
             blocking = next(
                 (
                 candidate for candidate in problems
@@ -2041,10 +2063,15 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
                     **({"blocked_by": blocking["path"]} if blocking else {}),
                 },
             })
-        covered = set(_json_leaf_paths(want))
+        covered = set(criterion_paths)
         for mismatch in problems:
             path = mismatch["path"]
             if path in covered and not mismatch.get("at_root"):
+                continue
+            if mismatch["reason_code"] == "value_mismatch" and any(
+                path.startswith(p + ".") or path.startswith(p + "[")
+                for p in spec.get("atomic_paths", [])
+            ):
                 continue
             criteria.append({
                 "id": f"json-contract:{'document' if mismatch.get('at_root') else 'field:' + path}:{mismatch['reason_code']}",
@@ -2200,8 +2227,8 @@ EVALUATOR_VERSIONS = {
     "ordered_labels": "2",
     "set_match": "2",
     "regex_all": "2",
-    "json_match": "7",
-    "code_exec": "5",
+    "json_match": "8",
+    "code_exec": "6",
     "format_check": "5",
     "contains_keywords": "3",
     "security_analysis": "3",

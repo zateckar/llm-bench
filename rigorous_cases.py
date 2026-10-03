@@ -15,7 +15,7 @@ import itertools
 import json
 import random
 
-from evaluators import _json_leaf_paths
+from evaluators import _json_criterion_paths
 from models import Question
 
 REVISION = "rigorous-v10"
@@ -38,12 +38,15 @@ def schema(value):
     return "string"
 
 
-def balanced_rubric(value, *, critical=()):
+def balanced_rubric(value, *, critical=(), atomic_paths=()):
     """Each top-level requirement has one point irrespective of array length."""
     rubric = []
-    fields = value.items() if isinstance(value, dict) else [("", value)]
-    for key, child in fields:
-        paths = _json_leaf_paths(child, key)
+    # Compute global paths before grouping so atomic paths use the exact
+    # same contract as the JSON evaluator.
+    all_paths = _json_criterion_paths(value, atomic_paths)
+    for key in (value if isinstance(value, dict) else [""]):
+        paths = [p for p in all_paths
+                 if not key or p == key or p.startswith(key + ".") or p.startswith(key + "[")]
         for path in paths:
             rubric.append(
                 {
@@ -88,59 +91,9 @@ def fraction(value):
 
 
 def probability_case(rng, variant, split):
-    # Enumeration and probability-generating-function derivations agree.
-    weights = [rng.randrange(1, 5) for _ in range(5)]
-    total = sum(weights)
-    threshold = rng.randrange(6, 10)
-    scores = [1, 2, 3, 4, 5]
-    mass = CounterMass()
-    for draws in itertools.product(range(5), repeat=3):
-        p = Fraction(weights[draws[0]] * weights[draws[1]] * weights[draws[2]], total**3)
-        report = sum(scores[d] for d in draws) >= threshold and draws[0] != draws[2]
-        if report:
-            mass.report += p
-            mass.event += p * (len(set(draws)) == 3)
-            mass.sum += p * sum(scores[d] for d in draws)
-    dp = defaultdict(Fraction)
-    for first in range(5):
-        for last in range(5):
-            if first == last:
-                continue
-            for middle in range(5):
-                s = first + middle + last + 3
-                if s >= threshold:
-                    dp["report"] += Fraction(
-                        weights[first] * weights[middle] * weights[last], total**3
-                    )
-                    dp["distinct"] += Fraction(
-                        weights[first] * weights[middle] * weights[last], total**3
-                    ) * (middle not in (first, last))
-                    dp["sum"] += Fraction(
-                        weights[first] * weights[middle] * weights[last] * s, total**3
-                    )
-    assert (mass.report, mass.event, mass.sum) == (dp["report"], dp["distinct"], dp["sum"])
-    answer = {
-        "report_probability": fraction(mass.report),
-        "all_distinct_given_report": fraction(mass.event / mass.report),
-        "expected_sum_given_report": fraction(mass.sum / mass.report),
-    }
-    return structured(
-        "selective-report",
-        "Mathematical Reasoning",
-        variant,
-        split,
-        f"Three independent draws with replacement take values {scores} with integer probability weights {weights}. "
-        f"The reporter reveals the trial only if the sum is at least {threshold} AND first and last values differ. "
-        "Find probability of revelation, probability that all three values differ CONDITIONAL on revelation, "
-        "and expected sum CONDITIONAL on revelation. Each probability/expectation is a reduced "
-        "[numerator,denominator] pair with a positive denominator.",
-        answer,
-    )
+    from reasoning_cases import probability_case as build
 
-
-class CounterMass:
-    def __init__(self):
-        self.report = self.event = self.sum = Fraction(0)
+    return build(rng, variant, split)
 
 
 def logic_case(rng, variant, split):
@@ -437,112 +390,9 @@ def policy_case(rng, variant, split):
 
 
 def retrieval_case(rng, variant, split):
-    # Multi-hop alias->part->assembly->service with revocations and evidence IDs.
-    names = [f"K{number}" for number in rng.sample(range(100000, 999999), 180)]
-    rows = [
-        {
-            "id": f"D{i:03d}",
-            "key": name,
-            "revision": 1,
-            "active": True,
-            "kind": "noise",
-            "value": f"x{i}",
-        }
-        for i, name in enumerate(names)
-    ]
-    links = [names[13], names[71], names[139], names[171]]
-    for i in range(3):
-        rows.extend(
-            [
-                {
-                    "id": f"L{i}old",
-                    "key": links[i],
-                    "revision": 1,
-                    "active": True,
-                    "kind": "link",
-                    "value": "obsolete",
-                },
-                {
-                    "id": f"L{i}",
-                    "key": links[i],
-                    "revision": 2,
-                    "active": True,
-                    "kind": "link",
-                    "value": links[i + 1],
-                },
-            ]
-        )
-    terminal = rng.choice(("red", "amber", "green"))
-    rows.append(
-        {
-            "id": "L3",
-            "key": links[3],
-            "revision": 2,
-            "active": True,
-            "kind": "result",
-            "value": terminal,
-        }
-    )
-    # Latest inactive record suppresses its old active value, not the target chain.
-    rows.extend(
-        [
-            {
-                "id": "fake-old",
-                "key": "near-match",
-                "revision": 1,
-                "active": True,
-                "kind": "link",
-                "value": links[0],
-            },
-            {
-                "id": "fake-void",
-                "key": "near-match",
-                "revision": 2,
-                "active": False,
-                "kind": "link",
-                "value": links[1],
-            },
-        ]
-    )
-    rng.shuffle(rows)
-    selected = {}
-    for row in rows:
-        if row["key"] not in selected or row["revision"] > selected[row["key"]]["revision"]:
-            selected[row["key"]] = row
-    path, evidence = [], []
-    cursor = links[0]
-    while True:
-        path.append(cursor)
-        row = selected[cursor]
-        evidence.append(row["id"])
-        if row["kind"] == "result":
-            value = row["value"]
-            break
-        cursor = row["value"]
-    assert path == links and evidence == ["L0", "L1", "L2", "L3"] and value == terminal
-    answer = {
-        "path": path,
-        "evidence_ids": evidence,
-        "result": value,
-        "near_match_is_active": False,
-    }
-    return structured(
-        "revision-multihop",
-        "Needle Retrieval",
-        variant,
-        split,
-        "Resolve this record packet. First choose greatest revision per EXACT key, then honor active=false as "
-        "a tombstone: do not resurrect older active rows. Starting key is "
-        + links[0]
-        + ". Follow kind=link values as next keys until kind=result. Give path including final key, evidence IDs "
-        "in traversal order, final result, and whether key near-match is active. Near matches and noisy kind=noise "
-        "records must not be substituted. Records: " + json.dumps(rows, separators=(",", ":")),
-        answer,
-        metadata={
-            "record_count": len(rows),
-            "context_claim": "bounded packet; use optional measured context sweep for long-context claims",
-        },
-    )
+    from reasoning_cases import retrieval_case as build
+
+    return build(rng, variant, split)
 
 
 def finance_case(rng, variant, split):

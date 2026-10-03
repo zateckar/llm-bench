@@ -1,11 +1,11 @@
 # Fixed rigorous question suite
 
-The canonical run bank is assembled by [quality_suite.py](../quality_suite.py). Every quality run uses the same 307 questions; the test browser displays that complete bank.
+The canonical run bank is assembled by [quality_suite.py](../quality_suite.py). Every quality run uses the same 315 questions; the test browser displays that complete bank.
 
 | Component | Count |
 |---|---:|
 | Static questions: one file per question in questions/ | 171 |
-| Generated reasoning/code: 27 families × 2 seeds × 2 variants | 108 |
+| Generated reasoning/code: 29 families × 2 seeds × 2 variants | 116 |
 | Interactive simulations: 5 families × 2 seeds × 2 variants | 20 |
 | Long-context: 2 families × 2 seeds × 8k/32k sizes | 8 |
 
@@ -20,6 +20,10 @@ V11 adds adaptive minimax policies versus fixed sensor subsets, worst-case graph
 V12 adds bounded concurrent FIFO histories with all valid permutations, real-time precedence and all minimum deletion repairs, and finite epistemic models with simultaneous public announcements, nested knowledge, common-knowledge reachability and shortest counterexamples. Queue variants for each seed change exactly one recorded result. Every knowledge instance separates mutual from common knowledge and needs a counterexample of at least two links. [selftest_compositional.py](../selftest_compositional.py) derives answers from the emitted prompts using independent permutation and relation/distance algorithms and tests answer corruptions.
 
 V13 adds finite evidence dossiers with complete minimal supports/refutations, contradiction cores, minimum deletion repairs and canonical countermodels, and typed tool traces with reference validation, error precedence, stale versions and cached retries. Evidence labels distinguish uncertainty from inconsistency; repaired-world counts deduplicate worlds rather than voting over repairs. Each tool call receives equal diagnostic weight, and receipt fields depend on its correct status. Counts, balances and versions have explicit integer-literal contracts using validated exact `integer_paths`; Boolean/float/string substitutes fail. [selftest_evidence.py](../selftest_evidence.py) recomputes answers from the emitted prompts using set-based truth tables and an independent SQLite interpreter. Six transformed fixtures in each advanced-coding anchor check large exact integers, Unicode identifiers and nested values; both existing code oracles agree and the reference programs run against them in real subprocesses.
+
+V14 replaces the four selective-report instances with latent-regime posterior and predictive inference, including covariance of conditionally independent future draws. It replaces the four revision-multihop instances with five-query dossiers covering exact revision ties, missing keys, tombstones and cycles; distractors share the identifier, revision and record-type distributions. Eight additional tasks require grid counts, position domains and witnesses after removing clues, and forward/inverse execution with Python list aliasing and a one-line mutant. [selftest_reasoning.py](../selftest_reasoning.py) checks emitted prompts with independent joint-distribution enumeration, SQLite selection, constraint backtracking and actual execution of the trusted reference source.
+
+The optional JSON `atomic_paths` contract groups compound answers into one diagnostic requirement: a wrong numerator cannot earn a point for a matching denominator, and incomplete evidence or witness arrays cannot earn fragments of a complete proof. Use exact nonoverlapping container paths, and generate matching rubrics with `balanced_rubric(..., atomic_paths=...)`. Integer-leaf contracts still apply within these groups. Structural errors keep the grouped criterion in the denominator and fail the separate contract score. Existing tasks retain their established diagnostic granularity.
 
 Generated tasks include selective-report conditioning, bounded constraint search, minimal inconsistent sets, temporal policies, revised multihop evidence, reliability decisions, string parsers, dependency layers and transactional state. Fixed authoring seeds are 19 and 23, with two variants. Family identifiers group related instances for balanced scoring.
 

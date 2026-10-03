@@ -25,7 +25,7 @@ The default runs both phases. Reports contain Markdown and a companion JSON file
 
 ## Quality
 
-**Rigorous v13 contains 307 tasks across 30 categories:** 171 revised static anchors, 108 original generated instances, 20 interactive simulations, and eight long-context accuracy checks at 8,192 and 32,768 cl100k_base reference tokens. The static bank has one question per file under [tests/questions](tests/questions); [quality_suite.py](quality_suite.py) assembles the complete suite deterministically. Question seeds 19 and 23 and two variants per generated family are fixed. New tasks require all minimal sufficient evidence, contradiction cores, minimum repairs and countermodels, plus typed tool traces with error precedence, references and idempotent retries. Paired variants change one assertion or call argument. All eight advanced-coding anchors now include large-number, Unicode-identifier or nested-payload transformations. Established generated prompts retain their generation version.
+**Rigorous v14 contains 315 tasks across 30 categories:** 171 revised static anchors, 116 original generated instances, 20 interactive simulations, and eight long-context accuracy checks at 8,192 and 32,768 cl100k_base reference tokens. The static bank has one question per file under [tests/questions](tests/questions); [quality_suite.py](quality_suite.py) assembles the complete suite deterministically. Question seeds 19 and 23 and two variants per generated family are fixed. V14 strengthens eight existing probability/retrieval instances and adds eight grid-ambiguity and code-execution instances. Tasks require posterior prediction under shared uncertainty, revision-aware retrieval with missing/deleted/cyclic paths, complete constraint counts and domains after clue deletion, and inverse execution with alias-sensitive program comparisons. Compound quantities, evidence paths and witnesses have explicit atomic diagnostic criteria; strict full success remains the primary metric. Unchanged families retain their established generation version.
 
 Every task requires a full pass. The headline is **strict task success**, averaged first within each family, then within each category, then across capability categories. This prevents many similar variants from dominating. Partial criterion achievement and its coverage are separate diagnostics. Three creative-writing items measure formal compliance separately; they do not measure artistic quality.
 
@@ -35,11 +35,11 @@ All quality calls use temperature 0, model seed 0 and a 65,536-token output cap,
 
 Saved reports record suite fingerprints, individual criteria, evaluator versions, client versions, timeout/retry policy and quality worker count. Paired comparisons require compatible protocols and identical question fingerprints. Invalid evaluator scores or diagnostics become unscored evaluator errors; missing required rubric criteria retain zero diagnostic credit. Family bootstrap intervals are unavailable when any category lacks multiple independent families; they do not estimate repeated-run variability.
 
-There are no profiles, filters, partial reruns, seed/split controls, output-budget controls, custom context grids or response-cache options. Historical scores are retained as historical data and do not become v13 scores.
+There are no profiles, filters, partial reruns, seed/split controls, output-budget controls, custom context grids or response-cache options. Historical scores are retained as historical data and do not become v14 scores.
 
 The new research draws on [FEVER](https://fever.ai/dataset/fever.html), [HoVer](https://hover-nlp.github.io/), [BFCL](https://gorilla.cs.berkeley.edu/blogs/8_berkeley_function_calling_leaderboard.html), [ComplexBench](https://github.com/thu-coai/ComplexBench) and [BigCodeBench](https://github.com/bigcode-project/bigcodebench), alongside the earlier LiveBench and RULER methods. Tasks are original local exercises; third-party datasets and benchmark scores are not reproduced.
 
-Fresh matched model runs are needed to establish empirical difficulty and model separation. Public question banks can be contaminated. The [v13 design and critical review](BENCHMARK_DESIGN.md) records the new tasks, primary research sources, client effects, fixed grading defects and verification methods. These bounded code functions and text-protocol simulations do not measure complete repository work, native tool APIs or unrestricted real-world agents.
+Fresh matched model runs are needed to establish empirical difficulty and model separation. Public question banks can be contaminated. The [v14 design and critical review](BENCHMARK_DESIGN.md) records the new tasks, primary research sources, client effects, fixed grading defects and verification methods. These bounded code functions and text-protocol simulations do not measure complete repository work, native tool APIs or unrestricted real-world agents.
 
 Only complete leading reasoning envelopes are removed before grading. Unfinished scratchpads have no final answer; literal tags within JSON and code remain data. JSON has a portable 256-level nesting limit. Code fixtures reject arbitrary objects that merely print like correct values, preserve ordered members inside sets, and distinguish interpreter-launch failures from submitted-program failures.
 
@@ -73,7 +73,7 @@ Python application and development dependencies are locked in [uv.lock](uv.lock)
 
 ```sh
 uv run python validate_suite.py --strict
-uv run python -m unittest selftest_client selftest_adversarial selftest_frontier selftest_granular selftest_rigorous selftest_quality selftest_perf selftest_run_options selftest_benchmark_runner selftest_reports selftest_ceiling selftest_stretch selftest_specialists selftest_compositional selftest_evidence
+uv run python -m unittest selftest_client selftest_adversarial selftest_frontier selftest_granular selftest_rigorous selftest_quality selftest_perf selftest_run_options selftest_benchmark_runner selftest_reports selftest_ceiling selftest_stretch selftest_specialists selftest_compositional selftest_evidence selftest_reasoning
 uv run python selftest_evaluators.py
 uv run python selftest_challenges.py
 uv run python selftest_run_queue.py

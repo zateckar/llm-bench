@@ -427,15 +427,17 @@ def check_json_match(report: Report, where: str, expected: object) -> None:
         report.error(where, "json_match value_aliases must map exact leaf paths to alternatives")
     else:
         # Build canonical comparator paths; do not accept misspelled or wildcard paths.
-        leaves = {}
+        leaves, containers = {}, set()
 
         def visit(value, path=""):
             if isinstance(value, dict):
+                containers.add(path)
                 for key, child in value.items():
                     if not isinstance(key, str) or not key or any(c in key for c in ".[]"):
                         report.error(where, f"json_match key {key!r} cannot form an unambiguous criterion path")
                     visit(child, f"{path}.{key}".lstrip("."))
             elif isinstance(value, list):
+                containers.add(path)
                 for i, child in enumerate(value):
                     visit(child, f"{path}[{i}]")
             else:
@@ -446,6 +448,17 @@ def check_json_match(report: Report, where: str, expected: object) -> None:
                 leaves[path] = value
 
         visit(expected.get("value"))
+        atomic_paths = expected.get("atomic_paths", [])
+        if (not isinstance(atomic_paths, list) or any(not isinstance(p, str) or not p for p in atomic_paths)
+                or len(set(atomic_paths)) != len(atomic_paths)):
+            report.error(where, "json_match atomic_paths must be a list of unique nonempty paths")
+            atomic_paths = []
+        for path in atomic_paths:
+            if path not in containers:
+                report.error(where, f"json_match atomic path {path!r} must name an exact container path")
+            if any(other != path and (path.startswith(other + ".") or path.startswith(other + "["))
+                   for other in atomic_paths):
+                report.error(where, f"json_match atomic path {path!r} overlaps another atomic path")
         integer_paths = expected.get("integer_paths", [])
         if (not isinstance(integer_paths, list) or any(not isinstance(p, str) for p in integer_paths)
                 or len(set(integer_paths)) != len(integer_paths)):
