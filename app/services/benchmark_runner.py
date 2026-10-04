@@ -452,9 +452,24 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, **sweep_options):
         )
 
 
+def _sanitize_sweep_errors(value):
+    """Control probes and inferred-limit explanations also carry provider errors."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in {"error", "reason", "stop_error"} and isinstance(item, str):
+                value[key] = _sanitize_error_detail(item)
+            elif key == "notes" and isinstance(item, list):
+                value[key] = [_sanitize_error_detail(note) if isinstance(note, str) else note
+                              for note in item]
+            else:
+                _sanitize_sweep_errors(item)
+    elif isinstance(value, list):
+        for item in value:
+            _sanitize_sweep_errors(item)
+
+
 def _store_sweep_checkpoint(run_id, report):
-    for effort in report.get("efforts", []):
-        effort["error"] = _sanitize_error_detail(effort.get("error", ""))
+    _sanitize_sweep_errors(report)
     db = _connect()
     try:
         db.execute("UPDATE test_runs SET perf_json=? WHERE id=? AND status IN ('pending','running')",
@@ -465,9 +480,7 @@ def _store_sweep_checkpoint(run_id, report):
 
 
 def _store_sweep_cell(run_id, cell):
-    cell["error"] = _sanitize_error_detail(cell.get("error", ""))
-    if cell.get("cache_reuse"):
-        cell["cache_reuse"]["error"] = _sanitize_error_detail(cell["cache_reuse"].get("error", ""))
+    _sanitize_sweep_errors(cell)
     db = _connect()
     try:
         db.execute("""INSERT OR REPLACE INTO performance_cells
@@ -510,13 +523,14 @@ def _run_context_sweep(run_id, client_config, sweep_config, metrics_scope=None):
         )
         measurement_elapsed = (time.perf_counter() - started) * 1000
         payload = report.to_dict()
+        _sanitize_sweep_errors(payload)
         if telemetry:
             payload["telemetry"] = telemetry.finish()
     finally:
         if telemetry:
             telemetry.session.close()
     if _run_is_active(run_id):
-        message = "" if report.successful_requests else "No complete answers were measured in the context sweep."
+        message = report.stop_error or ("" if report.successful_requests else "No complete answers were measured in the context sweep.")
         _summarise_and_finish(run_id, [], 0, sweep_config.max_concurrency,
                               measurement_elapsed,
                               json.dumps(payload), message, client_config)

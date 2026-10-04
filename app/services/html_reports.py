@@ -383,6 +383,7 @@ def load_performance_view(run):
 def performance_view(runs, *, offline=False):
     from app.services.telemetry_views import telemetry_view
     from app.services.capacity import estimate_capacity
+    from app.services.performance_comparison import performance_comparison
     def current_perf(run):
         raw = run["perf"]
         return raw if raw.get("schema_version") == 3 else {}
@@ -535,6 +536,7 @@ def performance_view(runs, *, offline=False):
                     "requests": point.get("requests", 0), "errors": point.get("errors", 0),
                 })
     return {
+        "comparison": performance_comparison(runs),
         "cache_rows": cache_rows,
         "capacity_views": [estimate_capacity(r) for r in runs if r.get("perf")],
         "telemetry_views": [view for r in runs if (view := telemetry_view(r))],

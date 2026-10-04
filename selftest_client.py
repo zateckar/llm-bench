@@ -84,6 +84,14 @@ class ClientTests(unittest.TestCase):
         self.assertTrue(metrics.ok)
         self.assertEqual(text, "answer")
 
+    def test_stream_error_preserves_provider_diagnostics(self):
+        for detail in ({"message": "EngineCore encountered an issue", "code": "500"},
+                       {"message": "maximum context length is 262144", "code": "context_length_exceeded"}):
+            _, _, metrics = self.complete(Response([{"error": detail}]))
+            self.assertFalse(metrics.ok)
+            self.assertIn(detail["message"], metrics.error)
+            self.assertIn(detail["code"], metrics.error)
+
     def test_empty_trailing_usage_choice_after_finish_is_accepted(self):
         # LiteLLM sends usage on an empty choice after the finish chunk.
         for trailing in ({"index": 0, "delta": {}}, {"index": 0, "delta": {}, "finish_reason": "length"}):

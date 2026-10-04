@@ -1,0 +1,48 @@
+{% set comparison = performance.comparison %}
+{% if comparison %}
+<section class="perf-section perf-comparison" aria-label="Side-by-side performance comparison">
+    <div class="perf-section-heading"><div><h3>Performance comparison</h3><p class="perf-caption">One column per run. Measurements align by workload, context, concurrency, reasoning, prefix mode, output limit and temperature.</p></div></div>
+    <p class="perf-footnote">A dash means this run has no saved measurement for that setting. n/a means the measurement exists but does not report that metric. Protocol versions and sample counts remain visible; different output lengths and few samples can limit comparisons.</p>
+    {% if comparison.runs|map(attribute='revision')|unique|list|length > 1 %}<p class="perf-warning perf-footnote">These runs use different performance revisions. Check protocol settings and sample counts when comparing shared workloads.</p>{% endif %}
+    {% if not offline %}
+    <script src="/static/performance-comparison.js"></script>
+    <div x-data="performanceComparison({{ comparison | tojson | forceescape }})">
+        <div class="sweep-controls comparison-controls">
+            <label>Workload<select x-model="workloadId" @change="changeWorkload()" :title="workload.label" aria-label="Comparison workload"><template x-for="w in data.workloads" :key="w.id"><option :value="w.id" x-text="w.label"></option></template></select></label>
+            <label>Input context<select x-model.number="context" aria-label="Comparison input context"><template x-for="n in workload.contexts" :key="n"><option :value="n" x-text="n.toLocaleString() + ' tokens'"></option></template></select></label>
+            <label>Concurrency<select x-model.number="concurrency" aria-label="Comparison concurrency"><template x-for="n in workload.concurrencies" :key="n"><option :value="n" x-text="n + ' requests'"></option></template></select></label>
+            <label>Slice measurement<select x-model="metric" aria-label="Comparison measurement"><template x-for="m in workload.metrics" :key="m.key"><option :value="m.key" x-text="m.label"></option></template></select></label>
+        </div>
+        <div class="perf-table-wrap"><table class="perf-table perf-comparison-table">
+            <caption>Measurements side by side <span x-text="context.toLocaleString() + ' input tokens · ' + concurrency + ' concurrent requests'"></span></caption>
+            <thead><tr><th scope="col">Metric</th><template x-for="(run, i) in data.runs" :key="i"><th scope="col"><span x-text="run.label"></span><small x-text="run.revision + ' · ' + run.status + (run.partial ? ' · partial' : '')"></small></th></template></tr></thead>
+            <tbody>
+                <template x-for="m in workload.metrics" :key="m.key"><tr><th scope="row" x-text="m.label"></th><template x-for="(point, i) in points()" :key="i"><td :class="{'perf-warning': problem(point)}" :title="title(point)" x-text="value(point, m.key)"></td></template></tr></template>
+                <tr><th scope="row">Samples</th><template x-for="(point, i) in points()" :key="i"><td x-text="point?.samples || '—'"></td></template></tr>
+                <tr><th scope="row">Errors / incomplete</th><template x-for="(point, i) in points()" :key="i"><td x-text="point?.failures || '—'"></td></template></tr>
+                <tr><th scope="row">Rounds per cell</th><template x-for="(rounds, i) in workload.rounds" :key="i"><td x-text="rounds == null ? 'n/a' : rounds"></td></template></tr>
+                <tr><th scope="row">Status</th><template x-for="(point, i) in points()" :key="i"><td class="perf-comparison-status" :class="{'perf-warning': problem(point)}" :title="title(point)"><span x-text="status(point)"></span><small x-show="point?.error" x-text="point?.error"></small></td></template></tr>
+            </tbody>
+        </table></div>
+        {% for axis, title in [('concurrency', 'Across concurrent requests'), ('context', 'Across input contexts')] %}
+        <details class="perf-details" {% if loop.first %}open{% endif %}><summary>{{ title }} <span x-text="metricInfo.label"></span></summary>
+            <div class="perf-table-wrap"><table class="perf-table perf-comparison-table">
+                <caption x-text="metricInfo.label + ' · ' + {{ "('Input ' + context.toLocaleString() + ' tokens')" if axis == 'concurrency' else "('Concurrency ' + concurrency)" }}"></caption>
+                <thead><tr><th scope="col">{{ 'Concurrency' if axis == 'concurrency' else 'Input tokens' }}</th><template x-for="(run, i) in data.runs" :key="i"><th scope="col" x-text="run.label"></th></template></tr></thead>
+                <tbody><template x-for="n in workload.{{ 'concurrencies' if axis == 'concurrency' else 'contexts' }}" :key="n"><tr :class="{'perf-peak': n === {{ axis }}}"><th scope="row"><button type="button" class="comparison-coordinate" @click="{{ axis }} = n" x-text="n.toLocaleString()" :aria-pressed="n === {{ axis }}"></button></th><template x-for="(point, i) in points({{ 'context, n' if axis == 'concurrency' else 'n, concurrency' }})" :key="i"><td :class="{'perf-warning': problem(point)}" :title="title(point)"><span x-text="value(point)"></span><small x-show="problem(point)" x-text="status(point)"></small></td></template></tr></template></tbody>
+            </table></div>
+        </details>
+        {% endfor %}
+    </div>
+    {% else %}
+    {% for workload in comparison.workloads %}
+    <details class="perf-details" {% if loop.first %}open{% endif %}><summary>{{ workload.label }} <span>{{ workload.rows|length }} aligned context/load settings</span></summary>
+        <div class="perf-table-wrap"><table class="perf-table perf-comparison-table">
+            <thead><tr><th scope="col">Context / concurrency</th>{% for run in comparison.runs %}<th scope="col">{{ run.label }}<small>{{ run.revision }} · {{ run.status }}{% if run.partial %} · partial{% endif %}</small></th>{% endfor %}</tr></thead>
+            <tbody>{% for row in workload.rows %}<tr><th scope="row">{{ '{:,}'.format(row.context) }} tokens<small>{{ row.concurrency }} concurrent requests</small></th>{% for point in row.points %}<td class="perf-comparison-record">{% if point %}<dl>{% for metric in workload.metrics %}<div><dt>{{ metric.label }}</dt><dd>{{ point.formatted[metric.key] }}</dd></div>{% endfor %}</dl><p class="perf-caption">{{ point.samples }} · {{ point.failures }}</p><p class="perf-caption">{{ point.status|replace('_', ' ') }}{% if workload.rounds[loop.index0] is not none %} · {{ workload.rounds[loop.index0] }} round(s){% endif %}</p>{% if point.error %}<p class="perf-warning perf-caption">{{ point.error }}</p>{% endif %}{% else %}<p>—</p><p class="perf-caption">Not measured for this workload</p>{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+        </table></div>
+    </details>
+    {% endfor %}
+    {% endif %}
+</section>
+{% endif %}

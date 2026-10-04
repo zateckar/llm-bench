@@ -333,6 +333,98 @@ class ReportTests(unittest.TestCase):
         self.assertIn('aria-label="Delivered output under load"', reports.render_report(selected))
         self.assertIn("/compare/report.html?runs=1&amp;runs=2", online.text)
 
+    def test_performance_comparison_aligns_runs_and_missing_loads(self):
+        selected = [asyncio.run(reports.load_run(i)) for i in (2, 1)]
+        selected[0]["perf"]["concurrency"] = selected[0]["perf"]["concurrency"][1:]
+        comparison = reports.performance_view(selected)["comparison"]
+        self.assertEqual([r["label"] for r in comparison["runs"]], [r["label"] for r in selected])
+        workload = comparison["workloads"][0]
+        self.assertEqual(workload["concurrencies"], [1, 2, 4, 8])
+        first = workload["rows"][0]
+        self.assertEqual((first["context"], first["concurrency"]), (1024, 1))
+        self.assertIsNone(first["points"][0])
+        self.assertEqual(first["points"][1]["formatted"]["aggregate_output"], "35.0 tok/s")
+        shared = workload["rows"][1]["points"]
+        self.assertEqual([p["values"]["aggregate_output"] for p in shared], [105.6, 64])
+        for url in ("/compare?runs=2&runs=1", "/compare/report.html?runs=2&runs=1"):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn('aria-label="Side-by-side performance comparison"', response.text)
+            if "report.html" in url:
+                self.assertIn("35.0 tok/s", response.text)
+            else:
+                self.assertIn("performanceComparison", response.text)
+        self.assertNotIn('aria-label="Side-by-side performance comparison"', self.client.get("/runs/1").text)
+
+    def test_performance_comparison_keeps_budgets_and_sampling_settings_distinct(self):
+        selected = [asyncio.run(reports.load_run(i)) for i in (1, 2)]
+        for field, value in (("max_output_tokens", 8192), ("temperature", 1),
+                             ("reasoning_effort", "high"), ("reference_tokenizer", "other")):
+            with self.subTest(field=field):
+                changed = json.loads(json.dumps(selected))
+                changed[1]["perf"]["protocol"][field] = value
+                workloads = reports.performance_view(changed)["comparison"]["workloads"]
+                self.assertEqual(len(workloads), 2)
+                self.assertTrue(all(row["points"][1] is None for row in workloads[0]["rows"]))
+                self.assertTrue(all(row["points"][0] is None for row in workloads[1]["rows"]))
+
+    def test_sweep_comparison_matches_contexts_prefixes_and_revisions(self):
+        selected = [asyncio.run(reports.load_run(i)) for i in (1, 2)]
+        cold = {"effort": "default", "context_tokens": 32768, "concurrency": 1,
+                "status": "measured", "requests": 1, "completed": 1, "errors": 0, "incomplete": 0,
+                "latency": {"p50_ms": 2000}, "ttft": {"p50_ms": 600},
+                "aggregate_tokens_per_sec": 30, "request_tokens_per_sec": {"p50": 20}}
+        for index, run in enumerate(selected):
+            run["perf"] = {"schema_version": 4, "kind": "context_sweep", "finished": index == 0,
+                           "protocol": {"revision": f"context-sweep-v{index + 2}",
+                                        "max_output_tokens": 8192, "temperature": 0,
+                                        "reference_tokenizer": "cl100k_base", "rounds_per_cell": index + 1},
+                           "cells": [json.loads(json.dumps(cold))]}
+        selected[0]["perf"]["cells"][0]["cache_reuse"] = {**cold, "ttft": {"p50_ms": 80}}
+        selected[1]["perf"]["cells"].append({**cold, "context_tokens": 65536, "status": "failed",
+                                             "requests": 1, "completed": 0, "errors": 1,
+                                             "ttft": {}, "latency": {}, "aggregate_tokens_per_sec": 0,
+                                             "error": "EngineCore <script>alert(1)</script>"})
+        comparison = reports.performance_view(selected)["comparison"]
+        self.assertEqual(len(comparison["workloads"]), 2)
+        shared = comparison["workloads"][0]
+        self.assertEqual(shared["contexts"], [32768, 65536])
+        self.assertEqual(shared["rounds"], [1, 2])
+        self.assertEqual([p["formatted"]["ttft_p50"] for p in shared["rows"][0]["points"]], ["600 ms", "600 ms"])
+        self.assertIsNone(shared["rows"][1]["points"][0])
+        failed = shared["rows"][1]["points"][1]
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(failed["formatted"]["aggregate_output"], "0.0 tok/s")
+        self.assertEqual(failed["formatted"]["ttft_p50"], "n/a")
+        warm = comparison["workloads"][1]["rows"][0]["points"]
+        self.assertEqual(warm[0]["formatted"]["ttft_p50"], "80 ms")
+        self.assertIsNone(warm[1])
+        self.assertTrue(comparison["runs"][1]["partial"])
+        html = reports.render_report(selected)
+        self.assertIn("These runs use different performance revisions", html)
+        self.assertIn("Not measured for this workload", html)
+        self.assertIn("EngineCore &lt;script&gt;alert(1)&lt;/script&gt;", html)
+        self.assertNotIn("<script>alert(1)</script>", html)
+        parser = AssetParser()
+        parser.feed(html)
+        self.assertEqual(parser.scripts, 0)
+        self.assertEqual(parser.external, [])
+
+    def test_prefix_cache_comparison_retains_cold_warm_rates_and_missing_run(self):
+        selected = [asyncio.run(reports.load_run(i)) for i in (1, 2, 3)]
+        point = {"requests": 4, "errors": 0, "output_tokens_per_sec": 42,
+                 "ttft": {"p50_ms": 10}, "cache_metrics": {"cache_hit_fraction": 0,
+                 "uncached_prefill_tokens_per_sec": {"p50": 123}}}
+        selected[0]["perf"]["cache_reuse"] = [{"context_tokens": 8192, "concurrency": 1,
+                                               "cold": point, "warm": {**point, "ttft": {"p50_ms": 5}}}]
+        workloads = reports.performance_view(selected)["comparison"]["workloads"]
+        cache = [w for w in workloads if w["label"].startswith("Prefix cache")]
+        self.assertEqual(len(cache), 2)
+        self.assertEqual(cache[0]["rows"][0]["points"][0]["formatted"]["cache_hit"], "0.0%")
+        self.assertEqual(cache[1]["rows"][0]["points"][0]["formatted"]["ttft_p50"], "5 ms")
+        self.assertTrue(all(p is None for w in cache for p in w["rows"][0]["points"][1:]))
+        self.assertIsNone(reports.performance_view([selected[0]])["comparison"])
+
     def assert_results_separated(self, html, *, quality=True, performance=True):
         parser = ResultSectionParser()
         parser.feed(html)

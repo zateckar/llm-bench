@@ -23,7 +23,7 @@ import urllib3
 from app.benchmarking.models import RequestMetrics, TokenUsage
 
 logger = logging.getLogger(__name__)
-CLIENT_PROTOCOL_VERSION = "chat-client-v5"
+CLIENT_PROTOCOL_VERSION = "chat-client-v6"
 
 # Rough characters-per-token used only for prompt-size estimates in the perf
 # suite when the server does not report prompt_tokens.
@@ -634,7 +634,10 @@ def _validated_choices(data, *, blocking=False):
     if not isinstance(data, dict):
         raise _ProtocolError("Completion response must be an object")
     if data.get("error"):
-        raise _ProtocolError("Endpoint returned an error event")
+        # Keep the provider's explanation: otherwise an engine crash or a
+        # context rejection in an HTTP-200 stream becomes an opaque parser error.
+        detail = json.dumps(data["error"], ensure_ascii=False)[:2000]
+        raise _ProtocolError(f"Endpoint returned an error event: {detail}")
     choices = data.get("choices")
     if not isinstance(choices, list) or len(choices) > 1 or (blocking and not choices):
         raise _ProtocolError("Expected one completion choice (or a streaming usage event)")

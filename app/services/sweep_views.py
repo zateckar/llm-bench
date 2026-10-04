@@ -104,7 +104,7 @@ def sweep_view(run, offline=False):
 
 
 def export_matrix(data, effort, metric):
-    """Every cell has an exact-value tooltip; missing results have distinct colors."""
+    """Print values at a readable size, retaining tooltips for status and details."""
     contexts, concurrencies = data["contexts"], data["concurrencies"]
     if not contexts or not concurrencies:
         return ""
@@ -117,30 +117,39 @@ def export_matrix(data, effort, metric):
         c["values"][metric["key"]] for c in cells.values() if c["values"][metric["key"]] is not None
     ]
     low, high = min(numbers, default=0), max(numbers, default=0)
-    width, height = 100 + 29 * len(concurrencies), 58 + 18 * len(contexts)
+    width, height = 100 + 96 * len(concurrencies), 58 + 38 * len(contexts)
     svg = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{escape(metric["label"])} by context and concurrency" viewBox="0 0 {width} {height}" class="sweep-export-matrix">',
+        f'<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{escape(metric["label"])} by context and concurrency" width="{width}" height="{height}" viewBox="0 0 {width} {height}" class="sweep-export-matrix">',
         '<g fill="currentColor" font-size="10" font-family="sans-serif">',
         '<text x="100" y="14">Concurrent requests →</text>',
     ]
     for x, concurrency in enumerate(concurrencies):
-        svg.append(f'<text x="{114 + x * 29}" y="34" text-anchor="middle">{concurrency}</text>')
+        svg.append(f'<text x="{146 + x * 96}" y="34" text-anchor="middle">{concurrency}</text>')
     for y, context in enumerate(contexts):
-        top = 42 + y * 18
+        top = 42 + y * 38
         svg.append(f'<text x="88" y="{top + 12}" text-anchor="end">{context:,}</text>')
         for x, concurrency in enumerate(concurrencies):
             cell = cells.get((context, concurrency))
             value = cell["values"][metric["key"]] if cell else None
+            foreground = "#fff"
             if value is not None:
                 ratio = (value - low) / (high - low) if high > low else 0.5
                 fill = f"hsl({215 + ratio * 55:.0f},70%,{75 - ratio * 35:.0f}%)"
+                if ratio < 0.45:
+                    foreground = "#111827"
             elif cell and cell["status"] in {"failed", "unsupported_context", "incomplete"}:
                 fill = "#a55a37"
             else:
                 fill = "#494953"
             label = f"{context:,} tokens · c={concurrency} · {cell['formatted'][metric['key']] if cell else 'Not measured'} · {cell['status'] if cell else effort['status']}"
+            display = (cell["formatted"][metric["key"]] if value is not None
+                       else "Failed" if cell and cell["status"] in {"failed", "unsupported_context"}
+                       else "Incomplete" if cell and cell["status"] == "incomplete"
+                       else "Skipped" if cell and cell["status"].startswith("skipped_")
+                       else "n/a" if cell and cell["requests"] else "—")
             svg.append(
-                f'<rect x="{100 + x * 29}" y="{top}" width="26" height="15" rx="2" fill="{fill}"><title>{escape(label)}</title></rect>'
+                f'<g><title>{escape(label)}</title><rect x="{100 + x * 96}" y="{top}" width="92" height="34" rx="2" fill="{fill}"/>'
+                f'<text x="{146 + x * 96}" y="{top + 21}" text-anchor="middle" fill="{foreground}">{escape(display)}</text></g>'
             )
     svg.append("</g></svg>")
     return Markup("".join(svg))

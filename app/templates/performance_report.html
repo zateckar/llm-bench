@@ -10,6 +10,8 @@
 
     {% if performance.notes %}<div class="perf-notices" role="note">{% for note in performance.notes %}<p>{{ note }}</p>{% endfor %}</div>{% endif %}
 
+    {% include "performance_comparison.html" %}
+
     {% with capacity_views = performance.capacity_views %}{% include "capacity_report.html" %}{% endwith %}
 
     {% include "performance_telemetry.html" %}
@@ -25,7 +27,7 @@
         <p class="perf-footnote">Cache hit means provider-reported cached prompt tokens divided by reported input tokens. Missing telemetry is n/a. Uncached prefill uses new prompt tokens / TTFT; effective input includes reused tokens. TTFT includes queue, network and first-token generation. Decode uses reported output minus one / first-to-last delivery span, excluding bursts and estimated counts. These are client timing proxies. KV prefix reuse saves repeated prefill computation; compare measured decode and throughput separately.</p>
     </section>
     {% elif performance.load_rows or performance.sweep_views %}<p class="perf-footnote">This report has no paired KV prefix cache measurements. Run the current performance protocol to compare cold and warm long contexts.</p>{% endif %}
-    {% if not performance.sweep_views and not offline %}<div class="perf-sweep-intro"><div><h3>Context &amp; reasoning sweep</h3><p class="perf-caption">Measure 256 to 1,048,576 input tokens in 16,384-token steps, concurrency 1 to 256 in steps of 8, and every accepted reasoning effort.</p></div><a href="/admin/run?mode=sweep" class="btn-ghost">New context sweep →</a></div>{% endif %}
+    {% if not performance.sweep_views and not offline %}<div class="perf-sweep-intro"><div><h3>Context &amp; reasoning sweep</h3><p class="perf-caption">Measure 256 to 1,048,576 input tokens in 65,536-token steps with a 32,768-token anchor, concurrency 1 to 256 in steps of 16, and every accepted reasoning effort.</p></div><a href="/admin/run?mode=sweep" class="btn-ghost">New context sweep →</a></div>{% endif %}
 
     {% if performance.load_rows %}
     <section class="perf-section" aria-label="Fixed-workload load test">

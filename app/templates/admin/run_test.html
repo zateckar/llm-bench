@@ -58,13 +58,14 @@
         sweepSize(run) {
             const ctx = Number(run.context_max), c = Number(run.max_concurrency);
             const contexts = new Set([256, ctx]);
-            for (let n=16384; n<=ctx; n+=16384) contexts.add(n);
+            if (ctx >= 32768) contexts.add(32768);
+            for (let n=65536; n<=ctx; n+=65536) contexts.add(n);
             const concurrencies = new Set([1, c]);
-            for (let n=8; n<=c; n+=8) concurrencies.add(n);
+            for (let n=16; n<=c; n+=16) concurrencies.add(n);
             const requests = 2 * contexts.size * [...concurrencies].reduce((a,b)=>a+b,0) * Number(run.sweep_rounds);
             return contexts.size.toLocaleString() + ' contexts × ' + concurrencies.size + ' load levels = ' +
                    (contexts.size * concurrencies.size).toLocaleString() + ' cells and ' + requests.toLocaleString() +
-                   ' timed cold/warm requests plus ' + contexts.size.toLocaleString() + ' cache primes per accepted effort. Up to 8 effort settings are probed, including provider default.';
+                   ' timed cold/warm requests plus ' + contexts.size.toLocaleString() + ' cache primes per accepted effort. Up to 8 effort settings are probed, including provider default; at most 2,448 paired cells (4,896 cold/warm measurements) across all efforts. Worker warmups and failure-control probes are additional untimed requests.';
         },
         payload() { return JSON.stringify(this.runs.map(({_key, context_max, sweep_rounds, sweep_output_tokens, ...rest}) =>
             rest.mode === 'sweep' ? {...rest, context_max, sweep_rounds, sweep_output_tokens} : rest)); }
@@ -123,13 +124,13 @@
                         </select>
                     </div>
                     <div><label class="block text-xs text-zinc-400">Mode</label><select x-model="run.mode" @change="setMode(run)" class="bg-zinc-800 rounded px-3 py-2 w-full"><option value="both">Quality + performance</option><option value="quality">Quality</option><option value="performance">Performance · fixed context</option><option value="sweep">Performance · context &amp; reasoning sweep</option></select></div>
-                    <div><label class="block text-xs text-zinc-400">Maximum concurrency</label><input type="number" min="1" :max="run.mode === 'sweep' ? 256 : {{ max_concurrency }}" x-model.number="run.max_concurrency" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p x-show="run.mode === 'sweep'" class="text-xs text-zinc-500 mt-1">1, then 8, 16, … up to this limit.</p></div>
-                    <div x-show="run.mode === 'sweep'"><label class="block text-xs text-zinc-400">Maximum input context · reference tokens</label><input type="number" min="256" max="1048576" x-model.number="run.context_max" :disabled="run.mode !== 'sweep'" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1">256, then 16,384-token steps to 1,048,576.</p></div>
+                    <div><label class="block text-xs text-zinc-400">Maximum concurrency</label><input type="number" min="1" :max="run.mode === 'sweep' ? 256 : {{ max_concurrency }}" x-model.number="run.max_concurrency" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p x-show="run.mode === 'sweep'" class="text-xs text-zinc-500 mt-1">1, then 16, 32, … up to this limit.</p></div>
+                    <div x-show="run.mode === 'sweep'"><label class="block text-xs text-zinc-400">Maximum input context · reference tokens</label><input type="number" min="256" max="1048576" x-model.number="run.context_max" :disabled="run.mode !== 'sweep'" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1">256 and 32,768, then 65,536-token steps to 1,048,576.</p></div>
                     <div x-show="run.mode === 'sweep'"><label class="block text-xs text-zinc-400">Rounds per cell</label><input type="number" min="1" max="8" x-model.number="run.sweep_rounds" :disabled="run.mode !== 'sweep'" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1">Each round sends one cold and one warm-prefix request per concurrent worker.</p></div>
                     <div x-show="run.mode === 'sweep'"><label class="block text-xs text-zinc-400">Output token limit · includes reasoning</label><input type="number" min="256" max="65536" x-model.number="run.sweep_output_tokens" :disabled="run.mode !== 'sweep'" class="bg-zinc-800 rounded px-3 py-2 w-full" required></div>
                 </div>
                 <p x-show="run.mode !== 'sweep'" class="text-xs text-zinc-400">Quality uses up to four workers. Ordinary questions allow two requests sharing a 65,536-token budget, with 8,192 tokens reserved for a final answer. Model sampling settings apply to both suites. Performance load levels are chosen automatically.</p>
-                <div x-show="run.mode === 'sweep'" class="rounded-md border border-blue-900 bg-blue-950/20 p-3 space-y-2 text-xs text-zinc-300"><p x-text="sweepSize(run)"></p><p>Records first-token and whole-answer latency, per-request token/s, aggregate output, errors and truncations. Probes every standard reasoning setting; rejected settings stay visible. Input lengths use cl100k_base; provider token counts may differ. Explicit context-limit rejections skip larger inputs.</p><p>With one round, concurrency 1 has one sample. Increase rounds for repeated measurements; p95 needs enough observations to be useful. Completed cells are saved as the sweep runs.</p></div>
+                <div x-show="run.mode === 'sweep'" class="rounded-md border border-blue-900 bg-blue-950/20 p-3 space-y-2 text-xs text-zinc-300"><p x-text="sweepSize(run)"></p><p>Records first-token and whole-answer latency, per-request token/s, aggregate output, errors and truncations. Probes every standard reasoning setting; rejected settings stay visible. Input lengths use cl100k_base; provider token counts may differ. Explicit context-limit rejections skip larger inputs. Three consecutive failed contexts or load levels trigger a small control probe: healthy controls infer a ceiling; failed controls stop the sweep as an endpoint/completion failure.</p><p>With one round, concurrency 1 has one sample. Increase rounds for repeated measurements; p95 needs enough observations to be useful. Completed cells are saved as the sweep runs.</p></div>
             </div>
         </template>
 

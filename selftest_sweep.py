@@ -74,10 +74,16 @@ class SweepProtocolTests(unittest.TestCase):
 
     def test_exact_requested_grid_and_budget(self):
         config = sweep.SweepConfig()
-        self.assertEqual(config.contexts, (256, *range(16384, 1048577, 16384)))
-        self.assertEqual(config.concurrencies, (1, *range(8, 257, 8)))
-        self.assertEqual(len(config.contexts) * len(config.concurrencies), 2145)
-        self.assertEqual(config.requests_per_effort, 549315)
+        self.assertEqual(config.contexts, (256, 32768, *range(65536, 1048577, 65536)))
+        self.assertEqual(config.concurrencies, (1, *range(16, 257, 16)))
+        self.assertEqual(len(config.contexts) * len(config.concurrencies), 306)
+        self.assertEqual(config.requests_per_effort, 78390)
+        self.assertEqual(len(config.contexts) * len(config.concurrencies) * len(sweep.EFFORTS) * 2, 4896)
+        for maximum in (257, 32767, 32768, 65535, 1048575):
+            bounded = sweep.SweepConfig(maximum, 255)
+            self.assertEqual(bounded.contexts[-1], maximum)
+            self.assertEqual(bounded.concurrencies[-1], 255)
+            self.assertLessEqual(len(bounded.contexts) * len(bounded.concurrencies) * 16, 5000)
         self.assertEqual(sweep.SweepConfig(256, 3).concurrencies, (1, 3))
         for kwargs in (
             {"context_max": 255},
@@ -171,7 +177,7 @@ class SweepProtocolTests(unittest.TestCase):
         with patch.object(sweep, "SweepClient", FakeClient):
             report = sweep.run_sweep(
                 CONFIG,
-                sweep.SweepConfig(32768, 8),
+                sweep.SweepConfig(65536, 8),
                 on_cell=cells.append,
                 checkpoint=lambda data: snapshots.append(json.loads(json.dumps(data))),
                 retain_cells=False,
@@ -249,6 +255,67 @@ class SweepProtocolTests(unittest.TestCase):
         self.assertEqual(len(report.cells), 1)
         self.assertTrue(all(c.session.close.call_count == 1 for c in FakeClient.instances))
 
+    def failure_sweep(self, *, bad_contexts=(), bad_loads=(), outage=False):
+        original_measure = sweep.measure_cell
+
+        def measure(clients, concurrency, bank, config, cancelled, *cache_args):
+            if bank.context_tokens in bad_contexts or concurrency in bad_loads:
+                return {"context_tokens": bank.context_tokens, "concurrency": concurrency,
+                        "status": "failed", "requests": concurrency, "completed": 0,
+                        "errors": concurrency, "incomplete": 0, "error": "HTTP 503: overloaded"}
+            return original_measure(clients, concurrency, bank, config, cancelled, *cache_args)
+
+        if outage:
+            def handler(client, prompt, kwargs):
+                if "-900" in prompt:
+                    return "", TokenUsage(), RequestMetrics(ok=False, error="HTTP 500: Cannot connect to host")
+                return "1", TokenUsage(), RequestMetrics(latency_ms=10, finish_reason="stop")
+            FakeClient.handler = handler
+        with (patch.object(sweep, "SweepClient", FakeClient),
+              patch.object(sweep, "EFFORTS", ("default",)),
+              patch.object(sweep, "measure_cell", measure)):
+            return sweep.run_sweep(CONFIG, sweep.SweepConfig(262144, 80))
+
+    def test_repeated_context_failures_require_healthy_control_before_ceiling(self):
+        report = self.failure_sweep(bad_contexts={32768, 65536, 131072})
+        self.assertTrue(report.finished)
+        self.assertEqual(report.efforts[0]["limits"]["context"]["at"], 32768)
+        first_workers = [c for c in report.cells if c["concurrency"] == 1]
+        self.assertEqual([c["status"] for c in first_workers],
+                         ["measured", "failed", "failed", "failed", "skipped_context", "skipped_context"])
+        self.assertTrue(first_workers[3]["limit_control"]["ok"])
+        self.assertEqual(first_workers[4]["requests"], 0)
+
+    def test_context_success_resets_streak_and_single_failure_does_not_set_ceiling(self):
+        report = self.failure_sweep(bad_contexts={32768, 65536, 196608, 262144})
+        self.assertEqual(report.efforts[0]["limits"], {})
+        cell = next(c for c in report.cells if c["context_tokens"] == 131072 and c["concurrency"] == 1)
+        self.assertEqual(cell["status"], "measured")
+
+    def test_three_failed_loads_skip_larger_loads_and_preserve_single_worker_contexts(self):
+        report = self.failure_sweep(bad_loads={16, 32, 48})
+        self.assertEqual(report.efforts[0]["limits"]["concurrency"]["at"], 16)
+        first_row = [c for c in report.cells if c["context_tokens"] == 256]
+        self.assertEqual([c["status"] for c in first_row],
+                         ["measured", "failed", "failed", "failed", "skipped_failure", "skipped_failure"])
+        later = [c for c in report.cells if c["context_tokens"] == 32768]
+        self.assertEqual(later[0]["status"], "measured")
+        self.assertTrue(all(c["requests"] == 0 for c in later[1:]))
+
+    def test_load_success_resets_streak(self):
+        report = self.failure_sweep(bad_loads={16, 32, 64, 80})
+        self.assertNotIn("concurrency", report.efforts[0]["limits"])
+        self.assertTrue(all(c["status"] == "measured" for c in report.cells if c["concurrency"] == 48))
+
+    def test_failed_control_stops_outage_without_inventing_context_limit(self):
+        report = self.failure_sweep(bad_contexts={32768, 65536, 131072}, outage=True)
+        self.assertFalse(report.finished)
+        self.assertFalse(report.cancelled)
+        self.assertIn("Cannot connect to host", report.stop_error)
+        self.assertEqual(report.efforts[0]["limits"], {})
+        self.assertFalse(any(c["context_tokens"] > 131072 for c in report.cells))
+        self.assertTrue(all(c.session.close.call_count == 1 for c in FakeClient.instances))
+
     def test_only_explicit_sampling_rejections_remove_fields(self):
         def endpoint(client, prompt, kwargs):
             if "temperature" not in client.omitted:
@@ -311,6 +378,51 @@ class SweepProtocolTests(unittest.TestCase):
 
 
 class SweepHTTPTests(unittest.TestCase):
+    def test_actual_client_handles_all_previously_failed_input_lengths(self):
+        lengths = (32768, 49152, 65536, 81920, 98304, 114688, 131072)
+        observed = []
+        encoding = sweep.PromptBank(256).encoding
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *args):
+                pass
+
+            def do_POST(self):
+                payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                count = len(encoding.encode(payload["messages"][0]["content"]))
+                observed.append(count)
+                events = [
+                    {"choices": [{"index": 0, "delta": {"content": "1,2,3"}, "finish_reason": "stop"}]},
+                    {"choices": [], "usage": {"prompt_tokens": count, "completion_tokens": 5}},
+                    {"choices": [{"index": 0, "delta": {}}], "usage": {"completion_tokens": 5}},
+                ]
+                body = b"".join(b"data: " + json.dumps(e).encode() + b"\n\n" for e in events) + b"data: [DONE]\n\n"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                self.wfile.flush()
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        client = sweep.SweepClient(ClientConfig(f"http://127.0.0.1:{server.server_port}", "unused", "fixture", timeout=2))
+        try:
+            for length in lengths:
+                text, usage, metrics = client.complete(sweep.PromptBank(length).prompt(0), retries=1)
+                self.assertTrue(metrics.ok, (length, metrics.error))
+                self.assertEqual(text, "1,2,3")
+                self.assertEqual(usage.prompt_tokens, length)
+            self.assertEqual(observed, list(lengths))
+        finally:
+            client.session.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
     def test_actual_http_negotiates_fields_without_dropping_requested_effort(self):
         payloads = []
 
@@ -426,6 +538,7 @@ class SweepStorageTests(unittest.TestCase):
         self.assertEqual(parser.external, [])
         self.assertIn("All exact measurements", text)
         self.assertIn("200.0 tok/s", text)
+        self.assertIn(">200.0 tok/s</text>", text)
         self.assertNotIn("Quality & coverage", text)
         self.assertNotIn("Category/family-balanced strict success", text)
         self.assertNotIn("Question results", text)
@@ -457,6 +570,10 @@ class SweepStorageTests(unittest.TestCase):
 
     def test_stop_guards_checkpoints_cells_and_retains_saved_results(self):
         report = sweep.SweepReport("fixture", {"contexts": [256], "concurrencies": [1]}).to_dict()
+        secret_error = "https://user:password@private.invalid/path?api_key=DO_NOT_EXPORT_API_KEY"
+        report["stop_error"] = secret_error
+        report["notes"] = [secret_error]
+        report["efforts"] = [{"effort": "default", "limits": {"context": {"reason": secret_error}}}]
         cell = {
             "effort": "default",
             "context_tokens": 256,
@@ -465,6 +582,7 @@ class SweepStorageTests(unittest.TestCase):
             "requests": 1,
             "completed": 0,
             "error": "https://user:password@private.invalid/path?api_key=DO_NOT_EXPORT_API_KEY",
+            "limit_control": {"ok": False, "error": secret_error},
         }
         runner._store_sweep_checkpoint(1, report)
         runner._store_sweep_cell(1, cell)
@@ -491,6 +609,20 @@ class SweepStorageTests(unittest.TestCase):
             self.assertEqual(
                 db.execute("SELECT COUNT(*) FROM performance_cells WHERE run_id=1").fetchone()[0], 0
             )
+
+    def test_endpoint_stop_is_failed_even_after_successful_measurements(self):
+        report = sweep.SweepReport("fixture", {"contexts": [256], "concurrencies": [1]},
+                                   successful_requests=2, stop_error="Control failed: Cannot connect to host")
+        cell = {"effort": "default", "context_tokens": 256, "concurrency": 1,
+                "status": "measured", "requests": 1, "completed": 1}
+        runner._store_sweep_cell(1, cell)
+        with patch.object(sweep, "run_sweep", return_value=report):
+            runner._run_context_sweep(1, CONFIG, sweep.SweepConfig(256, 1))
+        run = asyncio.run(html_reports.load_run(1))
+        self.assertEqual(run["status"], "failed")
+        self.assertIn("Cannot connect to host", run["error_message"])
+        self.assertEqual(run["perf"]["cells"][0]["completed"], 1)
+        self.assertFalse(run["perf"]["finished"])
 
     def test_submission_and_queue_preserve_full_sweep_options(self):
         from app.services import run_queue

@@ -52,6 +52,19 @@ function sweepExplorer(data) {
             if (['failed','unsupported_context','incomplete'].includes(cell.status)) return '#a55a37';
             return 'var(--sweep-empty, #33333d)';
         },
+        foreground(cell) {
+            const value = cell.values[this.metric];
+            const ratio = this.maximum > this.minimum ? (value - this.minimum) / (this.maximum - this.minimum) : 0.5;
+            return typeof value === 'number' && Number.isFinite(value) && ratio < 0.45 ? '#111827' : '#fff';
+        },
+        cellLabel(cell) {
+            const value = cell.values[this.metric];
+            if (typeof value === 'number' && Number.isFinite(value)) return this.format(value);
+            if (['failed', 'unsupported_context'].includes(cell.status)) return 'Failed';
+            if (cell.status === 'incomplete') return 'Incomplete';
+            if (cell.status.startsWith('skipped_')) return 'Skipped';
+            return cell.requests ? 'n/a' : '—';
+        },
         title(cell) {
             return `${cell.context.toLocaleString()} tokens · c=${cell.concurrency} · ${this.format(cell.values[this.metric])} · ${this.statusLabel(cell.status)} · ${cell.completed}/${cell.requests} complete`;
         },

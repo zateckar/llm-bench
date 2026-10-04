@@ -16,9 +16,11 @@ from app.benchmarking.models import LatencyStats, RequestMetrics
 from app.benchmarking.evaluators import strip_think_blocks
 from app.benchmarking.cache_metrics import cache_metrics
 
-REVISION = "context-sweep-v2"
+REVISION = "context-sweep-v3"
 MAX_CONTEXT = 1_048_576
-CONTEXT_STEP = 16_384
+CONTEXT_STEP = 65_536
+CONCURRENCY_STEP = 16
+FAILURE_STREAK = 3
 MAX_CONCURRENCY = 256
 EFFORTS = ("default", "none", "minimal", "low", "medium", "high", "xhigh", "max")
 
@@ -46,11 +48,14 @@ class SweepConfig:
 
     @property
     def contexts(self):
-        return grid(256, CONTEXT_STEP, self.context_max)
+        lengths = set(grid(256, CONTEXT_STEP, self.context_max))
+        if self.context_max >= 32_768:
+            lengths.add(32_768)
+        return tuple(sorted(lengths))
 
     @property
     def concurrencies(self):
-        return grid(1, 8, self.max_concurrency)
+        return grid(1, CONCURRENCY_STEP, self.max_concurrency)
 
     @property
     def requests_per_effort(self):
@@ -260,6 +265,7 @@ class SweepReport:
     successful_requests: int = 0
     cancelled: bool = False
     finished: bool = False
+    stop_error: str = ""
 
     def to_dict(self):
         return {
@@ -274,6 +280,8 @@ class SweepReport:
             "successful_requests": self.successful_requests,
             "cancelled": self.cancelled,
             "finished": self.finished,
+            "stop_error": self.stop_error,
+            "notes": [self.stop_error] if self.stop_error else [],
         }
 
 
@@ -297,7 +305,17 @@ def run_sweep(
             "concurrencies": list(config.concurrencies),
             "candidate_efforts": list(EFFORTS),
             "context_step": CONTEXT_STEP,
-            "concurrency_step": 8,
+            "concurrency_step": CONCURRENCY_STEP,
+            "failure_streak": FAILURE_STREAK,
+            "stopping_policy": (
+                "Explicit single-worker context rejection stops larger inputs immediately. "
+                "Three consecutive contexts without a complete single-worker answer infer a "
+                "context ceiling. Three consecutive load levels without any complete answers "
+                "infer a concurrency ceiling for this and larger contexts. A 256-token "
+                "single-worker control must succeed before inferring a ceiling; an unsuccessful "
+                "control stops the sweep. Controls are outside timed measurements. Success resets "
+                "each streak. Inferred ceilings are workload-specific heuristics, not provider limits."
+            ),
             "reference_tokenizer": "cl100k_base",
             "rounds_per_cell": config.sweep_rounds,
             "max_output_tokens": config.sweep_output_tokens,
@@ -326,6 +344,26 @@ def run_sweep(
         if checkpoint:
             checkpoint(report.to_dict())
 
+    def healthy_control(client, cell):
+        if cancelled():
+            return False
+        text, metrics = call(client, baseline.prompt(900_000 + report.resolved_cells), config.sweep_output_tokens)
+        healthy = (metrics.ok and bool(strip_think_blocks(text).strip())
+                   and metrics.finish_reason not in {"length", "max_tokens", "content_filter", "repetition"})
+        cell["limit_control"] = {"ok": bool(healthy), "error": metrics.error,
+                                 "context_tokens": 256, "concurrency": 1}
+        if cancelled():
+            cell["limit_control"]["cancelled"] = True
+            return False
+        if not healthy:
+            report.stop_error = (
+                f"Sweep stopped after {FAILURE_STREAK} consecutive failed measurements and an "
+                "unsuccessful 256-token single-worker control. Endpoint health or output completion "
+                "failed; no capacity limit inferred. "
+                f"{metrics.error or metrics.finish_reason or 'Empty answer'}"
+            )
+        return healthy
+
     def save(cell):
         report.resolved_cells += 1
         report.measured_cells += bool(cell.get("requests"))
@@ -343,7 +381,7 @@ def run_sweep(
 
     save_report()
     for effort in EFFORTS:
-        if cancelled():
+        if cancelled() or report.stop_error:
             break
         config_for_effort = replace(
             client_config,
@@ -416,17 +454,23 @@ def run_sweep(
                 for _ in range(config.max_concurrency - 1)
             )
             refused_at = None
+            refusal_reason = ""
+            context_failures = []
+            load_ceiling = None
+            load_reason = ""
+            report.efforts[-1]["limits"] = {}
             warmed = 1
             for context in config.contexts:
-                if cancelled():
+                if cancelled() or report.stop_error:
                     break
                 bank = PromptBank(context) if refused_at is None else None
                 cache_primed = False
                 cache_prime = None
                 warm_index = 1
                 failed_load = None
+                load_failures = []
                 for concurrency in config.concurrencies:
-                    if cancelled():
+                    if cancelled() or report.stop_error:
                         break
                     if refused_at is not None:
                         cell = {
@@ -437,9 +481,9 @@ def run_sweep(
                             "completed": 0,
                             "errors": 0,
                             "incomplete": 0,
-                            "error": f"Not measured: explicit context rejection at {refused_at:,} reference tokens with this output limit.",
+                            "error": refusal_reason,
                         }
-                    elif failed_load is not None:
+                    elif failed_load is not None or (load_ceiling is not None and concurrency >= load_ceiling):
                         cell = {
                             "context_tokens": context,
                             "concurrency": concurrency,
@@ -448,7 +492,8 @@ def run_sweep(
                             "completed": 0,
                             "errors": 0,
                             "incomplete": 0,
-                            "error": f"Not measured: all requests failed at concurrency {failed_load} for this context. Larger contexts still start at concurrency 1.",
+                            "error": (f"Not measured: no complete single-worker answer at {context:,} tokens. Larger contexts still start at concurrency 1."
+                                      if failed_load is not None else load_reason),
                         }
                     else:
                         if concurrency > warmed:
@@ -479,11 +524,42 @@ def run_sweep(
                                 total,
                             )
                         cell = measure_cell(clients, concurrency, bank, config, cancelled)
-                        if cell["status"] == "unsupported_context" and concurrency == 1:
-                            refused_at = context
-                        elif cell["requests"] and cell["errors"] == cell["requests"]:
-                            failed_load = concurrency
-                        elif cell.get("completed") and not cancelled():
+                        unsuccessful = bool(cell["requests"]) and not cell.get("completed")
+                        if not cancelled():
+                            if concurrency == 1:
+                                context_failures = [*context_failures, context] if unsuccessful else []
+                                explicit = cell["status"] == "unsupported_context"
+                                if explicit or (len(context_failures) >= FAILURE_STREAK
+                                                and healthy_control(warm, cell)):
+                                    refused_at = context if explicit else context_failures[0]
+                                    refusal_reason = (
+                                        f"Not measured: explicit context rejection at {context:,} "
+                                        "reference tokens with this output limit."
+                                        if explicit else
+                                        f"Not measured: inferred context ceiling after {FAILURE_STREAK} "
+                                        f"consecutive single-worker failures at {context_failures}. "
+                                        f"Last error: {cell.get('error', '')}"
+                                    )
+                                    report.efforts[-1]["limits"]["context"] = {
+                                        "at": refused_at, "kind": "explicit" if explicit else "inferred",
+                                        "failed_contexts": list(context_failures), "reason": refusal_reason,
+                                    }
+                                if unsuccessful:
+                                    failed_load = 1
+                            load_failures = [*load_failures, concurrency] if unsuccessful else []
+                            if len(load_failures) >= FAILURE_STREAK and healthy_control(warm, cell):
+                                load_ceiling = load_failures[0]
+                                load_reason = (
+                                    f"Not measured: inferred concurrency ceiling after {FAILURE_STREAK} "
+                                    f"consecutive failed load levels {load_failures} at {context:,} tokens. "
+                                    f"Last error: {cell.get('error', '')}"
+                                )
+                                report.efforts[-1]["limits"]["concurrency"] = {
+                                    "at": load_ceiling, "context_tokens": context,
+                                    "kind": "inferred", "failed_loads": list(load_failures),
+                                    "reason": load_reason,
+                                }
+                        if cell.get("completed") and not cancelled():
                             if not cache_primed:
                                 _, cache_prime = call(warm, bank.prompt(0, "warm"), config.sweep_output_tokens)
                                 cache_primed = True
@@ -508,6 +584,6 @@ def run_sweep(
             for client in clients:
                 client.session.close()
     report.cancelled = cancelled()
-    report.finished = not report.cancelled
+    report.finished = not report.cancelled and not report.stop_error
     save_report()
     return report
