@@ -1,6 +1,6 @@
 # Rigorous v14 design and critical review
 
-Reviewed on 2026-10-03. This document describes the current protocol.
+Review completed on 2026-10-04. This document describes the current protocol.
 Historical scores are retained and are not relabelled as v14 results. The v10-v13
 review records below describe earlier passes; the v14 review records the current changes.
 
@@ -69,7 +69,18 @@ requires fresh matched runs.
 Review proceeds through baseline inspection, independent prompt-derived oracles,
 single-field corruption and structural attacks, then complete regressions and
 integration checks. New controls live in [selftest_reasoning.py](selftest_reasoning.py)
-and run in CI. Final verification results are recorded below after the checks finish.
+and run in CI.
+
+Final v14 verification on 2026-10-04: all 315 questions passed strict authoring
+validation with zero errors or warnings; all 193 regression tests, 120 evaluator
+assertions and 1,133 challenge checks passed. Corruption controls rejected 14,145
+altered answers, including 2,874 v14 answer mutations and 873 v14 same-value
+integer-to-float substitutions. All 264 noninteractive JSON answer keys passed the
+full evaluator/rubric pipeline. Independent checks also cover three additional
+generation seeds. Queue integration passed without the earlier SQLite resource
+warnings; Ruff and Git whitespace checks passed. Two complete assemblies produced
+fingerprint `b11260da421820b5`. No known unresolved issue remains from these review
+passes; these checks do not prove the absence of every possible defect.
 
 ## Question storage and one runtime suite
 
