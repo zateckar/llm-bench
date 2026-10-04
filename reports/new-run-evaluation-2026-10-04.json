@@ -1,0 +1,942 @@
+{
+  "runs": [
+    {
+      "run_id": 80,
+      "model": "Qwen3.8-Flash-Next-FP8",
+      "status": "completed",
+      "suite_hash": "b11260da421820b5",
+      "scored": 315,
+      "planned": 315,
+      "strict_success": 0.8377853348758522,
+      "criterion_score": 0.883159566227993,
+      "criterion_coverage": 1.0,
+      "partial_questions": 32,
+      "zero_score_categories": [
+        "Terminal Algorithms"
+      ],
+      "categories": {
+        "Advanced Coding": {
+          "count": 24,
+          "passes": 5,
+          "score": 0.6256523569023569,
+          "full_pass_rate": 0.4166666666666667,
+          "families": 12
+        },
+        "Agentic Use Cases": {
+          "count": 23,
+          "passes": 18,
+          "score": 0.9123367228835979,
+          "full_pass_rate": 0.875,
+          "families": 12
+        },
+        "Classification": {
+          "count": 4,
+          "passes": 4,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Code Generation": {
+          "count": 8,
+          "passes": 3,
+          "score": 0.6,
+          "full_pass_rate": 0.6,
+          "families": 5
+        },
+        "Code Review": {
+          "count": 4,
+          "passes": 4,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 4
+        },
+        "Creative Writing": {
+          "count": 3,
+          "passes": 3,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 3
+        },
+        "Ethical Reasoning": {
+          "count": 8,
+          "passes": 7,
+          "score": 0.96875,
+          "full_pass_rate": 0.875,
+          "families": 2
+        },
+        "Factual Knowledge": {
+          "count": 7,
+          "passes": 7,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 2
+        },
+        "Finances": {
+          "count": 12,
+          "passes": 10,
+          "score": 0.9444444444444444,
+          "full_pass_rate": 0.9166666666666666,
+          "families": 6
+        },
+        "Instruction Following": {
+          "count": 7,
+          "passes": 6,
+          "score": 0.8333333333333333,
+          "full_pass_rate": 0.8333333333333333,
+          "families": 2
+        },
+        "Interactive Tool Use": {
+          "count": 20,
+          "passes": 20,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 5
+        },
+        "Language Translations": {
+          "count": 6,
+          "passes": 6,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 6
+        },
+        "Legal": {
+          "count": 8,
+          "passes": 4,
+          "score": 0.9666666666666667,
+          "full_pass_rate": 0.8,
+          "families": 5
+        },
+        "Logical Reasoning": {
+          "count": 28,
+          "passes": 27,
+          "score": 0.9939236111111112,
+          "full_pass_rate": 0.984375,
+          "families": 16
+        },
+        "Long Context Coherence": {
+          "count": 7,
+          "passes": 7,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 2
+        },
+        "Long Context Quality": {
+          "count": 8,
+          "passes": 4,
+          "score": 0.7465277777777778,
+          "full_pass_rate": 0.5,
+          "families": 2
+        },
+        "Mathematical Reasoning": {
+          "count": 20,
+          "passes": 19,
+          "score": 0.9285714285714286,
+          "full_pass_rate": 0.9285714285714286,
+          "families": 14
+        },
+        "Needle Retrieval": {
+          "count": 11,
+          "passes": 11,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 3
+        },
+        "R&D": {
+          "count": 7,
+          "passes": 5,
+          "score": 0.9140151515151516,
+          "full_pass_rate": 0.8666666666666667,
+          "families": 5
+        },
+        "Reading Comprehension": {
+          "count": 19,
+          "passes": 18,
+          "score": 0.9988344988344988,
+          "full_pass_rate": 0.9772727272727273,
+          "families": 11
+        },
+        "Security": {
+          "count": 12,
+          "passes": 11,
+          "score": 0.9930555555555556,
+          "full_pass_rate": 0.8888888888888888,
+          "families": 9
+        },
+        "Summarization": {
+          "count": 7,
+          "passes": 7,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 2
+        },
+        "Terminal Algorithms": {
+          "count": 4,
+          "passes": 0,
+          "score": 0.0,
+          "full_pass_rate": 0,
+          "families": 1
+        },
+        "Terminal Debugging": {
+          "count": 4,
+          "passes": 1,
+          "score": 0.25,
+          "full_pass_rate": 0.25,
+          "families": 1
+        },
+        "Terminal File Operations": {
+          "count": 4,
+          "passes": 3,
+          "score": 1.0,
+          "full_pass_rate": 0.75,
+          "families": 1
+        },
+        "Terminal Science": {
+          "count": 12,
+          "passes": 11,
+          "score": 0.9791666666666666,
+          "full_pass_rate": 0.9166666666666666,
+          "families": 3
+        },
+        "Terminal System Admin": {
+          "count": 4,
+          "passes": 4,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Tool Using": {
+          "count": 19,
+          "passes": 19,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 11
+        },
+        "Translation": {
+          "count": 3,
+          "passes": 3,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Truthfulness": {
+          "count": 12,
+          "passes": 11,
+          "score": 0.9563492063492064,
+          "full_pass_rate": 0.9166666666666666,
+          "families": 3
+        }
+      },
+      "outcomes": {
+        "truncation": 24,
+        "pass": 258,
+        "task_failure": 33
+      },
+      "cache_measurements": "Historical unique-prefix performance; no paired cold/warm measurements."
+    },
+    {
+      "run_id": 81,
+      "model": "Qwen3.8-27B.long",
+      "status": "completed",
+      "suite_hash": "b11260da421820b5",
+      "scored": 315,
+      "planned": 315,
+      "strict_success": 0.8310724237448376,
+      "criterion_score": 0.8892786187569875,
+      "criterion_coverage": 1.0,
+      "partial_questions": 39,
+      "zero_score_categories": [],
+      "categories": {
+        "Advanced Coding": {
+          "count": 24,
+          "passes": 13,
+          "score": 0.9087805134680135,
+          "full_pass_rate": 0.7708333333333334,
+          "families": 12
+        },
+        "Agentic Use Cases": {
+          "count": 23,
+          "passes": 20,
+          "score": 0.9656911375661376,
+          "full_pass_rate": 0.9305555555555556,
+          "families": 12
+        },
+        "Classification": {
+          "count": 4,
+          "passes": 3,
+          "score": 0.8630952380952381,
+          "full_pass_rate": 0.75,
+          "families": 1
+        },
+        "Code Generation": {
+          "count": 8,
+          "passes": 4,
+          "score": 0.5,
+          "full_pass_rate": 0.5,
+          "families": 5
+        },
+        "Code Review": {
+          "count": 4,
+          "passes": 3,
+          "score": 0.9642857142857143,
+          "full_pass_rate": 0.75,
+          "families": 4
+        },
+        "Creative Writing": {
+          "count": 3,
+          "passes": 3,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 3
+        },
+        "Ethical Reasoning": {
+          "count": 8,
+          "passes": 8,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 2
+        },
+        "Factual Knowledge": {
+          "count": 7,
+          "passes": 7,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 2
+        },
+        "Finances": {
+          "count": 12,
+          "passes": 8,
+          "score": 0.8888888888888888,
+          "full_pass_rate": 0.8333333333333334,
+          "families": 6
+        },
+        "Instruction Following": {
+          "count": 7,
+          "passes": 5,
+          "score": 0.7713675213675213,
+          "full_pass_rate": 0.6666666666666666,
+          "families": 2
+        },
+        "Interactive Tool Use": {
+          "count": 20,
+          "passes": 14,
+          "score": 0.85,
+          "full_pass_rate": 0.7,
+          "families": 5
+        },
+        "Language Translations": {
+          "count": 6,
+          "passes": 6,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 6
+        },
+        "Legal": {
+          "count": 8,
+          "passes": 5,
+          "score": 0.9633333333333334,
+          "full_pass_rate": 0.7,
+          "families": 5
+        },
+        "Logical Reasoning": {
+          "count": 28,
+          "passes": 23,
+          "score": 0.9440482954545455,
+          "full_pass_rate": 0.875,
+          "families": 16
+        },
+        "Long Context Coherence": {
+          "count": 7,
+          "passes": 7,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 2
+        },
+        "Long Context Quality": {
+          "count": 8,
+          "passes": 3,
+          "score": 0.5833333333333334,
+          "full_pass_rate": 0.375,
+          "families": 2
+        },
+        "Mathematical Reasoning": {
+          "count": 20,
+          "passes": 16,
+          "score": 0.8511904761904762,
+          "full_pass_rate": 0.8214285714285714,
+          "families": 14
+        },
+        "Needle Retrieval": {
+          "count": 11,
+          "passes": 11,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 3
+        },
+        "R&D": {
+          "count": 7,
+          "passes": 6,
+          "score": 0.9347222222222222,
+          "full_pass_rate": 0.9333333333333333,
+          "families": 5
+        },
+        "Reading Comprehension": {
+          "count": 19,
+          "passes": 18,
+          "score": 0.9818181818181818,
+          "full_pass_rate": 0.9090909090909091,
+          "families": 11
+        },
+        "Security": {
+          "count": 12,
+          "passes": 11,
+          "score": 0.9930555555555556,
+          "full_pass_rate": 0.8888888888888888,
+          "families": 9
+        },
+        "Summarization": {
+          "count": 7,
+          "passes": 7,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 2
+        },
+        "Terminal Algorithms": {
+          "count": 4,
+          "passes": 1,
+          "score": 0.25,
+          "full_pass_rate": 0.25,
+          "families": 1
+        },
+        "Terminal Debugging": {
+          "count": 4,
+          "passes": 3,
+          "score": 0.75,
+          "full_pass_rate": 0.75,
+          "families": 1
+        },
+        "Terminal File Operations": {
+          "count": 4,
+          "passes": 4,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Terminal Science": {
+          "count": 12,
+          "passes": 11,
+          "score": 0.9166666666666666,
+          "full_pass_rate": 0.9166666666666666,
+          "families": 3
+        },
+        "Terminal System Admin": {
+          "count": 4,
+          "passes": 4,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Tool Using": {
+          "count": 19,
+          "passes": 17,
+          "score": 0.9946912304866851,
+          "full_pass_rate": 0.946969696969697,
+          "families": 11
+        },
+        "Translation": {
+          "count": 3,
+          "passes": 3,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Truthfulness": {
+          "count": 12,
+          "passes": 10,
+          "score": 0.9141116352201258,
+          "full_pass_rate": 0.8333333333333334,
+          "families": 3
+        }
+      },
+      "outcomes": {
+        "pass": 254,
+        "task_failure": 35,
+        "truncation": 18,
+        "missing_answer": 8
+      },
+      "cache_measurements": "Historical unique-prefix performance; no paired cold/warm measurements."
+    },
+    {
+      "run_id": 82,
+      "model": "moonshotai/Kimi-K3.vlong",
+      "status": "completed",
+      "suite_hash": "b11260da421820b5",
+      "scored": 315,
+      "planned": 315,
+      "strict_success": 0.9033898094242921,
+      "criterion_score": 0.9629181283276111,
+      "criterion_coverage": 1.0,
+      "partial_questions": 32,
+      "zero_score_categories": [],
+      "categories": {
+        "Advanced Coding": {
+          "count": 24,
+          "passes": 16,
+          "score": 0.9564078282828283,
+          "full_pass_rate": 0.8333333333333334,
+          "families": 12
+        },
+        "Agentic Use Cases": {
+          "count": 23,
+          "passes": 21,
+          "score": 0.9930555555555556,
+          "full_pass_rate": 0.9583333333333334,
+          "families": 12
+        },
+        "Classification": {
+          "count": 4,
+          "passes": 3,
+          "score": 0.8928571428571428,
+          "full_pass_rate": 0.75,
+          "families": 1
+        },
+        "Code Generation": {
+          "count": 8,
+          "passes": 7,
+          "score": 0.8,
+          "full_pass_rate": 0.8,
+          "families": 5
+        },
+        "Code Review": {
+          "count": 4,
+          "passes": 4,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 4
+        },
+        "Creative Writing": {
+          "count": 3,
+          "passes": 3,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 3
+        },
+        "Ethical Reasoning": {
+          "count": 8,
+          "passes": 4,
+          "score": 0.8,
+          "full_pass_rate": 0.5,
+          "families": 2
+        },
+        "Factual Knowledge": {
+          "count": 7,
+          "passes": 6,
+          "score": 0.9722222222222222,
+          "full_pass_rate": 0.8333333333333333,
+          "families": 2
+        },
+        "Finances": {
+          "count": 12,
+          "passes": 12,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 6
+        },
+        "Instruction Following": {
+          "count": 7,
+          "passes": 7,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 2
+        },
+        "Interactive Tool Use": {
+          "count": 20,
+          "passes": 15,
+          "score": 0.875,
+          "full_pass_rate": 0.75,
+          "families": 5
+        },
+        "Language Translations": {
+          "count": 6,
+          "passes": 6,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 6
+        },
+        "Legal": {
+          "count": 8,
+          "passes": 4,
+          "score": 0.9666666666666667,
+          "full_pass_rate": 0.8,
+          "families": 5
+        },
+        "Logical Reasoning": {
+          "count": 28,
+          "passes": 28,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 16
+        },
+        "Long Context Coherence": {
+          "count": 7,
+          "passes": 7,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 2
+        },
+        "Long Context Quality": {
+          "count": 8,
+          "passes": 4,
+          "score": 0.9166666666666667,
+          "full_pass_rate": 0.5,
+          "families": 2
+        },
+        "Mathematical Reasoning": {
+          "count": 20,
+          "passes": 18,
+          "score": 0.8571428571428571,
+          "full_pass_rate": 0.8571428571428571,
+          "families": 14
+        },
+        "Needle Retrieval": {
+          "count": 11,
+          "passes": 11,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 3
+        },
+        "R&D": {
+          "count": 7,
+          "passes": 7,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 5
+        },
+        "Reading Comprehension": {
+          "count": 19,
+          "passes": 18,
+          "score": 0.9924242424242424,
+          "full_pass_rate": 0.9772727272727273,
+          "families": 11
+        },
+        "Security": {
+          "count": 12,
+          "passes": 11,
+          "score": 0.9930555555555556,
+          "full_pass_rate": 0.8888888888888888,
+          "families": 9
+        },
+        "Summarization": {
+          "count": 7,
+          "passes": 7,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 2
+        },
+        "Terminal Algorithms": {
+          "count": 4,
+          "passes": 4,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Terminal Debugging": {
+          "count": 4,
+          "passes": 4,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Terminal File Operations": {
+          "count": 4,
+          "passes": 4,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Terminal Science": {
+          "count": 12,
+          "passes": 10,
+          "score": 0.9527777777777778,
+          "full_pass_rate": 0.8333333333333334,
+          "families": 3
+        },
+        "Terminal System Admin": {
+          "count": 4,
+          "passes": 4,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Tool Using": {
+          "count": 19,
+          "passes": 19,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 11
+        },
+        "Translation": {
+          "count": 3,
+          "passes": 3,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Truthfulness": {
+          "count": 12,
+          "passes": 11,
+          "score": 0.9563492063492064,
+          "full_pass_rate": 0.9166666666666666,
+          "families": 3
+        }
+      },
+      "outcomes": {
+        "pass": 278,
+        "task_failure": 27,
+        "truncation": 5,
+        "formatting": 5
+      },
+      "cache_measurements": "Historical unique-prefix performance; no paired cold/warm measurements."
+    },
+    {
+      "run_id": 83,
+      "model": "gemma4-31",
+      "status": "completed",
+      "suite_hash": "b11260da421820b5",
+      "scored": 314,
+      "planned": 315,
+      "strict_success": 0.32482584465343084,
+      "criterion_score": 0.5343191255213413,
+      "criterion_coverage": 1.0,
+      "partial_questions": 122,
+      "zero_score_categories": [
+        "Long Context Quality",
+        "Mathematical Reasoning",
+        "Terminal File Operations",
+        "Terminal System Admin"
+      ],
+      "categories": {
+        "Advanced Coding": {
+          "count": 24,
+          "passes": 6,
+          "score": 0.6610140931372549,
+          "full_pass_rate": 0.5,
+          "families": 12
+        },
+        "Agentic Use Cases": {
+          "count": 23,
+          "passes": 4,
+          "score": 0.5819352377946128,
+          "full_pass_rate": 0.20833333333333334,
+          "families": 12
+        },
+        "Classification": {
+          "count": 4,
+          "passes": 0,
+          "score": 0.36904761904761907,
+          "full_pass_rate": 0,
+          "families": 1
+        },
+        "Code Generation": {
+          "count": 8,
+          "passes": 7,
+          "score": 0.8436363636363636,
+          "full_pass_rate": 0.8,
+          "families": 5
+        },
+        "Code Review": {
+          "count": 4,
+          "passes": 3,
+          "score": 0.9821428571428572,
+          "full_pass_rate": 0.75,
+          "families": 4
+        },
+        "Creative Writing": {
+          "count": 3,
+          "passes": 2,
+          "score": 0.9444444444444444,
+          "full_pass_rate": 0.6666666666666666,
+          "families": 3
+        },
+        "Ethical Reasoning": {
+          "count": 8,
+          "passes": 0,
+          "score": 0.549375,
+          "full_pass_rate": 0,
+          "families": 2
+        },
+        "Factual Knowledge": {
+          "count": 7,
+          "passes": 0,
+          "score": 0.24206349206349204,
+          "full_pass_rate": 0,
+          "families": 2
+        },
+        "Finances": {
+          "count": 12,
+          "passes": 0,
+          "score": 0.4072668650793651,
+          "full_pass_rate": 0,
+          "families": 6
+        },
+        "Instruction Following": {
+          "count": 7,
+          "passes": 0,
+          "score": 0.43240295584045585,
+          "full_pass_rate": 0,
+          "families": 2
+        },
+        "Interactive Tool Use": {
+          "count": 20,
+          "passes": 14,
+          "score": 0.825,
+          "full_pass_rate": 0.7,
+          "families": 5
+        },
+        "Language Translations": {
+          "count": 6,
+          "passes": 6,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 6
+        },
+        "Legal": {
+          "count": 8,
+          "passes": 7,
+          "score": 1.0,
+          "full_pass_rate": 0.8,
+          "families": 5
+        },
+        "Logical Reasoning": {
+          "count": 28,
+          "passes": 0,
+          "score": 0.23107638888888887,
+          "full_pass_rate": 0,
+          "families": 16
+        },
+        "Long Context Coherence": {
+          "count": 7,
+          "passes": 0,
+          "score": 0.4772927689594356,
+          "full_pass_rate": 0,
+          "families": 2
+        },
+        "Long Context Quality": {
+          "count": 8,
+          "passes": 0,
+          "score": 0.0,
+          "full_pass_rate": 0,
+          "families": 2
+        },
+        "Mathematical Reasoning": {
+          "count": 20,
+          "passes": 0,
+          "score": 0.0,
+          "full_pass_rate": 0,
+          "families": 14
+        },
+        "Needle Retrieval": {
+          "count": 11,
+          "passes": 0,
+          "score": 0.1851851851851852,
+          "full_pass_rate": 0,
+          "families": 3
+        },
+        "R&D": {
+          "count": 7,
+          "passes": 0,
+          "score": 0.44722222222222224,
+          "full_pass_rate": 0,
+          "families": 5
+        },
+        "Reading Comprehension": {
+          "count": 19,
+          "passes": 5,
+          "score": 0.5369827305311177,
+          "full_pass_rate": 0.38636363636363635,
+          "families": 11
+        },
+        "Security": {
+          "count": 12,
+          "passes": 11,
+          "score": 0.9930555555555556,
+          "full_pass_rate": 0.8888888888888888,
+          "families": 9
+        },
+        "Summarization": {
+          "count": 7,
+          "passes": 2,
+          "score": 0.7689594356261023,
+          "full_pass_rate": 0.25,
+          "families": 2
+        },
+        "Terminal Algorithms": {
+          "count": 4,
+          "passes": 4,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Terminal Debugging": {
+          "count": 4,
+          "passes": 4,
+          "score": 1.0,
+          "full_pass_rate": 1,
+          "families": 1
+        },
+        "Terminal File Operations": {
+          "count": 4,
+          "passes": 0,
+          "score": 0.0,
+          "full_pass_rate": 0,
+          "families": 1
+        },
+        "Terminal Science": {
+          "count": 12,
+          "passes": 0,
+          "score": 0.18055555555555558,
+          "full_pass_rate": 0,
+          "families": 3
+        },
+        "Terminal System Admin": {
+          "count": 4,
+          "passes": 0,
+          "score": 0.0,
+          "full_pass_rate": 0,
+          "families": 1
+        },
+        "Tool Using": {
+          "count": 19,
+          "passes": 7,
+          "score": 0.6974589646464646,
+          "full_pass_rate": 0.6363636363636364,
+          "families": 11
+        },
+        "Translation": {
+          "count": 2,
+          "passes": 1,
+          "score": 0.984375,
+          "full_pass_rate": 0.5,
+          "families": 1
+        },
+        "Truthfulness": {
+          "count": 12,
+          "passes": 0,
+          "score": 0.09920634920634919,
+          "full_pass_rate": 0,
+          "families": 3
+        }
+      },
+      "outcomes": {
+        "pass": 83,
+        "task_failure": 131,
+        "compliance_failure": 1,
+        "formatting": 96,
+        "truncation": 3,
+        "endpoint_error": 1
+      },
+      "cache_measurements": "Historical unique-prefix performance; no paired cold/warm measurements."
+    }
+  ],
+  "scoring": "Criterion achievement when available, evaluator score otherwise; equal family/category weighting, infrastructure exclusions preserved. Historical full-pass verdicts unchanged.",
+  "comparability": "These four runs share the v14 suite fingerprint. One run per model does not measure repeat variability."
+}

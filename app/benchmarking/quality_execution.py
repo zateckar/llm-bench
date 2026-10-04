@@ -288,8 +288,21 @@ def execute_question(q, client, cancelled=lambda: False):
         from app.benchmarking.interactive_tasks import run_interaction
 
         return run_interaction(q, client, cancelled)
-    response, tokens, metrics = client.complete(q.prompt, q.system_prompt, max_tokens=q.max_tokens)
-    return score_response(q, response, tokens, metrics)
+    from app.benchmarking.quality_protocol import complete_bounded
+
+    response, tokens, metrics, diagnostics = complete_bounded(q, client, cancelled)
+    if diagnostics.get("cancelled"):
+        result = Result(q, response, 0, "Run cancelled before finalization", tokens, metrics,
+                        outcome="cancelled")
+        result.evaluation = _availability_evaluation(q, "cancelled", result.detail)
+    else:
+        result = score_response(q, response, tokens, metrics)
+    recovery = diagnostics["recovery"]
+    recovery.setdefault("initial_outcome", result.outcome)
+    recovery["initial_passed"] = result.passed if not recovery["attempted"] else False
+    recovery["recovered"] = recovery["attempted"] and result.passed
+    result.diagnostics.update(diagnostics)
+    return result
 
 
 def run_quality(questions, client_config, max_concurrency=8, on_result=None, cancelled=None):
@@ -306,7 +319,8 @@ def run_quality(questions, client_config, max_concurrency=8, on_result=None, can
     workers = min(QUALITY_WORKERS, max_concurrency)
     # An early repetition heuristic can abort legitimate repeated JSON/code.
     # Canonical accuracy measures the full budget with no heuristic intervention.
-    config = replace(client_config, detect_repetition=False)
+    config = replace(client_config, detect_repetition=False, retry_transport_errors=False,
+                     max_retries=min(3, client_config.max_retries))
     lock = threading.Lock()
     local = threading.local()
     clients = []

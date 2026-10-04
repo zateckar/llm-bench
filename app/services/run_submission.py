@@ -7,18 +7,29 @@ from fastapi import HTTPException
 
 from app.database import fetch_all, get_db
 from app.benchmarking.perf import DEFAULT_MAX_CONCURRENCY, MAX_CONCURRENCY, PerfConfig
+from app.benchmarking.perf_sweep import SweepConfig
 from app.benchmarking.quality_suite import QUALITY_WORKERS, load_questions, provenance
 
 
-def make_run_options(*, mode="both", max_concurrency=DEFAULT_MAX_CONCURRENCY):
-    if not isinstance(mode, str) or mode not in {"both", "quality", "performance"}:
-        raise HTTPException(status_code=422, detail="Choose quality, performance, or both")
+def make_run_options(*, mode="both", max_concurrency=DEFAULT_MAX_CONCURRENCY,
+                     context_max=1_048_576, sweep_rounds=1, sweep_output_tokens=8192):
+    if not isinstance(mode, str) or mode not in {"both", "quality", "performance", "sweep"}:
+        raise HTTPException(status_code=422, detail="Choose quality, performance, both, or a context sweep")
+
+    def integer(raw):
+        if isinstance(raw, bool):
+            raise ValueError("Sweep settings must be integers")
+        value = int(raw)
+        if str(value) != str(raw).strip():
+            raise ValueError("Benchmark settings must be integers")
+        return value
+
     try:
-        if isinstance(max_concurrency, bool):
-            raise ValueError("Maximum concurrency must be an integer")
-        value = int(max_concurrency)
-        if str(value) != str(max_concurrency).strip():
-            raise ValueError("Maximum concurrency must be an integer")
+        value = integer(max_concurrency)
+        if mode == "sweep":
+            config = SweepConfig(integer(context_max), value, integer(sweep_rounds), integer(sweep_output_tokens))
+            return {"mode": mode, "max_concurrency": value, "context_max": config.context_max,
+                    "sweep_rounds": config.sweep_rounds, "sweep_output_tokens": config.sweep_output_tokens}
         PerfConfig(value)
     except (TypeError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -36,6 +47,9 @@ def spec_from_run(run):
         options = make_run_options(
             mode=previous.get("mode", "both"),
             max_concurrency=previous.get("max_concurrency", DEFAULT_MAX_CONCURRENCY),
+            context_max=previous.get("context_max", 1_048_576),
+            sweep_rounds=previous.get("sweep_rounds", 1),
+            sweep_output_tokens=previous.get("sweep_output_tokens", 8192),
         )
     except (ValueError, TypeError, AttributeError, HTTPException):
         options = make_run_options()
@@ -51,7 +65,7 @@ async def validated_specs(raw: str) -> list[tuple[int, dict, dict]]:
         raise HTTPException(status_code=422, detail="Submit between 1 and 50 runs")
     models = {model["id"] for model in await fetch_all("SELECT id FROM models")}
     prepared = []
-    allowed = set(spec_defaults())
+    allowed = set(spec_defaults()) | {"context_max", "sweep_rounds", "sweep_output_tokens"}
     for index, spec in enumerate(specs, 1):
         if not isinstance(spec, dict):
             raise HTTPException(status_code=422, detail=f"Run {index} is malformed")
@@ -66,9 +80,14 @@ async def validated_specs(raw: str) -> list[tuple[int, dict, dict]]:
         unknown = set(spec) - allowed
         if unknown:
             raise HTTPException(status_code=422, detail=f"Run {index} has unsupported settings")
+        if spec.get("mode", "both") != "sweep" and set(spec) & {"context_max", "sweep_rounds", "sweep_output_tokens"}:
+            raise HTTPException(status_code=422, detail=f"Run {index}: context sweep settings require sweep mode")
         options = make_run_options(
             mode=spec.get("mode", "both"),
             max_concurrency=spec.get("max_concurrency", DEFAULT_MAX_CONCURRENCY),
+            context_max=spec.get("context_max", 1_048_576),
+            sweep_rounds=spec.get("sweep_rounds", 1),
+            sweep_output_tokens=spec.get("sweep_output_tokens", 8192),
         )
         prepared.append((model_id, options))
     # All rows share a single snapshot of the current fixed benchmark protocol.
@@ -121,14 +140,23 @@ def form_context(
 
 
 async def _insert_runs(db, prepared, user_id, plan_id):
+    from app.services.model_settings import decoding_settings
+
     run_ids = []
     created_at = datetime.now(timezone.utc).isoformat()
     for model_id, quality_config, options in prepared:
+        model_cursor = await db.execute(
+            "SELECT temperature, reasoning_effort FROM models WHERE id = ?", (model_id,)
+        )
+        model_settings = await model_cursor.fetchone()
+        if model_settings is None:
+            raise HTTPException(status_code=422, detail="Model no longer exists")
+        decoding = decoding_settings(*model_settings)
         cursor = await db.execute(
             """INSERT INTO test_runs
                (model_id, status, created_by, workers, quality_config_json,
-                run_options_json, plan_id, created_at)
-               VALUES (?, 'pending', ?, ?, ?, ?, ?, ?)""",
+                run_options_json, plan_id, created_at, decoding_config_json)
+               VALUES (?, 'pending', ?, ?, ?, ?, ?, ?, ?)""",
             (
                 model_id,
                 user_id,
@@ -137,6 +165,7 @@ async def _insert_runs(db, prepared, user_id, plan_id):
                 json.dumps(options),
                 plan_id,
                 created_at,
+                json.dumps(decoding),
             ),
         )
         run_ids.append(cursor.lastrowid)

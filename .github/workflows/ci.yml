@@ -69,10 +69,16 @@ jobs:
       - name: Verify saved answers and benchmark failure reporting
         run: uv run python selftest_benchmark_runner.py
 
+      - name: Verify bounded recovery and model decoding configuration
+        run: uv run python selftest_protocol.py
+
       - name: Verify fixed performance measurements
         run: |
           uv run python selftest_perf.py
+          uv run python selftest_sweep.py
           uv run python selftest_telemetry.py
+          uv run python selftest_cache.py
+          uv run python selftest_storage.py
 
       - name: Verify independent v10 oracles and review regressions
         run: uv run python selftest_frontier.py
@@ -90,6 +96,11 @@ jobs:
 
       - name: Verify v14 inference, ambiguity, execution and atomic grading
         run: uv run python selftest_reasoning.py
+
+      - name: Verify empirical calibration and original behavioral reconstruction
+        run: |
+          uv run python selftest_calibration.py
+          uv run python selftest_reconstruction.py
 
       - name: Verify portable HTML reports and comparisons
         run: uv run python selftest_reports.py

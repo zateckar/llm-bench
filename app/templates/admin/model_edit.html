@@ -31,6 +31,7 @@
                 <input type="password" name="api_key" placeholder="Leave blank to keep the stored key" class="input-field">
                 <p class="text-xs text-zinc-500 mt-1">Blank keeps the current key; it is never shown here.</p>
             </div>
+            {% include "admin/decoding_fields.html" %}
             <div class="md:col-span-2">
                 <label class="block text-sm font-medium text-zinc-300 mb-1">Description (optional)</label>
                 <input type="text" name="description" value="{{ model.description or '' }}" class="input-field">

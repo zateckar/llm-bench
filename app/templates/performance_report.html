@@ -1,31 +1,92 @@
-<section class="report-section space-y-4">
-<h2 class="text-lg font-semibold">Performance</h2>
-{% for note in performance.notes %}<p class="notice text-sm text-amber-400">{{ note }}</p>{% endfor %}
-{% if performance.load_rows %}
-<p class="muted text-sm text-zinc-400">One 1,024-token reference workload, 256-token output limit, warm connections, one attempt per timed request. Concurrency increases automatically. Throughput counts successful output over elapsed time including failures. Latency and TTFT percentiles cover successful requests. TTFT measures first delivered content or reasoning; provider buffering can affect it. This is a bounded concurrency test.</p>
-<div class="table-wrap overflow-x-auto"><table class="w-full"><thead><tr><th>Metric</th>{% for label in performance.labels %}<th>{{ label }}</th>{% endfor %}</tr></thead><tbody>
-{% for row in performance.suite_rows %}<tr><td>{{ row.label }}</td>{% for value in row['values'] %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}
-</tbody></table></div>
-{% if performance.charts %}<div class="report-grid grid lg:grid-cols-3 gap-4">{% for chart in performance.charts %}<div class="panel"><h3>{{ chart.title }}</h3><div class="chart">{{ chart.svg }}</div><div class="legend text-xs">{% for series in chart.series %}<span style="color:{{ series.color }}">{{ series.label }}</span> {% endfor %}</div></div>{% endfor %}
-</div>{% endif %}
-{% if performance.load_rows %}<div class="table-wrap overflow-x-auto"><table class="w-full text-xs"><thead><tr><th>Run</th><th>Concurrency</th><th>Requests</th><th>Errors</th><th>Output tok/s</th><th>Requests/s</th><th>Latency p95</th><th>TTFT p95</th></tr></thead><tbody>{% for row in performance.load_rows %}<tr><td>{{ row.run }}</td>{% for i in [0, 1, 2, 4, 5, 7, 9] %}<td>{{ row['values'][i] }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% endif %}
-<details><summary class="text-sm cursor-pointer">All per-load metrics</summary>
-{% if performance.load_rows %}<div class="table-wrap overflow-x-auto"><table class="w-full text-xs"><thead><tr><th>Run</th><th>Concurrency</th><th>Requests</th><th>Errors</th><th>Wall time</th><th>Output</th><th>Request rate</th><th>Latency p50</th><th>Latency p95</th><th>TTFT p50</th><th>TTFT p95</th><th>Failed latency p95</th><th>Estimated tokens (requests)</th><th>Burst delivery (requests)</th><th>Latency p99</th><th>TTFT p99</th><th>Error rate</th><th>Mean output tokens</th><th>Output token time proxy p50</th><th>Chunk gap p95</th></tr></thead><tbody>
-{% for row in performance.load_rows %}<tr><td>{{ row.run }}</td>{% for value in row['values'] %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}
-</tbody></table></div>{% endif %}
-</details>
-{% if performance.distributions %}<details class="space-y-4"><summary class="text-sm cursor-pointer">Request distributions</summary><div class="report-grid grid lg:grid-cols-3 gap-4">{% for chart in performance.distributions %}<div class="panel"><h3>{{ chart.title }}</h3><div class="chart">{{ chart.svg }}</div><div class="legend text-xs">{% for series in chart.series %}<span style="color:{{ series.color }}">{{ series.label }}</span>{% endfor %}</div></div>{% endfor %}</div></details>{% endif %}
-<p class="muted text-xs text-zinc-400">Output token time is a client delivery proxy: span between first and last output chunks / (reported completion tokens − 1). Buffered bursts, estimated counts and outputs shorter than two tokens are excluded. It is unavailable on historical runs without this measurement. Chunk gaps measure SSE delivery intervals, not individual token latency. Provider token counts can include reasoning. Percentiles use small samples; repeat matched runs to assess variability.</p>
-{% endif %}
-{% for view in performance.request_views %}
-<div class="space-y-4">
-<h3 class="text-sm font-semibold">Quality request performance · {{ view.label }}</h3>
-<p class="muted text-xs text-zinc-400">These timings cover varied quality tasks and include retries. They are separate from the fixed workload above. Failed requests remain visible; successful-request percentiles exclude failures.</p>
-<div class="metric-grid grid grid-cols-2 lg:grid-cols-5 gap-3">
-{% for label, value in [('Request success', view.success_rate), ('Latency p50', view.latency_p50), ('Latency p95', view.latency_p95), ('TTFT p50', view.ttft_p50), ('Stream deadlines', view.deadline_count)] %}<div class="panel"><p class="metric-label text-xs text-zinc-400">{{ label }}</p><p class="metric-value text-xl font-semibold">{{ value }}</p></div>{% endfor %}
+{% macro metrics(items) %}
+<div class="perf-metrics">
+    {% for metric in items %}
+    <div class="perf-metric">
+        <p class="perf-label">{{ metric.label }}</p>
+        <p class="perf-value">{{ metric.value }}</p>
+        <p class="perf-caption">{{ metric.detail }}</p>
+    </div>
+    {% endfor %}
 </div>
-{% if view.chart %}<div class="panel"><div class="chart">{{ view.chart }}</div><div class="legend text-xs">{% for s in view.series %}<span style="color:{{ s.color }}">{{ s.label }}</span>{% endfor %}</div></div>{% endif %}
-<details {% if view.deadline_count %}open{% endif %}><summary class="text-sm cursor-pointer">Timing and errors by category</summary><div class="table-wrap overflow-x-auto"><table class="w-full text-xs"><thead><tr><th>Category</th><th>Requests</th><th>Errors</th><th>Deadlines</th><th>Latency p50</th><th>Latency p95</th></tr></thead><tbody>{% for row in view.rows %}<tr><td>{{ row.category }}</td><td>{{ row.requests }}</td><td>{{ row.errors }}</td><td>{{ row.deadlines }}</td><td>{{ row.p50 }}</td><td>{{ row.p95 }}</td></tr>{% endfor %}</tbody></table></div></details>
-</div>
-{% endfor %}
+{% endmacro %}
+
+{% macro chart_panel(chart, show_legend=true) %}
+<article class="perf-panel">
+    <h3>{{ chart.title }}</h3>
+    {% if chart.description %}<p class="perf-caption">{{ chart.description }}</p>{% endif %}
+    <div class="perf-chart">{{ chart.svg }}</div>
+    {% if show_legend %}<div class="perf-legend">{% for series in chart.series %}<span><i style="background:{{ series.color }}"></i>{{ series.label }}</span>{% endfor %}</div>{% endif %}
+</article>
+{% endmacro %}
+
+<style>{% include "performance_styles.css" %}</style>
+<section class="performance-page" aria-label="Performance results">
+    <header class="perf-page-heading">
+        <div><p class="perf-eyebrow">MEASURED PERFORMANCE</p><h2>Speed, load &amp; reliability</h2>
+        <p class="perf-intro">Explore first-token latency, whole-answer time and output speed across context, load and reasoning settings.</p></div>
+        {% if performance_json_url %}<a class="btn-ghost perf-download" href="{{ performance_json_url }}" download>Download JSON <span aria-hidden="true">↓</span></a>{% endif %}
+    </header>
+
+    {% if performance.notes %}<div class="perf-notices" role="note">{% for note in performance.notes %}<p>{{ note }}</p>{% endfor %}</div>{% endif %}
+
+    {% include "performance_sweep.html" %}
+    {% if performance.cache_rows %}
+    <section class="perf-section" aria-label="KV prefix cache comparison">
+        <div class="perf-section-heading"><div><h3>KV prefix cache comparison</h3><p class="perf-caption">Cold unique prefixes and warm shared prefixes at the same context length and load. Warm requests change their suffix after an untimed priming request.</p></div></div>
+        <div class="perf-table-wrap"><table class="perf-table"><caption>Prefill, reuse &amp; decode <span>Per-request rate proxies and TTFT are medians; output throughput uses the whole measurement wall time.</span></caption>
+            <thead><tr><th>Run / effort</th><th>Context</th><th>Concurrency</th><th>Prefix</th><th>Cache hit</th><th>Cache reporting</th><th>First delivery</th><th>Uncached prefill</th><th>Effective input</th><th>Decode</th><th>Aggregate output</th><th>Requests / errors</th></tr></thead>
+            <tbody>{% for row in performance.cache_rows %}<tr><td>{{ row.run }} · {{ row.effort }}</td><td>{{ row.context }}</td><td>{{ row.concurrency }}</td><td>{{ row.mode }} · {{ row.status }}</td><td>{{ row.hit }}</td><td>{{ row.coverage }}</td><td>{{ row.ttft }}</td><td>{{ row.prefill }}</td><td>{{ row.effective }}</td><td>{{ row.decode }}</td><td>{{ row.output }}</td><td>{{ row.requests }} / {{ row.errors }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        <p class="perf-footnote">Cache hit means provider-reported cached prompt tokens divided by reported input tokens. Missing telemetry is n/a. Uncached prefill uses new prompt tokens / TTFT; effective input includes reused tokens. TTFT includes queue, network and first-token generation. Decode uses reported output minus one / first-to-last delivery span, excluding bursts and estimated counts. These are client timing proxies. KV prefix reuse saves repeated prefill computation; compare measured decode and throughput separately.</p>
+    </section>
+    {% elif performance.load_rows or performance.sweep_views %}<p class="perf-footnote">This report has no paired KV prefix cache measurements. Run the current performance protocol to compare cold and warm long contexts.</p>{% endif %}
+    {% if not performance.sweep_views and not offline %}<div class="perf-sweep-intro"><div><h3>Context &amp; reasoning sweep</h3><p class="perf-caption">Measure 256 to 1,048,576 input tokens in 16,384-token steps, concurrency 1 to 256 in steps of 8, and every accepted reasoning effort.</p></div><a href="/admin/run?mode=sweep" class="btn-ghost">New context sweep →</a></div>{% endif %}
+
+    {% if performance.load_rows %}
+    <section class="perf-section" aria-label="Fixed-workload load test">
+        <div class="perf-section-heading"><div><h3>Fixed-workload load test</h3><p class="perf-caption">The same reference workload at each load level. Peaks are the highest observed within the tested range.</p></div><span class="perf-tag">Controlled workload</span></div>
+        {% for view in performance.load_views %}
+        <div class="perf-load-summary">
+            {% if performance.labels|length > 1 %}<h4 class="perf-run-label">{{ view.label }}</h4>{% endif %}
+            {{ metrics(view.metrics) }}
+            <div class="perf-protocol"><span>{{ view.protocol.input }} reference input tokens</span><span>{{ view.protocol.output }} output token limit</span><span>Concurrency {{ view.levels or 'n/a' }}</span><span>{{ view.protocol.revision }}</span></div>
+        </div>
+        {% endfor %}
+
+        <div class="perf-chart-grid">{% for chart in performance.charts if chart.primary %}{{ chart_panel(chart, performance.labels|length > 1) }}{% endfor %}</div>
+
+        <div class="perf-table-wrap"><table class="perf-table"><caption>Results by concurrency <span>Response and first-delivery times are p95 for successful requests.</span></caption>
+            <thead><tr>{% if performance.labels|length > 1 %}<th scope="col">Run</th>{% endif %}<th scope="col">Concurrent requests</th><th scope="col">Output</th><th scope="col">Request rate</th><th scope="col">Response · p95</th><th scope="col">First delivery · p95</th><th scope="col">Requests / errors</th></tr></thead>
+            <tbody>{% for row in performance.load_rows %}<tr {% if row.peak %}class="perf-peak"{% endif %}>{% if performance.labels|length > 1 %}<td class="perf-run-cell">{{ row.run }}</td>{% endif %}<th scope="row">{{ row.concurrency }}{% if row.peak %} <span class="perf-peak-tag">Peak output</span>{% endif %}</th><td>{{ row.output }}</td><td>{{ row.request_rate }}</td><td>{{ row.latency }}</td><td>{{ row.ttft }}</td><td>{{ row.requests }} / {{ row.errors }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        <p class="perf-footnote">Throughput includes elapsed time spent on failed requests. First delivery (TTFT) measures the first received content or reasoning; buffering can make it close to completion time.</p>
+
+        <details class="perf-details"><summary>Load-test diagnostics <span>Request rate, failures, streaming &amp; full measurements</span></summary>
+            <div class="perf-chart-grid">{% for chart in performance.charts if not chart.primary %}{{ chart_panel(chart, performance.labels|length > 1) }}{% endfor %}</div>
+            <div class="perf-table-wrap"><table class="perf-table"><caption>Reported suite summary</caption><thead><tr><th scope="col">Metric</th>{% for label in performance.labels %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead><tbody>{% for row in performance.suite_rows %}<tr><th scope="row">{{ row.label }}</th>{% for value in row['values'] %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+            <div class="perf-table-wrap"><table class="perf-table perf-raw"><caption>All per-load metrics <span>Raw duration values use milliseconds.</span></caption><thead><tr><th scope="col">Run</th>{% for label in ['Concurrency', 'Requests', 'Errors', 'Wall time', 'Output', 'Request rate', 'Latency p50', 'Latency p95', 'TTFT p50', 'TTFT p95', 'Failed latency p95', 'Estimated tokens (requests)', 'Burst delivery (requests)', 'Latency p99', 'TTFT p99', 'Error rate', 'Mean output tokens', 'Output token time proxy p50', 'Chunk gap p95'] %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead><tbody>{% for row in performance.load_rows %}<tr><th scope="row">{{ row.run }}</th>{% for value in row['values'] %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+            <p class="perf-footnote">Output token time is a client delivery proxy: first-to-last output span divided by reported completion tokens minus one. Buffered bursts, estimated counts and outputs shorter than two tokens are excluded. Chunk gaps are SSE delivery intervals. Provider counts can include reasoning.</p>
+        </details>
+        {% if performance.distributions %}<details class="perf-details"><summary>Load-test request distributions <span>Completion time, first delivery &amp; output length</span></summary><div class="perf-chart-grid">{% for chart in performance.distributions %}{{ chart_panel(chart) }}{% endfor %}</div></details>{% endif %}
+        <details class="perf-details"><summary>How to read these measurements <span>Protocol &amp; interpretation</span></summary><div class="perf-method">
+            <p>This is a bounded, closed-loop concurrency test with warmed connections. It measures delivered output and client-observed timing, rather than model-side prefill or decoding speed. It does not establish arrival-rate capacity.</p>
+            {% for view in performance.load_views %}<p><strong>{{ view.label }}</strong> · {{ view.protocol.attempts }} attempt(s) per timed request · {{ view.protocol.input }} reference input tokens · {{ view.protocol.output }} output token limit · {{ view.protocol.revision }}.</p>{% endfor %}
+            <p>p50 is the median; p95 is the time within which 95% of measured successful requests finished. Tail percentiles come from small samples. Compare common load levels, matching protocols and output lengths, and repeat runs to assess variability.</p>
+        </div></details>
+    </section>
+    {% elif not performance.sweep_views %}<div class="perf-empty"><h3>No fixed-workload measurements</h3><p>Run a benchmark with performance enabled to measure throughput at different load levels.</p></div>{% endif %}
+
+    {% for view in performance.request_views %}
+    <section class="perf-section perf-quality" aria-label="Quality-task timings for {{ view.label }}">
+        <div class="perf-section-heading"><div><h3>Quality-task timings{% if performance.request_views|length > 1 %} · {{ view.label }}{% endif %}</h3><p class="perf-caption">Varied benchmark tasks, including retries. Request success measures delivery; answer correctness is reported in the quality results.</p></div><span class="perf-tag">{{ view.count }} recorded tasks</span></div>
+        {{ metrics(view.metrics) }}
+        <p class="perf-reliability {% if view.error_count %}perf-warning{% endif %}">{{ view.error_count }} request error{{ 's' if view.error_count != 1 }} <span aria-hidden="true">·</span> {{ view.deadline_count }} stream deadline{{ 's' if view.deadline_count != 1 }} exceeded. Successful timing percentiles exclude failed requests.</p>
+        <div class="perf-chart-grid">
+            {% if view.chart %}<article class="perf-panel"><h3>Time to complete a task</h3><p class="perf-caption">Each curve orders its observations from fastest to slowest.</p><div class="perf-chart">{{ view.chart }}</div><div class="perf-legend">{% for series in view.completion_series %}<span><i style="background:{{ series.color }}"></i>{{ series.label }}</span>{% endfor %}</div></article>{% endif %}
+            {% if view.slowest %}<article class="perf-panel"><div class="perf-section-heading"><h3>Slowest categories</h3><span class="perf-caption">Response · p95</span></div><p class="perf-caption">Successful tasks only. Workload and output length vary by category.</p><ol class="perf-slowest">{% for row in view.slowest %}<li><div class="perf-slow-label"><span>{{ row.category }}<small>{{ row.requests }} recorded · {{ row.errors }} errors</small></span><strong>{{ row.time_p95 }}</strong></div><div class="perf-bar"><span style="width:{{ row.width }}%"></span></div></li>{% endfor %}</ol></article>{% endif %}
+        </div>
+        {% if view.delivery_chart %}<details class="perf-details"><summary>First-delivery distribution <span>Time to first content or reasoning</span></summary><div class="perf-chart-grid"><article class="perf-panel"><h3>Time to first delivery</h3><div class="perf-chart">{{ view.delivery_chart }}</div><div class="perf-legend">{% for series in view.delivery_series %}<span><i style="background:{{ series.color }}"></i>{{ series.label }}</span>{% endfor %}</div></article></div></details>{% endif %}
+        <details class="perf-details" {% if view.error_count %}open{% endif %}><summary>Timing and errors by category <span>{{ view.rows|length }} categories{% if view.error_count %} · {{ view.error_count }} request errors{% endif %}</span></summary><div class="perf-table-wrap"><table class="perf-table"><thead><tr><th scope="col">Category</th><th scope="col">Recorded tasks</th><th scope="col">Request errors</th><th scope="col">Stream deadlines</th><th scope="col">Response · p50</th><th scope="col">Response · p95</th></tr></thead><tbody>{% for row in view.rows %}<tr {% if row.errors %}class="perf-error-row"{% endif %}><th scope="row">{{ row.category }}</th><td>{{ row.requests }}</td><td>{{ row.errors }}</td><td>{{ row.deadlines }}</td><td>{{ row.time_p50 }}</td><td>{{ row.time_p95 }}</td></tr>{% endfor %}</tbody></table></div></details>
+    </section>
+    {% endfor %}
 </section>

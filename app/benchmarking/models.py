@@ -178,6 +178,7 @@ class TokenUsage:
     cached_tokens: int = 0
     prompt_tokens_estimated: bool = False
     completion_tokens_estimated: bool = False
+    cached_tokens_reported: bool = False
 
     @property
     def total_tokens(self) -> int:
@@ -214,6 +215,7 @@ class RequestMetrics:
     successful_attempt_latency_ms: float | None = None
     chunk_gaps_ms: list[float] = field(default_factory=list)
     attempt_diagnostics: list[dict] = field(default_factory=list)
+    cached_tokens_reported: bool = False
 
     @property
     def output_token_time_ms(self) -> float | None:
@@ -267,6 +269,13 @@ class Result:
         return self.score >= self.question.pass_threshold - SCORE_EPSILON
 
     @property
+    def achievement_score(self) -> float:
+        """Content achievement; retain the evaluator score when no breakdown exists."""
+        if self.evaluation is not None and self.evaluation.criterion_achievement is not None:
+            return self.evaluation.criterion_achievement
+        return self.score
+
+    @property
     def is_transport_error(self) -> bool:
         """True when the model never answered (network/HTTP failure).
 
@@ -305,7 +314,7 @@ class CategoryResult:
         scored = self.scored
         if not scored:
             return 0.0
-        return sum(r.score for r in scored) / len(scored) * 100
+        return sum(r.achievement_score for r in scored) / len(scored) * 100
 
     @property
     def pass_rate_pct(self) -> float:
@@ -321,7 +330,7 @@ class CategoryResult:
         total_weight = sum(r.question.effective_weight for r in scored)
         if not total_weight:
             return 0.0
-        earned = sum(r.score * r.question.effective_weight for r in scored)
+        earned = sum(r.achievement_score * r.question.effective_weight for r in scored)
         return earned / total_weight * 100
 
     @property
@@ -441,6 +450,7 @@ class ConcurrencyPoint:
     chunk_gap: LatencyStats = field(default_factory=LatencyStats)
     output_length: LatencyStats = field(default_factory=LatencyStats)
     samples: list[dict] = field(default_factory=list)
+    cache_metrics: dict = field(default_factory=dict)
 
     @property
     def requests_per_sec(self):
@@ -485,6 +495,7 @@ class PerfReport:
     concurrency: list[ConcurrencyPoint] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     cancelled: bool = False
+    cache_reuse: list[dict] = field(default_factory=list)
 
     @property
     def peak_output_tokens_per_sec(self):
@@ -502,6 +513,7 @@ class PerfReport:
             "concurrency": [p.to_dict() for p in self.concurrency],
             "notes": self.notes,
             "cancelled": self.cancelled,
+            "cache_reuse": self.cache_reuse,
             "peak_output_tokens_per_sec": self.peak_output_tokens_per_sec,
             "peak_requests_per_sec": self.peak_requests_per_sec,
         }

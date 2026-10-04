@@ -13,6 +13,7 @@ wheels/
 .uv-python/
 .tokenizer-cache/
 .ruff_cache/
+.tmp/
 
 # Benchmark cache
 .benchmark_cache.json

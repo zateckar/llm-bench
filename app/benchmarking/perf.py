@@ -13,14 +13,16 @@ import uuid
 
 from app.benchmarking.llm_client import ChatClient, client_protocol
 from app.benchmarking.models import ConcurrencyPoint, LatencyStats, PerfReport, RequestMetrics
+from app.benchmarking.cache_metrics import cache_metrics
 
-REVISION = "performance-v6"
+REVISION = "performance-v8"
 DEFAULT_MAX_CONCURRENCY = 8
 MAX_CONCURRENCY = 32
 MIN_SAMPLES = 24
 ROUNDS = 4
 INPUT_REFERENCE_TOKENS = 1024
 OUTPUT_TOKENS = 256
+CACHE_CONTEXTS = (8192, 32768)
 
 
 @dataclass(frozen=True)
@@ -49,7 +51,8 @@ class PerfConfig:
         return max(MIN_SAMPLES, ROUNDS * level)
 
     def total_requests(self):
-        return self.max_concurrency + 1 + sum(self.requests_for_level(c) for c in self.levels)
+        cache_requests = len(CACHE_CONTEXTS) * sum(1 + 2 * max(4, c) for c in {1, self.max_concurrency})
+        return self.max_concurrency + 1 + sum(self.requests_for_level(c) for c in self.levels) + cache_requests
 
 
 def _prompt(nonce, index):
@@ -119,12 +122,15 @@ def _measure_level(clients, level, prompts, cancelled):
         streamed_requests=sum(m.streamed for m in good),
         burst_delivery_requests=sum(m.burst_delivery for m in good),
         cached_tokens=sum(m.cached_tokens for m in good),
+        cache_metrics=cache_metrics(samples, wall_ms),
         output_token_time=LatencyStats.from_samples([m.output_token_time_ms for m in good]),
         chunk_gap=LatencyStats.from_samples([gap for m in good for gap in m.chunk_gaps_ms]),
         output_length=LatencyStats.from_samples([m.completion_tokens for m in good]),
         samples=[{
             "ok": m.ok, "latency_ms": m.latency_ms, "ttft_ms": m.ttft_ms,
             "completion_tokens": m.completion_tokens,
+            "prompt_tokens": m.prompt_tokens, "cached_tokens": m.cached_tokens,
+            "cached_tokens_reported": m.cached_tokens_reported,
             "output_token_time_ms": m.output_token_time_ms,
             "estimated_tokens": m.completion_tokens_estimated,
             "burst_delivery": m.burst_delivery, "error": m.error,
@@ -148,12 +154,16 @@ def run_perf_suite(client_config, config=None, progress=None, cancelled=None):
             "input_reference_tokens": INPUT_REFERENCE_TOKENS,
             "reference_tokenizer": "cl100k_base",
             "max_output_tokens": OUTPUT_TOKENS,
-            "temperature": 0,
+            "temperature": client_config.temperature,
+            "reasoning_effort": client_config.reasoning_effort,
             "model_seed": 0,
             "attempts_per_request": 1,
             "output_token_time_definition": "first-to-last delivery span / (reported completion tokens - 1); excludes estimated counts and bursts",
             "chunk_gap_definition": "interval between content/reasoning SSE chunks; not individual token latency",
             "sample_scope": "timed requests only, including errors; successful requests for distribution percentiles",
+            "cache_context_tokens": list(CACHE_CONTEXTS),
+            "cache_policy": "Paired unique-prefix cold and primed shared-prefix warm requests, with changing suffixes. Priming outside timing; actual hits require provider telemetry.",
+            "prefill_rate_definition": "Uncached reported prompt tokens / client TTFT; includes queue, network and first decode overhead. Effective prompt rate includes reused tokens; rates are client proxies.",
         },
     )
     nonce = uuid.uuid4().hex
@@ -168,7 +178,7 @@ def run_perf_suite(client_config, config=None, progress=None, cancelled=None):
 
     try:
         # Negotiate streaming before timed samples; no retries in measured calls.
-        warm = ChatClient(replace(client_config, temperature=0, seed=0, detect_repetition=False))
+        warm = ChatClient(replace(client_config, seed=0, detect_repetition=False))
         clients.append(warm)
         warm_success = False
         for i in range(2):
@@ -234,6 +244,44 @@ def run_perf_suite(client_config, config=None, progress=None, cancelled=None):
                     f"All requests failed at concurrency {level}; further load stopped."
                 )
                 break
+        if report.concurrency and report.concurrency[-1].requests > report.concurrency[-1].errors:
+            from app.benchmarking.perf_sweep import PromptBank
+            for context in CACHE_CONTEXTS:
+                for level in sorted({1, config.max_concurrency}):
+                    if cancelled():
+                        report.cancelled = True
+                        break
+                    bank = PromptBank(context)
+                    samples = max(4, level)
+                    if progress:
+                        progress(f"Cold prefix · {context:,} tokens · c={level}", count, total)
+                    cold = _measure_level(clients, level, [bank.prompt(i) for i in range(samples)], cancelled)
+                    count += cold.requests
+                    pair = {"context_tokens": context, "concurrency": level, "cold": cold.to_dict()}
+                    report.cache_reuse.append(pair)
+                    if cold.requests == cold.errors or cancelled():
+                        pair["status"] = "cold_failed" if not cancelled() else "cancelled"
+                        if cancelled():
+                            report.cancelled = True
+                        break
+                    prime = _probe(clients[0], bank.prompt(0, "warm"))
+                    notify("Cache priming")
+                    pair["priming_ok"] = prime.ok
+                    if not prime.ok:
+                        pair["status"] = "priming_failed"
+                        pair["error"] = prime.error
+                        break
+                    warm_prompts = [bank.prompt(i + 1, "warm") for i in range(samples)]
+                    if progress:
+                        progress(f"Cached prefix · {context:,} tokens · c={level}", count, total)
+                    reused = _measure_level(clients, level, warm_prompts, cancelled)
+                    pair["warm"] = reused.to_dict()
+                    pair["status"] = "measured"
+                    count += reused.requests
+                    if progress:
+                        progress("Cache comparison", count, total)
+        if cancelled():
+            report.cancelled = True
         if any(p.estimated_token_requests for p in report.concurrency):
             report.notes.append("Some output token counts are estimates; see counts per level.")
         if any(p.burst_delivery_requests for p in report.concurrency):

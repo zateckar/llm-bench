@@ -6,7 +6,7 @@ import json
 import random
 from pathlib import Path
 
-REVISION = "rigorous-v14"
+REVISION = "rigorous-v15"
 # Keep established instances stable when adding families or changing grading.
 # New families own their generation version, independently of the run protocol.
 GENERATION_REVISION = "rigorous-v11"
@@ -55,6 +55,7 @@ def load_questions(tests_dir=None):
     from app.benchmarking.interactive_tasks import make_tasks
     from app.benchmarking.rigorous_cases import load_new_questions
     from app.benchmarking.reasoning_cases import load_reasoning_questions
+    from app.benchmarking.reconstruction_cases import make_reconstruction_tasks
     from app.benchmarking.test_loader import load_all_tests
 
     questions = load_all_tests(tests_dir or Path(__file__).resolve().parents[2] / "tests")
@@ -104,6 +105,7 @@ def load_questions(tests_dir=None):
             questions.extend(load_compositional_questions(seed, variant))
             questions.extend(load_evidence_questions(seed, variant))
             questions.extend(load_reasoning_questions(seed, variant))
+            questions.extend(make_reconstruction_tasks(seed, variant))
     questions.extend(
         context_question(size, seed, family)
         for family in FAMILIES
@@ -129,6 +131,8 @@ def load_questions(tests_dir=None):
 
 
 def provenance():
+    from app.benchmarking.reconstruction_cases import REVISION as reconstruction_revision
+
     return {
         "revision": REVISION,
         "legacy_generation_revision": GENERATION_REVISION,
@@ -136,4 +140,5 @@ def provenance():
         "variants": VARIANTS,
         "context_reference_tokens": list(CONTEXT_SIZES),
         "max_output_tokens": MAX_OUTPUT_TOKENS,
+        "behavioral_reconstruction_revision": reconstruction_revision,
     }

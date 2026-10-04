@@ -2218,6 +2218,7 @@ EVALUATORS: dict[str, Callable] = {
 # cover the JSON, code and format corrections described in BENCHMARK_DESIGN.md.
 EVALUATOR_VERSIONS = {
     "interactive_state": "2",
+    "behavioral_reconstruction": "1",
     "exact_match": "2",
     "mcq": "2",
     "numeric_match": "2",

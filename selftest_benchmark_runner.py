@@ -5,6 +5,7 @@ from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
+from app.storage import DETECT_TYPES
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -50,7 +51,7 @@ class RunnerTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.path = Path(directory.name) / "bench.db"
-        with closing(sqlite3.connect(self.path)) as db:
+        with closing(sqlite3.connect(self.path, detect_types=DETECT_TYPES)) as db:
             db.executescript((ROOT / "app/schema.sql").read_text(encoding="utf-8"))
             db.execute(
                 "INSERT INTO models(id,name,base_url,api_key,model_id) "
@@ -84,7 +85,7 @@ class RunnerTests(unittest.TestCase):
             self.addCleanup(patcher.stop)
 
     def sql(self, query, params=()):
-        with closing(sqlite3.connect(self.path)) as db:
+        with closing(sqlite3.connect(self.path, detect_types=DETECT_TYPES)) as db:
             db.row_factory = sqlite3.Row
             rows = db.execute(query, params).fetchall()
             db.commit()

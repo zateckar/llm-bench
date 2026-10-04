@@ -224,7 +224,9 @@ def transaction_history(rng, seed, variant):
         "Recoverable: every writer read by another tx commits before that reader commits. "
         "Cascadeless: every external source writer commits before the read. Strict: after a "
         "tx writes a key, no OTHER tx reads OR writes that key before the writer commits. "
-        "Return those three booleans separately. Sort conflict_edges lexicographically.",
+        "Return those three booleans separately. conflict_edges is an array of "
+        "two-element arrays [source-tx-ID,target-tx-ID], not arrow strings. "
+        "Sort conflict_edges lexicographically.",
         answer, {"history": history})
 
 

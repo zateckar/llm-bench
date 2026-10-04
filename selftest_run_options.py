@@ -46,11 +46,11 @@ class OptionsTests(unittest.TestCase):
 
     def test_fixed_questions_are_reproducible_and_strict(self):
         a, b = load_questions(), load_questions()
-        self.assertEqual(len(a), 315)
+        self.assertEqual(len(a), 323)
         self.assertEqual(suite_hash(a), suite_hash(b))
-        self.assertEqual(len({q.id for q in a}), 315)
+        self.assertEqual(len({q.id for q in a}), 323)
         self.assertTrue(all(q.max_tokens == 65536 and q.pass_threshold == 1 for q in a))
-        self.assertEqual(sum(bool(q.interaction) for q in a), 20)
+        self.assertEqual(sum(bool(q.interaction) for q in a), 28)
         self.assertEqual(
             [q.metadata["context_tokens"] for q in a if q.metadata.get("context_tokens")],
             [8192, 32768] * 4,
@@ -62,10 +62,11 @@ class OptionsTests(unittest.TestCase):
         categories, error = load_tests_from_yaml()
         self.assertIsNone(error)
         rows = [row for items in categories.values() for row in items]
-        self.assertEqual(len(rows), 315)
+        self.assertEqual(len(rows), 323)
         self.assertEqual(sum(r["evaluator"] == "interactive_state" for r in rows), 20)
+        self.assertEqual(sum(r["evaluator"] == "behavioral_reconstruction" for r in rows), 8)
 
-    def test_balanced_primary_is_strict_and_paired_metric_matches(self):
+    def test_balanced_primary_is_fractional_and_paired_metric_matches(self):
         q = Question(
             "q",
             "Code",
@@ -81,10 +82,11 @@ class OptionsTests(unittest.TestCase):
         )
         config = ClientConfig("http://fake.invalid", "unused", "fake")
         a = make_report([partial], config)
-        self.assertEqual(a["summary"]["category_balanced"], 0)
+        self.assertEqual(a["summary"]["category_balanced"], 0.5)
+        self.assertEqual(a["summary"]["category_balanced_full_pass"], 0)
         self.assertEqual(a["summary"]["category_balanced_criterion_achievement"], 0.5)
         b = make_report([replace(partial, score=1, evaluation=None, outcome="pass")], config)
-        self.assertEqual(paired_comparison(a, b)["balanced_difference"], 1)
+        self.assertEqual(paired_comparison(a, b)["balanced_difference"], 0.5)
 
     def test_submission_validation_and_browser_timezone(self):
         with patch.object(run_submission, "fetch_all", AsyncMock(return_value=[MODEL])):
@@ -190,7 +192,7 @@ class SubmissionTests(unittest.TestCase):
         page = self.client.get("/admin/run")
         self.assertEqual(page.status_code, 200)
         self.assertIn('action="/admin/run"', page.text)
-        self.assertIn("315 questions", page.text)
+        self.assertIn("323 questions", page.text)
         for word in (
             "Question limit",
             "Quality profile",
@@ -371,7 +373,7 @@ class SubmissionTests(unittest.TestCase):
         prepared = asyncio.run(run_submission.validated_specs(json.dumps([{"model_id": 1}])))
         # Simulate a model being deleted after validation, before the transaction.
         invalid = [prepared[0], (999, prepared[0][1], prepared[0][2])]
-        with self.assertRaises(sqlite3.IntegrityError):
+        with self.assertRaises(HTTPException):
             asyncio.run(run_submission.submit_runs("failure", 1, None, invalid))
         self.assertEqual(self.sql("SELECT * FROM run_plans"), [])
         self.assertEqual(self.sql("SELECT * FROM test_runs"), [])
@@ -381,7 +383,7 @@ class SubmissionTests(unittest.TestCase):
         before_plans = self.sql("SELECT * FROM run_plans")
         before_runs = self.sql("SELECT * FROM test_runs ORDER BY id")
         self.dispatch.reset_mock()
-        with self.assertRaises(sqlite3.IntegrityError):
+        with self.assertRaises(HTTPException):
             asyncio.run(run_submission.replace_runs(1, "failure", 1, None, invalid))
         self.assertEqual(self.sql("SELECT * FROM run_plans"), before_plans)
         self.assertEqual(self.sql("SELECT * FROM test_runs ORDER BY id"), before_runs)

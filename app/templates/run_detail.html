@@ -14,7 +14,7 @@
 {%- endmacro %}
 
 {% block content %}
-<div class="space-y-4" x-data="{ expandedCategories: {}, expandedQuestion: null, tab: 'overview' }">
+<div class="space-y-4" x-data="{ expandedCategories: {}, expandedQuestion: null, tab: '{{ 'performance' if perf and perf.schema_version == 4 else 'overview' }}' }">
     {% if request.query_params.get('error') == 'running' %}
     <div class="p-3 bg-amber-900/50 border border-amber-700 rounded-md text-amber-200 text-sm">
         This run is still active and cannot be deleted until it finishes.
@@ -45,7 +45,7 @@
             {% else %}
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-pass"
                   title="A question passes only when it reaches its own pass threshold, so partial credit never counts as a pass.">
-                {{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }} passed · {{ "%.1f"|format(run.avg_score * 100) }}% {{ "strict task success" if quality and quality.schema_version == 3 else "historical average" }}
+                {{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }} passed · {{ "%.1f"|format(run.avg_score * 100) }}% {{ "criterion achievement" if quality and quality.schema_version == 3 else "historical average" }}
             </span>
             {% endif %}
             {% if run.error_count %}
@@ -116,13 +116,13 @@
     </div>
     {% endif %}
 
-    {% if quality and quality.schema_version != 3 %}<p class="text-sm text-amber-400">Historical evaluation protocol. Run the current complete suite for comparable strict scores.</p>{% endif %}
+    {% if quality and quality.schema_version != 3 %}<p class="text-sm text-amber-400">Historical evaluation protocol. Run the current complete suite for comparable scores.</p>{% endif %}
     {% include "quality_summary.html" %}
 
     </div>
     <div class="space-y-4" x-show="tab === 'performance'" x-cloak>
-        {% if perf %}<a class="btn-ghost" href="/runs/{{ run.id }}/performance.json" download>Download performance JSON</a>{% endif %}
-        <div class="card p-4">{% include "performance_report.html" %}</div>
+        {% set performance_json_url = '/runs/' ~ run.id ~ '/performance.json' if perf else none %}
+        {% include "performance_report.html" %}
     </div>
     <div class="space-y-4" x-show="tab === 'answers'" x-cloak>
 
@@ -242,7 +242,7 @@
                                     <span class="text-xs text-zinc-500">{{ ms(r.latency_ms) }}</span>
                                     <span class="text-xs text-zinc-500">{{ r.prompt_tokens + r.completion_tokens }} tok</span>
                                     <span class="text-xs font-medium {% if r.passed %}text-emerald-400{% else %}text-red-400{% endif %}"
-                                          title="Needed {{ '%.0f%%'|format((r.pass_threshold or 1.0) * 100) }} to pass">
+                                          title="Criterion achievement; full task success is shown separately">
                                         {{ "%.0f"|format(r.score * 100) }}%
                                     </span>
                                 </div>
@@ -250,6 +250,14 @@
 
                             <!-- Expanded detail -->
                             <div x-show="expandedQuestion === '{{ r.test_id }}_{{ run.id }}'" x-collapse class="mt-3 space-y-3">
+                                {% if r.quality_requests|length > 1 %}
+                                <details class="text-xs text-zinc-300"><summary class="cursor-pointer">Final-answer recovery · {{ r.quality_requests|length }} requests</summary>
+                                {% for call in r.quality_requests %}
+                                <p class="mt-2">Request {{ call.request }} · {{ call.tokens.completion_tokens }} output tokens · {{ ms(call.metrics.latency_ms) }} · {{ call.metrics.finish_reason or 'error' }}</p>
+                                {% if call.metrics.error %}<p>{{ call.metrics.error }}</p>{% endif %}
+                                <pre class="max-h-64 overflow-auto whitespace-pre-wrap">{{ call.response }}</pre>
+                                {% endfor %}</details>
+                                {% endif %}
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
                                         <p class="text-xs font-medium text-zinc-500 mb-1">Prompt</p>

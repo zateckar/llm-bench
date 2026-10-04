@@ -8,6 +8,7 @@
     then total fuel, then the lexicographic path string. Also count ALL feasible
     S-to-T paths under the fuel cap, not just optimal ones.
     Return JSON {"cost": ..., "fuel": ..., "path": "S...T", "feasible_paths": ...}.
+    Encode path by concatenating node IDs without separators.
 
     Explicit JSON output contract (types only): {"cost": "number", "fuel": "number", "path": "string", "feasible_paths": "number"}
   evaluator: json_match

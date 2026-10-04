@@ -102,8 +102,10 @@ def concurrency_case(rng, seed, variant):
         "lists sorted lexically; [] if none). Then delete the fewest completed operations "
         "to obtain a linearizable log, preserving every retained timestamp and result and "
         "restarting from the empty queue. Report minimum_removals and ALL minimum repairs, "
-        "ordered by their sorted removed-ID lists. Each repair has removed, its canonical "
-        "order, final_queue for that order, and count of valid retained permutations. "
+        "ordered by their sorted removed-ID lists. Each repair has exactly the keys "
+        "removed (sorted array of operation IDs), order (its canonical retained ID array), "
+        "final_queue (numeric array for that order), and count (number of valid retained "
+        "permutations). "
         "If already valid, the only repair removes []. Do not treat deletion as undoing an "
         "operation after execution: deleted operations never execute.",
         {"capacity": 2, "operations": ops}, answer)

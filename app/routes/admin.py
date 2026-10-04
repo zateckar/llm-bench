@@ -10,6 +10,7 @@ from app.auth import hash_password, set_session_cookie
 from app.database import fetch_all, fetch_one, execute
 from app.templates_config import templates
 from app.services import run_submission
+from app.services.model_settings import decoding_settings
 
 router = APIRouter()
 
@@ -31,8 +32,11 @@ async def admin_run_page(request: Request):
     if isinstance(user, RedirectResponse):
         return user
     models = await fetch_all("SELECT * FROM models ORDER BY name")
+    specs = None
+    if request.query_params.get("mode") == "sweep":
+        specs = [{"model_id": None, **run_submission.make_run_options(mode="sweep", max_concurrency=256)}]
     return templates.TemplateResponse(
-        request, "admin/run_test.html", run_submission.form_context(models)
+        request, "admin/run_test.html", run_submission.form_context(models, specs=specs)
     )
 
 
@@ -101,13 +105,11 @@ async def admin_run_stream(request: Request, run_id: int):
                               COALESCE(SUM(COALESCE(quality_scored, request_ok)), 0)
                                   AS scored_questions,
                               COALESCE(SUM(request_ok = 0 AND
-                                  COALESCE(json_extract(CASE WHEN json_valid(quality_metadata_json)
-                                    THEN quality_metadata_json ELSE '{}' END, '$.outcome'), '')
+                                  COALESCE(quality_outcome, '')
                                     != 'cancelled'), 0) AS request_errors,
                               (SELECT detail FROM test_results
                                 WHERE run_id = ? AND request_ok = 0
-                                  AND COALESCE(json_extract(CASE WHEN json_valid(quality_metadata_json)
-                                    THEN quality_metadata_json ELSE '{}' END, '$.outcome'), '') != 'cancelled'
+                                  AND COALESCE(quality_outcome, '') != 'cancelled'
                                 ORDER BY id DESC LIMIT 1) AS last_request_error
                          FROM test_results WHERE run_id = ?""",
                     (run_id, run_id),
@@ -171,11 +173,14 @@ async def admin_create_model(
     api_key: str = Form(...),
     model_id: str = Form(...),
     description: str = Form(""),
+    temperature: str = Form("0"),
+    reasoning_effort: str = Form(""),
 ):
     user = _admin_required(request)
     if isinstance(user, RedirectResponse):
         return user
 
+    settings = decoding_settings(temperature, reasoning_effort)
     from app.services.url_guard import validate_endpoint, UnsafeURLError
 
     try:
@@ -190,8 +195,10 @@ async def admin_create_model(
         )
 
     await execute(
-        "INSERT INTO models (name, base_url, api_key, model_id, description) VALUES (?, ?, ?, ?, ?)",
-        (name, base_url, api_key, model_id, description),
+        """INSERT INTO models
+           (name, base_url, api_key, model_id, description, temperature, reasoning_effort)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (name, base_url, api_key, model_id, description, settings["temperature"], settings["reasoning_effort"]),
     )
     return RedirectResponse(url="/admin/models", status_code=302)
 
@@ -216,6 +223,8 @@ async def admin_edit_model(
     api_key: str = Form(""),
     model_id_str: str = Form("", alias="model_id"),
     description: str = Form(""),
+    temperature: str | None = Form(None),
+    reasoning_effort: str | None = Form(None),
 ):
     user = _admin_required(request)
     if isinstance(user, RedirectResponse):
@@ -225,6 +234,11 @@ async def admin_edit_model(
     if not model:
         return RedirectResponse(url="/admin/models", status_code=302)
 
+    posted = await request.form()
+    settings = decoding_settings(
+        posted.get("temperature", model["temperature"]),
+        posted.get("reasoning_effort", model["reasoning_effort"]),
+    )
     from app.services.url_guard import validate_endpoint, UnsafeURLError
 
     try:
@@ -240,6 +254,7 @@ async def admin_edit_model(
                     base_url=base_url,
                     model_id=model_id_str,
                     description=description,
+                    **settings,
                 ),
                 "error": f"Invalid base URL: {e}",
             },
@@ -251,9 +266,11 @@ async def admin_edit_model(
     new_key = api_key if api_key else model["api_key"]
     new_model_id = model_id_str or model["model_id"]
     await execute(
-        """UPDATE models SET name = ?, base_url = ?, api_key = ?, model_id = ?, description = ?
+        """UPDATE models SET name = ?, base_url = ?, api_key = ?, model_id = ?, description = ?,
+                            temperature = ?, reasoning_effort = ?
            WHERE id = ?""",
-        (name, base_url, new_key, new_model_id, description, model_id),
+        (name, base_url, new_key, new_model_id, description,
+         settings["temperature"], settings["reasoning_effort"], model_id),
     )
     return RedirectResponse(url="/admin/models", status_code=302)
 

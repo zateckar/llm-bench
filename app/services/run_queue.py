@@ -20,6 +20,8 @@ import sqlite3
 import threading
 import time
 from datetime import datetime, timezone
+from fastapi import HTTPException
+from app.storage import DETECT_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ _tick_started = False
 def _connect() -> sqlite3.Connection:
     from app.config import DATABASE_PATH
 
-    db = sqlite3.connect(str(DATABASE_PATH), timeout=30)
+    db = sqlite3.connect(str(DATABASE_PATH), timeout=30, detect_types=DETECT_TYPES)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA foreign_keys=ON")
@@ -94,7 +96,7 @@ def _try_start(run_id: int) -> bool:
     db = _connect()
     try:
         row = db.execute(
-            """SELECT tr.status, tr.run_options_json, tr.plan_id, m.* FROM test_runs tr
+            """SELECT tr.status, tr.run_options_json, tr.plan_id, tr.decoding_config_json, m.* FROM test_runs tr
                   JOIN models m ON m.id = tr.model_id
                 WHERE tr.id = ?""",
             (run_id,),
@@ -125,9 +127,25 @@ def _try_start(run_id: int) -> bool:
             # Scheduled for later: the tick dispatches it when due.
             return False
         model_keys = {
-            "status", "run_options_json", "plan_id"}
+            "status", "run_options_json", "plan_id", "decoding_config_json"}
         model = {k: row[k] for k in row.keys() if k not in model_keys}
-        options = json.loads(row["run_options_json"])
+        try:
+            if row["decoding_config_json"]:
+                from app.services.model_settings import decoding_settings
+
+                model.update(decoding_settings(**json.loads(row["decoding_config_json"])))
+            options = json.loads(row["run_options_json"])
+        except (ValueError, TypeError, HTTPException) as error:
+            # Invalid persisted settings must not pin the queue head forever.
+            logger.warning("Invalid saved settings for run %d: %s", run_id, type(error).__name__)
+            db.execute(
+                """UPDATE test_runs SET status='failed', completed_at=?,
+                          error_message='Invalid saved benchmark settings.'
+                    WHERE id=? AND status='pending'""",
+                (datetime.now(timezone.utc).isoformat(), run_id),
+            )
+            db.commit()
+            return False
     finally:
         db.close()
 

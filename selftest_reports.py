@@ -265,7 +265,7 @@ class ReportTests(unittest.TestCase):
         for url in ("/runs/1", "/runs/1/report.html"):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
-            self.assertIn("Partial", response.text)
+            self.assertIn("achievement", response.text)
             self.assertIn("Interactive transcript", response.text)
             self.assertIn("Turn 2", response.text)
             self.assertIn("&lt;script&gt;bad()&lt;/script&gt;", response.text)
@@ -274,9 +274,9 @@ class ReportTests(unittest.TestCase):
         for url in ("/compare?runs=1&runs=2", "/compare/report.html?runs=1&runs=2"):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
-            self.assertIn("Strict task success", response.text)
+            self.assertIn("Criterion achievement", response.text)
 
-    def test_saved_balanced_score_is_not_replaced_by_raw_average(self):
+    def test_stale_binary_summary_is_recomputed_from_saved_criteria(self):
         with closing(sqlite3.connect(self.path)) as db:
             raw = db.execute("SELECT quality_json FROM test_runs WHERE id=1").fetchone()[0]
             report = json.loads(raw)
@@ -287,8 +287,8 @@ class ReportTests(unittest.TestCase):
             )
             db.commit()
         run = asyncio.run(reports.load_run(1))
-        self.assertEqual(run["avg_score"], 0.123)
-        self.assertIn("12.3%", self.client.get("/compare?runs=1&runs=2").text)
+        self.assertAlmostEqual(run["avg_score"], 2 / 3)
+        self.assertIn("66.7%", self.client.get("/compare?runs=1&runs=2").text)
 
     def test_performance_values_and_online_parity(self):
         selected = [asyncio.run(reports.load_run(i)) for i in (1, 2)]
@@ -301,6 +301,7 @@ class ReportTests(unittest.TestCase):
             for value in row["values"]:
                 self.assertIn(value, online.text)
         self.assertIn("Delivered output under load", online.text)
+        self.assertIn('aria-label="Peak aggregate output"', reports.render_report(selected))
         self.assertIn("/compare/report.html?runs=1&amp;runs=2", online.text)
 
     def test_legacy_zero_missing_partial_and_invalid_json(self):
@@ -369,6 +370,79 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(chart.count("<circle"), 2)
         self.assertNotIn('stroke-width="2.5"', chart)
         self.assertIsNone(reports.line_chart([], "Empty", "X", "ms"))
+
+    def test_peak_cards_use_one_observed_load_and_include_failed_requests(self):
+        run = {"label": "fixture", "perf": {"schema_version": 3, "protocol": {
+            "input_reference_tokens": 4096, "max_output_tokens": 512,
+            "attempts_per_request": 1, "revision": "fixture-v1"}, "concurrency": [
+                {"concurrency": 1, "requests": 10, "errors": 0,
+                 "output_tokens_per_sec": 30, "latency": {"p95_ms": 1200},
+                 "ttft": {"p95_ms": 200}},
+                {"concurrency": 4, "requests": 20, "errors": 2,
+                 "output_tokens_per_sec": 100, "latency": {"p95_ms": 8000},
+                 "ttft": {"p95_ms": 2200}},
+                {"concurrency": 8, "requests": 20, "errors": 10,
+                 "output_tokens_per_sec": 80, "latency": {"p95_ms": 20000},
+                 "ttft": {"p95_ms": 7000}},
+            ]}}
+        view = reports.performance_view([run])
+        summary = view["load_views"][0]
+        self.assertEqual(summary["peak_concurrency"], 4)
+        self.assertEqual([m["value"] for m in summary["metrics"]],
+                         ["100.0 tok/s", "8.00 s", "2.20 s", "76.0%"])
+        self.assertEqual(summary["metrics"][3]["detail"], "38 / 50 timed requests · 12 errors")
+        self.assertEqual(summary["protocol"]["input"], "4,096")
+        self.assertEqual(summary["protocol"]["output"], "512")
+        self.assertEqual([r["concurrency"] for r in view["load_rows"] if r["peak"]], ["4"])
+
+    def test_failed_and_missing_measurements_do_not_invent_a_peak(self):
+        failed = {"label": "failed", "perf": {"schema_version": 3, "cancelled": True,
+            "concurrency": [{"concurrency": 1, "requests": 24, "errors": 24,
+                             "output_tokens_per_sec": 0}]}}
+        view = reports.performance_view([failed])
+        summary = view["load_views"][0]
+        self.assertIsNone(summary["peak_concurrency"])
+        self.assertEqual([m["value"] for m in summary["metrics"]],
+                         ["n/a", "n/a", "n/a", "0.0%"])
+        self.assertFalse(view["load_rows"][0]["peak"])
+        self.assertIn("stopped early", " ".join(view["notes"]))
+        failed["perf"]["concurrency"][0].pop("errors")
+        self.assertEqual(reports.performance_view([failed])["load_views"][0]["metrics"][3]["value"], "n/a")
+        self.assertEqual(self.client.get("/runs/3").status_code, 200)
+        self.assertIn("No fixed-workload measurements", self.client.get("/runs/3").text)
+
+    def test_quality_tail_and_error_categories_remain_visible(self):
+        rows = [
+            {"category": "Fast", "request_ok": 1, "latency_ms": 900, "ttft_ms": 90},
+            {"category": "Slow", "request_ok": 1, "latency_ms": 120000, "ttft_ms": 100},
+            {"category": "Slow", "request_ok": 0, "latency_ms": 900000,
+             "detail": "stream deadline exceeded"},
+            {"category": "Failed only", "request_ok": 0, "latency_ms": 950000},
+        ]
+        view = reports.request_performance_view({"label": "fixture", "results": rows})
+        self.assertEqual(view["metrics"][0]["value"], "50.0%")
+        self.assertEqual(view["error_count"], 2)
+        self.assertEqual(view["deadline_count"], 1)
+        self.assertEqual([r["category"] for r in view["slowest"]], ["Slow", "Fast"])
+        self.assertEqual(view["slowest"][0]["time_p95"], "2.00 min")
+        self.assertEqual(len(view["rows"]), 3)
+        self.assertIn("Failed requests", view["chart"])
+        self.assertNotIn("First delivery:", view["chart"])
+        self.assertIn("First delivery:", view["delivery_chart"])
+
+    def test_timing_units_and_percentile_axes(self):
+        self.assertEqual([reports.duration(v) for v in (None, 0, 125, 1760, 152900)],
+                         ["n/a", "0 ms", "125 ms", "1.76 s", "2.55 min"])
+        series = [{"label": "fixture", "color": reports.COLORS[0], "points": [(50, 1000), (100, 800000)]}]
+        chart = reports.line_chart(series, "Tail", "Percentile", "ms", percentile=True)
+        self.assertIn(">min</text>", chart)
+        self.assertIn(">0</text>", chart)
+        self.assertIn(">25</text>", chart)
+        self.assertIn(">100</text>", chart)
+        self.assertNotIn(">800k</text>", chart)
+        single = reports.line_chart([{**series[0], "points": [(100, 1000)]}],
+                                    "Single", "Percentile", "ms", percentile=True)
+        self.assertIn('cx="538"', single)
 
 
 if __name__ == "__main__":

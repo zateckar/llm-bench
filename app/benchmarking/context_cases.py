@@ -163,8 +163,9 @@ def _records(seed, family):
             "AND known_at<=55, then select the greatest revision. A winning deleted=true row suppresses "
             "that shipment; never resurrect an older one. Sum signed quantities of the remaining shipments. "
             "Return site, shipments (sorted live shipment IDs), count, totals as [item,sum] in amber,blue,green "
-            "order INCLUDING zero totals, net_quantity, and evidence. Evidence is the winning site record "
-            "plus each winning shipment revision INCLUDING tombstones, sorted by record ID."
+            "order INCLUDING zero totals, net_quantity, and evidence. Evidence is an array of record-ID "
+            "strings (not record objects): the winning site record plus each winning shipment revision "
+            "INCLUDING tombstones, sorted by record ID."
         )
     rng.shuffle(records)
     return rng, records, answer, rules

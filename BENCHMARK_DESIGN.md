@@ -1,8 +1,104 @@
-# Rigorous v14 design and critical review
+# Rigorous v15 design and critical review
 
 Review completed on 2026-10-04. This document describes the current protocol.
-Historical scores are retained and are not relabelled as v14 results. The v10-v13
-review records below describe earlier passes; the v14 review records the current changes.
+Historical scores are retained and are not relabelled as v15 results. The v10-v14
+review records below describe earlier passes; the v15 review records the current changes.
+
+## Current scoring, caching and storage revision
+
+As of 2026-10-04, `criterion-achievement-v1` makes saved criterion achievement the primary question score. Questions without content criteria retain their evaluator score, including format failures at zero. Family and category aggregation averages those fractional values; no category pass threshold is used. Original evaluator scores and full-pass verdicts remain available separately. Saved reports are reaggregated from their recorded criteria without another model call or evaluator replay; their original suite fingerprints and generation protocols remain unchanged. Earlier strict scores in the dated reviews below describe the earlier scoring convention.
+
+Performance v8 pairs cold and primed warm prefixes at 8K/32K reference tokens. Context-sweep v2 pairs both modes at every supported context/load/effort cell. Suffixes differ across warm requests to avoid identical-response cache hits. Provider cache reporting distinguishes missing telemetry from explicit zero. Uncached prefill and effective input rate use client TTFT; decode uses non-burst reported output over delivery span. Queue/network/first-token effects prevent interpreting these proxies as engine kernel rates. The method follows [vLLM prefix reuse](https://docs.vllm.ai/en/v0.9.2/features/automatic_prefix_caching.html), which avoids repeated prefill computation. Priming is excluded from timed measurements and disclosed in setup budgets.
+
+Large SQLite payloads now use lossless, versioned compression with transparent application readers. Historical maintenance reserves the writer slot, requires an idle queue, creates a compressed consistent backup, verifies compression roundtrips, updates score projections, and vacuums free pages. Indexed numeric scores and outcome labels remain queryable without decompressing audits. No answer, criterion or timing evidence is discarded. `selftest_storage.py` verifies restore, preservation, mixed legacy/compressed reads, timestamp behavior and the idle guard; `selftest_cache.py` verifies rate denominators, telemetry coverage and paired prefix structure.
+
+## V15 empirical calibration and behavioral reconstruction
+
+The read-only [calibration snapshot](reports/calibration-v14-2026-10-04.md),
+[per-question data](reports/calibration-v14-2026-10-04.json), and
+[contract review](reports/calibration-v14-2026-10-04-review.md) use completed runs
+80 and 81 on identical v14 suite `b11260da421820b5` and identical recorded
+single-call protocols. Their balanced strict scores are 83.78% and 83.11%.
+Among 312 capability tasks, 227 pass in both runs, 52 split, and 33 fail in both.
+These are descriptive observations from two models with one run each. Run 82 was
+still running at the snapshot and is excluded; no endpoint call, database write,
+queue change, or historical score update was performed for calibration.
+
+The calibration separates 24 and 26 completion/format failures, respectively,
+from 23 and 21 other contract failures and from completed content mismatches.
+Source authoring validation had zero errors/warnings across all 315 v14 tasks.
+The saved answers nevertheless exposed underspecified nested field names and
+representations: queue repairs need explicit `removed`, `order`, `final_queue`,
+`count` keys; transaction edges need `[source,target]` arrays; shipment evidence
+needs record-ID strings; a path string needs concatenated node IDs. V15 clarifies
+these 13 instances while preserving answers and strict grading. Representation-only
+audit mappings make 13 additional historical submissions match the keys, but
+these are diagnostic counterfactuals and are not revised benchmark results.
+Families failing primarily through truncation are completion-constrained in this
+panel; neither they nor ambiguous-contract failures establish semantic difficulty.
+
+The new [calibration tool](calibrate_suite.py) reads one SQLite snapshot in
+read-only/query-only mode without application startup or credentials. Complete
+reports are pooled only when full protocols and complete fingerprint/category/
+family/scope inventories agree. Duplicate run/question identities, invalid
+verdicts and hashes, partial runs, and incompatible schemas are rejected.
+Repeated evidence is balanced by model. At least two models and three fully
+scored runs per model are required for repeated-panel evidence. No task is
+automatically pruned; variants are never counted as repeated model runs.
+
+The public method inspiration is [VulcanBench's behavioral-parity suite](https://github.com/morganlinton/VulcanBench#suites),
+its [fail-to-pass/regression task format](https://github.com/morganlinton/VulcanBench/blob/main/docs/TASK_CONTRIBUTION.md),
+and the [candidate admission charter](https://github.com/morganlinton/VulcanBench/blob/main/tasks/coding-intelligence-index-v4/CHARTER.md).
+We adopt observed behavior as ground truth, preserve regression behavior, and
+distinguish source correctness from empirical difficulty. We do not adopt its
+latency-based difficulty threshold or composite score. No third-party tasks,
+binary artifacts, evaluator code, or benchmark scores are copied.
+
+Two original reconstruction families add eight instances in a new capability
+category, using seeds 19/23 and two variants. Each instance selects one of four
+legacy profiles with at least two differences from the naive rewrite. The profile
+does not appear in the model prompt. The model can issue up to 12 domain-valid
+probes, submit complete Python once, and explicitly finish. The final program
+is graded after completion using the existing out-of-process code evaluator;
+no hidden test, expected output, or grade is returned during the interaction.
+
+| Family | Interacting behavior | Exhaustive grading | Independent oracle |
+|---|---|---|---|
+| Signed quantizer | Floor versus truncation; offset before versus after division; reflection versus signed saturation; final cap | Every combination of value -6..6, divisor 2..4, offset -2..2, cap 1..3: 585 inputs | Exact rational arithmetic and independent integral rounding |
+| Capacity-2 TTL cache | Inclusive versus strict expiration; fixed versus sliding expiry; whether successful reads update eviction recency; overwrite and expiration order | Every sequence of zero through four operations from the seven-command alphabet: 2,801 sequences | Timestamped dictionaries with independent eviction priorities, versus an ordered-map reference interpreter |
+
+Both groups of fixtures (regression and deviation from the naive rewrite) carry
+half the diagnostic content weight. All fixtures remain mandatory for strict
+success. Inputs are protected from mutation, invalid/out-of-budget probes and
+actions after submission fail the protocol, at least one observation is required,
+and evaluator infrastructure failures remain unscored. Cancellation and unfinished
+interactions do not execute submitted code. The task browser identifies the new
+grader separately from state-change simulations.
+
+Repeated review caught an initially unobservable quantizer rounding choice when
+negative values were clamped to zero. The final signed-saturation domain makes
+all eight policy profiles distinguishable. Independent observing agents identify
+every selected profile in two probes; this establishes solvability, not model
+difficulty. All 13,544 new expected fixture outputs match the independent oracles,
+and all 56 alternative-policy programs fail actual subprocess grading. Source
+correctness gates pass; empirical admission remains `unmeasured` pending fresh
+v15 model runs. The suite is `rigorous-v15`: 323 tasks across 31 categories,
+including 28 interactive tasks, with fingerprint `7909c6325d1abd7b`.
+
+The new tasks measure bounded black-box inference and replacement functions, not
+compiled-binary reverse engineering or full repository repair. Public generation
+and seeds are not a contamination-free holdout. Historical single-call results
+and current bounded-finalization results remain separate protocols.
+
+Final verification on 2026-10-04: strict validation reports zero errors and warnings
+for all 323 tasks; the complete unittest discovery passes 240 tests. Evaluator
+self-tests pass 120 assertions, challenge checks pass 1,133 checks over 56 questions,
+and existing corruption tests reject 14,145 incorrect answers. The reconstruction
+tests add the exhaustive oracle and 56 alternative-policy rejection checks above.
+Ruff and Git whitespace checks pass. Repeated assembly confirms fingerprint
+`7909c6325d1abd7b`. Calibration CLI tests also verify distinct JSON/Markdown outputs
+and reject source-database overwrite before any read or write. No live model call
+was made, and the application's active v14 run was left untouched.
 
 ## V14 research, question audit and repeated review
 
@@ -557,3 +653,17 @@ Client v4 gives quality calls an independent 1,800-second stream budget while ke
 Performance v6 adds request samples, p99 presentation, request/error-rate graphs, output-length distributions, chunk-gap summaries and a mean output-token-time delivery proxy. Reported completion counts may include reasoning, and one SSE event can deliver many tokens. Consequently the proxy excludes estimates and buffered bursts; chunk gaps are never called inter-token latency. Definitions are informed by [NVIDIA GenAI-Perf](https://docs.nvidia.com/deeplearning/triton-inference-server/archives/triton-inference-server-2600/user-guide/docs/perf_benchmark/genai-perf-README.html). It remains a closed-loop load test with successful output over full wall time including failures. Quality-request distributions and category deadline counts are separate from controlled load results. Old records never acquire invented stream diagnostics.
 
 The CLI benchmark and management entry points, console/Markdown formatting and generator command entry points were removed. Runtime benchmark code is under `app/benchmarking`; verification scripts stay at the root. The task bank is unchanged: 315 tasks, hash `b11260da421820b5`, verified against the pre-change Git version. App configuration loads `.env` with process environment precedence. The UI retains the existing stack and adopts compact neutral surfaces, borders and token colors inspired by [Shadcn theming](https://ui.shadcn.com/docs/theming), with mobile navigation and run sections. Review corrected missing container closure, model-ID column collisions, desktop toggle visibility, empty-report notices and percentile graph scaling. Regression checks cover deadlines without retries, retained partial progress, invalid budgets, EOF deadline enforcement, token-time exclusions, wall-clock failure denominators, raw sample distributions and authenticated performance downloads.
+
+## 2026-10-04 bounded finalization and configurable decoding
+
+Run #80 used four workers. Summed quality request duration was 29,185 seconds over 7,447 seconds elapsed, indicating substantial overlap. All 24 output-limit failures exhausted 65,536 completion tokens while returning reasoning without a final answer. Several saved endings repeat calculations or irrelevant edge cases. These observations motivate bounded finalization; they do not establish that another request will solve the tasks. The historical run is preserved and no live recovery requests were issued.
+
+[Pi](https://github.com/earendil-works/pi) was evaluated as a possible harness. Its [SDK](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md) offers agent sessions, tools, context management and configurable resources, with a Node.js/Bun runtime. It is appropriate to consider for future repository/environment tasks. Replacing the fixed-task runner would additionally require controlled instructions, tool isolation, retry/compaction limits, usage accounting and an evaluator adapter. Those boundaries already exist in the current runner, so this change keeps it and implements bounded finalization directly. This is an execution protocol, not an unrestricted coding agent.
+
+`bounded-quality-v1` allocates 57,344 tokens to the initial ordinary-question call and reserves 8,192 for one finalization call. Allocations share the existing 65,536-token ceiling. Smaller budgets reserve `min(8192, budget // 8)`; fewer than eight tokens permit no followup. The followup trigger is output-length termination or a nonempty reasoning-only response ending normally. Empty, refused, failed and completed wrong responses receive no additional attempt. The conversation includes the original messages and full returned response, followed by a fixed instruction requesting a complete replacement answer. Only that last response is evaluated; no hidden fixtures, expected values or evaluator feedback enter model context. Finalization uses a normal chat turn and does not promise a provider-native resumption or that internal thinking is disabled. Preserving long history requires sufficient endpoint context capacity, and all repeated input tokens are included in cost.
+
+The protocol records allocations, per-call metrics/usage, recovery outputs, initial outcomes, initial passes and recovered passes. Latency includes both calls; their combined streams are not treated as one continuous token-delivery span. Followups execute within the existing question worker. Compatibility negotiation can explicitly remove rejected streaming fields before generation, with at most three attempts per call. Quality transport failures are not regenerated, preventing unknown partial output from being multiplied by retries. Existing interactive tasks retain their action and total-output budgets and do not gain evaluator-guided repair.
+
+Models now configure finite temperature in [0, 2] and an optional standard `reasoning_effort`. The empty effort setting omits the field. Explicit unsupported settings fail visibly. Both quality and performance honor the selected settings; submission snapshots them so later edits do not alter queued runs. Existing models migrate to temperature 0 and provider-default effort. [Qwen's model card](https://huggingface.co/Qwen/Qwen3.8-Flash-Next-FP8/blob/main/README.md) recommends different sampling for thinking mode; matching those settings is a user configuration choice, not an assumed measured improvement. Client v5 and performance v7 record the settings, and quality reports additionally record the execution protocol. Strict comparisons reject differing protocols/settings. The question bank and fingerprints are unchanged.
+
+Offline coverage in `selftest_protocol.py` exercises real client payloads and SSE parsing with controlled responses, complete replacement semantics, exhausted budgets, reasoning-only recovery, missing final answers, cancellation, endpoint failures, usage/timing aggregation, parallel worker limits, schema migration, create/edit validation, provider rejection, performance settings, corrupt queue entries and queued-setting snapshots. These checks do not establish live model recovery rates or latency improvements.

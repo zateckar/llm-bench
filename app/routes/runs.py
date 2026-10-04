@@ -40,8 +40,9 @@ async def quality_download(request: Request, run_id: int):
     row = await fetch_one("SELECT quality_json FROM test_runs WHERE id=?", (run_id,))
     if not row or not row.get("quality_json"):
         raise HTTPException(status_code=404, detail="No quality report for this run")
+    from app.benchmarking.quality_report import rescore_report
     return JSONResponse(
-        json.loads(row["quality_json"]),
+        rescore_report(json.loads(row["quality_json"])),
         headers={"Content-Disposition": f'attachment; filename="run-{run_id}.quality.json"'},
     )
 
@@ -51,7 +52,8 @@ def _parse_perf(raw: str | None) -> dict | None:
         data = json.loads(raw or "null")
     except (TypeError, ValueError):
         return None
-    return data if isinstance(data, dict) and data.get("schema_version") == 3 else None
+    return data if isinstance(data, dict) and (data.get("schema_version") == 3 or
+            data.get("schema_version") == 4 and data.get("kind") == "context_sweep") else None
 
 
 @router.get("/runs/{run_id}/performance.json")
@@ -62,6 +64,8 @@ async def performance_download(request: Request, run_id: int):
     data = _parse_perf(row.get("perf_json")) if row else None
     if data is None:
         raise HTTPException(status_code=404, detail="No performance report for this run")
+    from app.services.sweep_reports import hydrate_sweep
+    data = await hydrate_sweep(run_id, data)
     return JSONResponse(data, headers={
         "Content-Disposition": f'attachment; filename="run-{run_id}.performance.json"',
         "Cache-Control": "no-store",
@@ -77,7 +81,11 @@ async def runs_list(request: Request):
     # `evaluator_error_count` is deliberately distinct from test_runs.error_count:
     # the former counts suite/evaluator bugs, the latter counts transport failures.
     runs = await fetch_all(
-        """SELECT tr.*, m.name as model_name, m.model_id AS provider_model_id,
+        """SELECT tr.id,tr.status,tr.total_questions,tr.scored_questions,tr.passed_questions,
+                  tr.avg_score,tr.error_count,tr.workers,tr.latency_p50_ms,tr.latency_p95_ms,
+                  tr.output_tokens_per_sec,tr.test_suite_hash,tr.created_at,tr.plan_id,
+                  (tr.perf_json IS NOT NULL) AS perf_json,
+                  m.name as model_name, m.model_id AS provider_model_id,
                   (SELECT COUNT(*) FROM test_results
                     WHERE run_id = tr.id
                       AND (detail LIKE 'Evaluator error:%' OR detail LIKE 'Unknown evaluator:%')
@@ -140,7 +148,11 @@ async def run_detail(request: Request, run_id: int):
         except (TypeError, ValueError):
             metadata = {}
         r["evaluation"] = metadata.get("evaluation")
+        from app.benchmarking.quality_report import achievement_score
+        r["score"] = achievement_score({**r, "evaluation": r["evaluation"]})
         r["attempt_diagnostics"] = metadata.get("metrics", {}).get("attempt_diagnostics", [])
+        r["quality_requests"] = metadata.get("diagnostics", {}).get("quality_requests", [])
+        r["quality_requests"] = metadata.get("diagnostics", {}).get("quality_requests", [])
         cat = r["category"]
         if cat not in results_by_category:
             results_by_category[cat] = []
@@ -157,11 +169,16 @@ async def run_detail(request: Request, run_id: int):
     transport_errors = [r for r in results if not r["request_ok"]]
 
     perf_data = _parse_perf(run.get("perf_json"))
+    from app.services.sweep_reports import hydrate_sweep
+    perf_data = await hydrate_sweep(run_id, perf_data)
     try:
         quality_data = json.loads(run.get("quality_json") or "null")
     except (ValueError, TypeError):
         quality_data = None
     if quality_data and quality_data.get("schema_version") == 3:
+        from app.benchmarking.quality_report import rescore_report
+        quality_data = rescore_report(quality_data)
+        run["avg_score"] = quality_data["summary"]["category_balanced"] or 0.0
         for category in categories:
             summary = quality_data["summary"]["categories"].get(category["category"])
             if summary:
@@ -212,6 +229,15 @@ async def stop_run(request: Request, run_id: int):
                           SET status = 'failed', completed_at = CURRENT_TIMESTAMP,
                               error_message = 'Stopped by administrator.'
                         WHERE id = ? AND status IN ('running', 'pending')""",
+                    (run_id,),
+                ),
+                (
+                    """UPDATE test_runs SET perf_json = CASE WHEN json_valid(perf_json)
+                        THEN CASE WHEN json_extract(perf_json,'$.schema_version')=4
+                                  AND json_extract(perf_json,'$.kind')='context_sweep'
+                             THEN json_set(perf_json,'$.cancelled',json('true'),'$.finished',json('false'))
+                             ELSE perf_json END ELSE perf_json END
+                        WHERE id=? AND status='failed' AND error_message='Stopped by administrator.'""",
                     (run_id,),
                 ),
                 ("DELETE FROM benchmark_progress WHERE run_id = ?", (run_id,)),

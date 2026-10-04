@@ -17,23 +17,26 @@ from app.benchmarking.perf import DEFAULT_MAX_CONCURRENCY, PerfConfig, run_perf_
 from app.benchmarking.quality_execution import run_quality
 from app.benchmarking.quality_report import make_report as make_quality_report, result_record, summarize
 from app.benchmarking.quality_suite import MAX_OUTPUT_TOKENS, QUALITY_WORKERS, load_questions, provenance, suite_hash
+from app.storage import DETECT_TYPES, pack_text
 
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 180.0
 
 
 def start_benchmark(
-    run_id, model, mode="both", max_concurrency=DEFAULT_MAX_CONCURRENCY, on_finish=None
+    run_id, model, mode="both", max_concurrency=DEFAULT_MAX_CONCURRENCY, on_finish=None,
+    **sweep_options,
 ):
     threading.Thread(
-        target=_run_benchmark, args=(run_id, model, mode, max_concurrency, on_finish), daemon=True
+        target=_run_benchmark, args=(run_id, model, mode, max_concurrency, on_finish),
+        kwargs=sweep_options, daemon=True
     ).start()
 
 
 def _connect() -> sqlite3.Connection:
     from app.config import DATABASE_PATH
 
-    db = sqlite3.connect(str(DATABASE_PATH), timeout=30)
+    db = sqlite3.connect(str(DATABASE_PATH), timeout=30, detect_types=DETECT_TYPES)
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA foreign_keys=ON")
     return db
@@ -66,14 +69,15 @@ def _update_progress(
 
 def _store_result(run_id: int, index: int, result: Result) -> None:
     q = result.question
+    record = result_record(result)
     db = _connect()
     try:
         db.execute(
             """INSERT INTO test_results
                    (run_id, test_id, category, prompt, response, score, detail, evaluator,
                     question_index, prompt_tokens, completion_tokens, passed, pass_threshold,
-                    difficulty, weight, latency_ms, ttft_ms, request_ok, quality_metadata_json, quality_scored)
-               SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    difficulty, weight, latency_ms, ttft_ms, request_ok, quality_metadata_json, quality_scored, quality_outcome)
+               SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 WHERE EXISTS (
                     SELECT 1 FROM test_runs
                      WHERE id = ? AND status IN ('pending', 'running')
@@ -82,9 +86,9 @@ def _store_result(run_id: int, index: int, result: Result) -> None:
                 run_id,
                 q.id,
                 q.category,
-                q.prompt,
-                result.response,
-                result.score,
+                pack_text(q.prompt),
+                pack_text(result.response),
+                result.achievement_score,
                 result.detail,
                 q.evaluator,
                 index,
@@ -97,8 +101,9 @@ def _store_result(run_id: int, index: int, result: Result) -> None:
                 result.metrics.latency_ms or None,
                 result.metrics.ttft_ms,
                 1 if result.metrics.ok else 0,
-                json.dumps(result_record(result)),
+                pack_text(json.dumps(record, separators=(",", ":"))),
                 int(result.is_scored),
+                record["outcome"],
                 run_id,
             ),
         )
@@ -164,7 +169,7 @@ def _finish_run(
                 ttft.p50,
                 ttft.p95,
                 throughput,
-                perf_json,
+                pack_text(perf_json),
                 run_id,
             ),
         )
@@ -276,13 +281,44 @@ def _sanitize_error_detail(error: str) -> str:
     return _URL_RE.sub("<endpoint>", error)
 
 
+def _sanitize_result_errors(result: Result) -> None:
+    """Keep endpoint error strings out of saved recovery transcripts."""
+    result.detail = _sanitize_error_detail(result.detail)
+    if result.metrics.error:
+        result.metrics.error = _sanitize_error_detail(result.metrics.error)
+    if not result.metrics.ok:
+        result.response = _sanitize_error_detail(result.response)
+
+    def scrub(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in {"error", "detail"} and isinstance(item, str):
+                    value[key] = _sanitize_error_detail(item)
+                else:
+                    scrub(item)
+            if (isinstance(value.get("metrics"), dict)
+                    and not value["metrics"].get("ok", True)
+                    and isinstance(value.get("response"), str)):
+                value["response"] = _sanitize_error_detail(value["response"])
+        elif isinstance(value, list):
+            for item in value:
+                scrub(item)
+
+    scrub(result.diagnostics)
+    scrub(result.metrics.attempt_diagnostics)
+    if result.evaluation:
+        for criterion in result.evaluation.criteria:
+            scrub(criterion.evidence)
+
+
 def _build_client_config(model: dict) -> ClientConfig:
     return ClientConfig(
         base_url=model["base_url"],
         api_key=model["api_key"],
         model=model["model_id"],
         max_tokens=MAX_OUTPUT_TOKENS,
-        temperature=0,
+        temperature=model.get("temperature", 0),
+        reasoning_effort=model.get("reasoning_effort"),
         seed=0,
         timeout=REQUEST_TIMEOUT,
         stream_deadline=1800.0,
@@ -290,10 +326,10 @@ def _build_client_config(model: dict) -> ClientConfig:
     )
 
 
-def _run_benchmark(run_id, model, mode, max_concurrency, on_finish: Callable[[int], None] | None):
+def _run_benchmark(run_id, model, mode, max_concurrency, on_finish: Callable[[int], None] | None, **sweep_options):
     workers = min(QUALITY_WORKERS, max_concurrency)
     try:
-        _run_benchmark_impl(run_id, model, mode, max_concurrency)
+        _run_benchmark_impl(run_id, model, mode, max_concurrency, **sweep_options)
     except Exception as error:
         logger.exception("Benchmark run %d failed", run_id)
         _safe_mark_run_failed(run_id, str(error), workers)
@@ -305,12 +341,15 @@ def _run_benchmark(run_id, model, mode, max_concurrency, on_finish: Callable[[in
                 logger.exception("Queue callback failed for run %d", run_id)
 
 
-def _run_benchmark_impl(run_id, model, mode, max_concurrency):
+def _run_benchmark_impl(run_id, model, mode, max_concurrency, **sweep_options):
     from app.services.url_guard import validate_endpoint
 
-    if mode not in {"both", "quality", "performance"}:
-        raise ValueError("Mode must be both, quality, or performance")
-    perf_config = PerfConfig(max_concurrency)
+    if mode not in {"both", "quality", "performance", "sweep"}:
+        raise ValueError("Mode must be both, quality, performance, or sweep")
+    perf_config = PerfConfig(max_concurrency) if mode != "sweep" else None
+    if mode == "sweep":
+        from app.benchmarking.perf_sweep import SweepConfig
+        sweep_config = SweepConfig(max_concurrency=max_concurrency, **sweep_options)
     workers = min(QUALITY_WORKERS, max_concurrency)
     db = _connect()
     try:
@@ -325,6 +364,9 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency):
         return
     validate_endpoint(model["base_url"])
     config = _build_client_config(model)
+    if mode == "sweep":
+        _run_context_sweep(run_id, config, sweep_config)
+        return
     questions = load_questions() if mode != "performance" else []
     db = _connect()
     try:
@@ -348,7 +390,7 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency):
             nonlocal processed
             if not _run_is_active(run_id):
                 return
-            result.detail = _sanitize_error_detail(result.detail)
+            _sanitize_result_errors(result)
             _store_result(run_id, index + 1, result)
             processed += 1
             _update_progress(
@@ -404,6 +446,52 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency):
         )
 
 
+def _store_sweep_checkpoint(run_id, report):
+    for effort in report.get("efforts", []):
+        effort["error"] = _sanitize_error_detail(effort.get("error", ""))
+    db = _connect()
+    try:
+        db.execute("UPDATE test_runs SET perf_json=? WHERE id=? AND status IN ('pending','running')",
+                   (pack_text(json.dumps(report, separators=(",", ":"))), run_id))
+        db.commit()
+    finally:
+        db.close()
+
+
+def _store_sweep_cell(run_id, cell):
+    cell["error"] = _sanitize_error_detail(cell.get("error", ""))
+    if cell.get("cache_reuse"):
+        cell["cache_reuse"]["error"] = _sanitize_error_detail(cell["cache_reuse"].get("error", ""))
+    db = _connect()
+    try:
+        db.execute("""INSERT OR REPLACE INTO performance_cells
+                   (run_id,effort,context_tokens,concurrency,result_json)
+                   SELECT ?,?,?,?,? WHERE EXISTS
+                   (SELECT 1 FROM test_runs WHERE id=? AND status IN ('pending','running'))""",
+                   (run_id, cell["effort"], cell["context_tokens"], cell["concurrency"], pack_text(json.dumps(cell, separators=(",", ":"))), run_id))
+        db.commit()
+    finally:
+        db.close()
+
+
+def _run_context_sweep(run_id, client_config, sweep_config):
+    from app.benchmarking.perf_sweep import run_sweep
+
+    started = time.perf_counter()
+    report = run_sweep(
+        client_config, sweep_config, retain_cells=False,
+        on_cell=lambda cell: _store_sweep_cell(run_id, cell),
+        checkpoint=lambda data: _store_sweep_checkpoint(run_id, data),
+        progress=lambda label, n, total: _update_progress(run_id, label, n, total, f"Resolved {n:,}/{total:,} cells", "sweep"),
+        cancelled=lambda: not _run_is_active(run_id),
+    )
+    if _run_is_active(run_id):
+        message = "" if report.successful_requests else "No complete answers were measured in the context sweep."
+        _summarise_and_finish(run_id, [], 0, sweep_config.max_concurrency,
+                              (time.perf_counter() - started) * 1000,
+                              json.dumps(report.to_dict()), message, client_config)
+
+
 def _summarise_and_finish(
     run_id, results, total, workers, duration_ms, perf_json, error_message, client_config=None
 ):
@@ -431,7 +519,7 @@ def _summarise_and_finish(
             try:
                 db.execute(
                     "UPDATE test_runs SET quality_json=? WHERE id=? AND status IN ('pending','running')",
-                    (json.dumps(report), run_id),
+                    (pack_text(json.dumps(report, separators=(",", ":"))), run_id),
                 )
                 db.commit()
             finally:

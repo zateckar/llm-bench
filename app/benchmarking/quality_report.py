@@ -8,6 +8,7 @@ import statistics
 from app.benchmarking.models import EVALUATION_SCHEMA_VERSION, percentile
 from app.benchmarking.evaluators import EVALUATOR_VERSIONS
 from app.benchmarking.llm_client import client_protocol
+from app.benchmarking.quality_protocol import protocol as execution_protocol
 from app.benchmarking.quality_suite import (
     REVISION,
     MAX_OUTPUT_TOKENS,
@@ -19,6 +20,24 @@ from app.benchmarking.quality_suite import (
 )
 
 EXCLUDED = {"endpoint_error", "unsupported_context", "evaluator_error", "cancelled"}
+SCORING_REVISION = "criterion-achievement-v1"
+
+
+def achievement_score(row):
+    value = (row.get("evaluation") or {}).get("criterion_achievement")
+    return value if value is not None else row.get("evaluator_score", row.get("score", 0.0))
+
+
+def rescore_report(report):
+    """Project saved criteria into current scores without regrading model answers."""
+    if report.get("schema_version") != 3:
+        return report
+    for row in report["results"]:
+        row.setdefault("evaluator_score", row["score"])
+        row["score"] = achievement_score(row)
+    report["scoring_revision"] = SCORING_REVISION
+    report["summary"] = summarize(report["results"])
+    return report
 
 
 def result_record(result):
@@ -34,7 +53,8 @@ def result_record(result):
         "scope": q.metadata.get("scope", question_scope(q)),
         "metadata": q.metadata,
         "rubric": q.rubric,
-        "score": result.score,
+        "score": result.achievement_score,
+        "evaluator_score": result.score,
         "passed": result.passed and result.is_scored,
         "scored": result.is_scored,
         "outcome": result.outcome
@@ -86,6 +106,7 @@ def bootstrap(groups, samples=1000):
 
 
 def summarize(rows):
+    rows = [{**r, "score": achievement_score(r)} for r in rows]
     usable = [r for r in rows if r["scored"]]
     capability = [r for r in usable if r["scope"] == "capability"]
     planned = [r for r in rows if r["scope"] == "capability"]
@@ -103,20 +124,20 @@ def summarize(rows):
     bounds = [
         balanced(
             clusters(
-                [{**r, "passed": r["passed"] if r["scored"] else assumed} for r in planned],
-                "passed",
+                [{**r, "score": r["score"] if r["scored"] else assumed} for r in planned],
             )
         )
         for assumed in (0, 1)
     ]
-    groups = clusters(capability, "passed")
+    groups = clusters(capability)
     categories = {}
     for category in sorted({r["category"] for r in rows}):
         items = [r for r in usable if r["category"] == category]
         categories[category] = {
             "count": len(items),
             "passes": sum(r["passed"] for r in items),
-            "score": balanced(clusters(items, "passed")),
+            "score": balanced(clusters(items)),
+            "full_pass_rate": balanced(clusters(items, "passed")),
             "families": len({r["family"] for r in items}),
         }
     context = []
@@ -136,11 +157,12 @@ def summarize(rows):
                 "count": len(items),
                 "scored": len(scored),
                 "unsupported": sum(r["outcome"] == "unsupported_context" for r in items),
-                "accuracy": statistics.mean(r["passed"] for r in scored) if scored else None,
+                "accuracy": statistics.mean(r["score"] for r in scored) if scored else None,
                 "server_prompt_tokens_mean": statistics.mean(measured) if measured else None,
             }
         )
     interactions = [r for r in rows if r["metadata"].get("protocol") == "json-actions-v1"]
+    recovery_rows = [r for r in rows if r["diagnostics"].get("recovery")]
     return {
         "count": len(rows),
         "total": len(rows),
@@ -156,13 +178,21 @@ def summarize(rows):
         if usable
         else None,
         "outcomes": dict(Counter(r["outcome"] for r in rows)),
+        "recovery": {
+            "questions": len(recovery_rows),
+            "model_calls": sum(len(r["diagnostics"]["quality_requests"]) for r in recovery_rows),
+            "initial_passes": sum(r["diagnostics"]["recovery"]["initial_passed"] for r in recovery_rows),
+            "attempted": sum(r["diagnostics"]["recovery"]["attempted"] for r in recovery_rows),
+            "recovered": sum(r["diagnostics"]["recovery"]["recovered"] for r in recovery_rows),
+        },
         "category_balanced": balanced(groups),
+        "category_balanced_full_pass": balanced(clusters(capability, "passed")),
         "category_balanced_ci95": bootstrap(groups),
         "category_balanced_criterion_achievement": balanced(clusters(achievement)),
         "capability_criterion_coverage": len(achievement) / len(capability) if capability else None,
         "contract_compliance_mean": statistics.mean(contract) if contract else None,
         "missing_outcome_score_bounds": bounds,
-        "compliance_score": statistics.mean(r["passed"] for r in compliance)
+        "compliance_score": statistics.mean(r["score"] for r in compliance)
         if compliance
         else None,
         "categories": categories,
@@ -184,6 +214,7 @@ def make_report(results, client_config, selected_hash=None, max_concurrency=8):
     rows = [result_record(r) for r in results]
     return {
         "schema_version": 3,
+        "scoring_revision": SCORING_REVISION,
         "evaluation_schema_version": EVALUATION_SCHEMA_VERSION,
         "suite_hash": selected_hash or suite_hash([r.question for r in results]),
         "model": client_config.model,
@@ -193,10 +224,14 @@ def make_report(results, client_config, selected_hash=None, max_concurrency=8):
             "evaluation_schema_version": EVALUATION_SCHEMA_VERSION,
             "evaluator_versions": dict(EVALUATOR_VERSIONS),
             "temperature": client_config.temperature,
+            "reasoning_effort": client_config.reasoning_effort,
+            "execution": execution_protocol(client_config.max_tokens),
             "model_seed": client_config.seed,
-            "max_output_tokens": MAX_OUTPUT_TOKENS,
+            "max_output_tokens": min(MAX_OUTPUT_TOKENS, client_config.max_tokens),
             "quality_workers": min(QUALITY_WORKERS, max_concurrency),
-            "client": client_protocol(replace(client_config, detect_repetition=False)),
+            "client": client_protocol(replace(client_config, detect_repetition=False,
+                                              retry_transport_errors=False,
+                                              max_retries=min(3, client_config.max_retries))),
         },
         "summary": summarize(rows),
         "results": rows,
@@ -215,7 +250,7 @@ def paired_comparison(left, right):
     rrows = {r["fingerprint"]: r for r in right["results"] if r["scope"] == "capability"}
     matched = sorted(lrows.keys() & rrows.keys())
     pairs = [
-        {**lrows[key], "score": int(rrows[key]["passed"]) - int(lrows[key]["passed"])}
+        {**lrows[key], "score": achievement_score(rrows[key]) - achievement_score(lrows[key])}
         for key in matched
         if lrows[key]["scored"] and rrows[key]["scored"]
     ]
@@ -228,6 +263,7 @@ def paired_comparison(left, right):
     return {
         "compatible": True,
         "direction": "right minus left",
+        "score_basis": SCORING_REVISION,
         "matched": len(matched),
         "paired": len(pairs),
         "excluded_pairs": len(matched) - len(pairs),

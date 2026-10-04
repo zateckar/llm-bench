@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS models (
     api_key TEXT NOT NULL,
     model_id TEXT NOT NULL,
     description TEXT,
+    temperature REAL NOT NULL DEFAULT 0,
+    reasoning_effort TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -55,6 +57,7 @@ CREATE TABLE IF NOT EXISTS test_runs (
     quality_config_json TEXT,
     quality_json TEXT,
     run_options_json TEXT,                -- full start parameters, so the queue can re-dispatch a pending run
+    decoding_config_json TEXT,            -- model settings captured when the run is submitted
     plan_id INTEGER,                      -- set when the run belongs to a run_plans group
     FOREIGN KEY (model_id) REFERENCES models(id),
     FOREIGN KEY (created_by) REFERENCES users(id),
@@ -98,12 +101,23 @@ CREATE TABLE IF NOT EXISTS test_results (
     request_ok INTEGER DEFAULT 1,       -- 0 when the call failed at the transport layer
     quality_scored INTEGER,             -- NULL on legacy rows; excludes evaluator/unsupported errors
     quality_metadata_json TEXT,
+    quality_outcome TEXT,               -- queryable without decompressing audit payloads
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (run_id) REFERENCES test_runs(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_test_results_run ON test_results(run_id);
 CREATE INDEX IF NOT EXISTS idx_test_results_run_category ON test_results(run_id, category);
+
+-- Each sweep cell is durable without rewriting a growing report after every request.
+CREATE TABLE IF NOT EXISTS performance_cells (
+    run_id INTEGER NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+    effort TEXT NOT NULL,
+    context_tokens INTEGER NOT NULL,
+    concurrency INTEGER NOT NULL,
+    result_json TEXT NOT NULL,
+    PRIMARY KEY (run_id, effort, context_tokens, concurrency)
+);
 
 -- Active benchmark sessions (for progress tracking)
 CREATE TABLE IF NOT EXISTS benchmark_progress (

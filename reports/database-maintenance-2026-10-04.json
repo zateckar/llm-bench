@@ -1,0 +1,90 @@
+{
+  "before": {
+    "bytes": 385454080,
+    "free_bytes": 26501120,
+    "runs": 49,
+    "results": 16507
+  },
+  "after": {
+    "bytes": 104378368,
+    "free_bytes": 0,
+    "runs": 49,
+    "results": 16507
+  },
+  "backup": "D:\\DEV\\llm-bench\\data\\backups\\bench-20261004T141213231809Z.db.gz",
+  "backup_bytes": 88225611,
+  "compressed_payloads": 12548,
+  "rescored_runs": [
+    {
+      "run_id": 67,
+      "achievement": 0.9681812271516512,
+      "full_pass": 0.9111993661100803,
+      "scored": 272,
+      "outcomes": {
+        "pass": 239,
+        "endpoint_error": 19,
+        "task_failure": 31,
+        "truncation": 2
+      }
+    },
+    {
+      "run_id": 80,
+      "achievement": 0.883159566227993,
+      "full_pass": 0.8377853348758522,
+      "scored": 315,
+      "outcomes": {
+        "truncation": 24,
+        "pass": 258,
+        "task_failure": 33
+      }
+    },
+    {
+      "run_id": 81,
+      "achievement": 0.8892786187569875,
+      "full_pass": 0.8310724237448376,
+      "scored": 315,
+      "outcomes": {
+        "pass": 254,
+        "task_failure": 35,
+        "truncation": 18,
+        "missing_answer": 8
+      }
+    },
+    {
+      "run_id": 82,
+      "achievement": 0.9629181283276111,
+      "full_pass": 0.9033898094242921,
+      "scored": 315,
+      "outcomes": {
+        "pass": 278,
+        "task_failure": 27,
+        "truncation": 5,
+        "formatting": 5
+      }
+    },
+    {
+      "run_id": 83,
+      "achievement": 0.5343191255213413,
+      "full_pass": 0.32482584465343084,
+      "scored": 314,
+      "outcomes": {
+        "pass": 83,
+        "task_failure": 131,
+        "compliance_failure": 1,
+        "formatting": 96,
+        "truncation": 3,
+        "endpoint_error": 1
+      }
+    }
+  ],
+  "verification": {
+    "preserved_result_payloads": 16507,
+    "preserved_evaluation_records": 10289,
+    "preserved_run_protocols": 28,
+    "backup_integrity": "ok",
+    "database_integrity": "ok",
+    "foreign_key_violations": 0,
+    "live_database_read_routes": 5,
+    "offline_html_render": "ok"
+  }
+}

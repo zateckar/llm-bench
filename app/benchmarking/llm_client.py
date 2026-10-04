@@ -23,7 +23,7 @@ import urllib3
 from app.benchmarking.models import RequestMetrics, TokenUsage
 
 logger = logging.getLogger(__name__)
-CLIENT_PROTOCOL_VERSION = "chat-client-v4"
+CLIENT_PROTOCOL_VERSION = "chat-client-v5"
 
 # Rough characters-per-token used only for prompt-size estimates in the perf
 # suite when the server does not report prompt_tokens.
@@ -107,8 +107,17 @@ class ClientConfig:
     detect_repetition: bool = False
     repetition_threshold: float = 0.30
     extra_headers: dict = field(default_factory=dict)
+    reasoning_effort: str | None = None
+    retry_transport_errors: bool = True
 
     def __post_init__(self):
+        if (type(self.temperature) not in (int, float)
+                or not math.isfinite(self.temperature) or not 0 <= self.temperature <= 2):
+            raise ValueError("Temperature must be a finite number between 0 and 2")
+        if self.reasoning_effort is not None and self.reasoning_effort not in (
+            "none", "minimal", "low", "medium", "high", "xhigh", "max",
+        ):
+            raise ValueError("Unsupported reasoning effort")
         for name, value in [("timeout", self.timeout), ("stream_deadline", self.stream_deadline)]:
             if value is not None and (type(value) not in (int, float) or not math.isfinite(value) or value <= 0):
                 raise ValueError(f"{name} must be a positive finite number")
@@ -229,7 +238,7 @@ class ChatClient:
                     logger.info("Endpoint rejected streaming; falling back to blocking")
                     self._streaming_supported = False
                     continue
-                if not e.retryable:
+                if not e.retryable or not cfg.retry_transport_errors:
                     # A permanent 4xx (401, 403, 413, ...) will fail the same
                     # way on every attempt, so don't pay the backoff.
                     return failed(attempt + 1)
@@ -246,7 +255,7 @@ class ChatClient:
                 })
                 # Repeating an exhausted generation budget discards progress and
                 # multiplies worker occupancy. Protocol violations are also permanent.
-                if isinstance(e, (_StreamDeadlineExceeded, _ProtocolError)):
+                if isinstance(e, (_StreamDeadlineExceeded, _ProtocolError)) or not cfg.retry_transport_errors:
                     return failed(attempt + 1)
                 if attempt < attempts_allowed - 1:
                     self._sleep_backoff(attempt, last_error)
@@ -267,6 +276,7 @@ class ChatClient:
                 attempts=attempt + 1,
                 streamed=want_stream,
                 cached_tokens=usage.cached_tokens,
+                cached_tokens_reported=usage.cached_tokens_reported,
                 finish_reason=self._last_finish_reason,
                 prompt_tokens_estimated=usage.prompt_tokens_estimated,
                 completion_tokens_estimated=usage.completion_tokens_estimated,
@@ -299,6 +309,8 @@ class ChatClient:
         }
         if cfg.seed is not None:
             payload["seed"] = cfg.seed
+        if cfg.reasoning_effort is not None:
+            payload["reasoning_effort"] = cfg.reasoning_effort
         if stream:
             payload["stream"] = True
             if self._stream_usage_supported:
@@ -418,6 +430,7 @@ class ChatClient:
                             isinstance(details, dict) and "cached_tokens" in details
                         ):
                             usage.cached_tokens = update.cached_tokens
+                            usage.cached_tokens_reported = update.cached_tokens_reported
 
                 for choice in choices:
                     if choice.get("finish_reason"):
@@ -691,10 +704,14 @@ def _parse_usage(usage_raw: dict) -> TokenUsage:
         details = usage_raw.get("prompt_tokens_details")
         if isinstance(details, dict):
             cached = details.get("cached_tokens")
+    cached = count(cached)
+    if prompt is not None and cached is not None and cached > prompt:
+        cached = None
     return TokenUsage(
         prompt_tokens=prompt or 0,
         completion_tokens=completion or 0,
-        cached_tokens=count(cached) or 0,
+        cached_tokens=cached or 0,
+        cached_tokens_reported=cached is not None,
         prompt_tokens_estimated=prompt is None,
         completion_tokens_estimated=completion is None,
     )
@@ -728,6 +745,10 @@ def client_protocol(config):
     """Result-affecting client settings, without endpoints, headers or secrets."""
     return {
         "revision": CLIENT_PROTOCOL_VERSION,
+        "temperature": config.temperature,
+        "reasoning_effort": config.reasoning_effort,
+        "model_seed": config.seed,
+        "retry_transport_errors": config.retry_transport_errors,
         "timeout_seconds": config.timeout,
         "stream_deadline_seconds": config.stream_deadline_seconds,
         "deadline_retry_policy": "no_retry",

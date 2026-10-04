@@ -13,6 +13,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 CATEGORY_DESCRIPTIONS = {
+    "Behavioral Reconstruction": "Probe a simulated legacy implementation, infer its behavior, and submit replacement code that passes exhaustive parity and regression checks.",
     "Factual Knowledge": "Tests compositional scientific and factual reasoning with explicit typed answers.",
     "Mathematical Reasoning": "Tests ability to solve arithmetic, word problems, algebra, and geometry. Evaluates numerical accuracy.",
     "Logical Reasoning": "Tests logical deduction, pattern recognition, syllogisms, and sequential reasoning.",
@@ -34,6 +35,7 @@ CATEGORY_DESCRIPTIONS = {
 }
 
 EVALUATOR_DESCRIPTIONS = {
+    "behavioral_reconstruction": "Legacy probes reveal observations only. Replacement Python is graded once after completion against every finite-domain input, with regression and deviation checks reported separately.",
     "interactive_state": "JSON actions are executed in a local simulation. Every final-state and authorization requirement must pass; excess calls are reported separately.",
     "code_exec": "Code is extracted and executed in a sandboxed subprocess against boundary and combination fixtures, including protected input-state checks. The submitted program is not rewritten. Values are compared structurally, so int/float and tuple/list differences are not counted as wrong.",
     "format_check": "Formatting and instruction constraints (JSON structure, word/line/sentence/paragraph counts, regexes, table shape, allowed vocabulary). Every check must pass.",
@@ -81,7 +83,9 @@ def load_tests_from_yaml() -> tuple[dict, str | None]:
                 "id": q.id,
                 "prompt": q.prompt,
                 "system_prompt": q.system_prompt,
-                "evaluator": "interactive_state" if q.interaction else q.evaluator,
+                "evaluator": ("behavioral_reconstruction"
+                              if q.interaction and q.interaction.get("kind") == "behavioral-reconstruction"
+                              else "interactive_state" if q.interaction else q.evaluator),
                 "expected": expected,
                 "difficulty": q.difficulty,
                 "weight": q.effective_weight,

@@ -1,6 +1,7 @@
 """SQLite database connection and helpers."""
 
 import aiosqlite
+import json
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -12,6 +13,7 @@ from datetime import datetime, timezone
 # another module imported app.database first. app.services.run_queue and
 # benchmark_runner already resolve it lazily -- this matches them.
 from app import config as app_config
+from app.storage import DETECT_TYPES
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
@@ -19,10 +21,14 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 # schema.sql does not alter an existing table, so every added column needs an
 # idempotent ALTER here as well. Listed as (table, column, definition).
 MIGRATIONS: list[tuple[str, str, str]] = [
+    ("models", "temperature", "REAL NOT NULL DEFAULT 0"),
+    ("models", "reasoning_effort", "TEXT"),
+    ("test_runs", "decoding_config_json", "TEXT"),
     ("test_runs", "quality_config_json", "TEXT"),
     ("test_runs", "quality_json", "TEXT"),
     ("test_results", "quality_metadata_json", "TEXT"),
     ("test_results", "quality_scored", "INTEGER"),
+    ("test_results", "quality_outcome", "TEXT"),
     ("test_runs", "test_suite_hash", "TEXT"),
     ("test_runs", "total_prompt_tokens", "INTEGER DEFAULT 0"),
     ("test_runs", "total_completion_tokens", "INTEGER DEFAULT 0"),
@@ -84,6 +90,18 @@ async def _apply_migrations(db: aiosqlite.Connection) -> None:
                       pass_threshold = 0.5"""
         )
 
+    await db.execute("UPDATE test_results SET quality_outcome='' WHERE quality_outcome IS NULL AND quality_metadata_json IS NULL")
+    cursor = await db.execute("SELECT id,quality_metadata_json FROM test_results WHERE quality_outcome IS NULL")
+    while rows := await cursor.fetchmany(100):
+        updates = []
+        for row_id, raw in rows:
+            try:
+                outcome = json.loads(raw).get("outcome", "")
+            except (ValueError, TypeError, AttributeError):
+                outcome = ""
+            updates.append((outcome, row_id))
+        await db.executemany("UPDATE test_results SET quality_outcome=? WHERE id=?", updates)
+
     # test_runs gained created_at later; existing rows are NULL. Backfill from
     # whatever timestamp the run has so the list shows a plausible date.
     await db.execute(
@@ -95,7 +113,7 @@ async def _apply_migrations(db: aiosqlite.Connection) -> None:
 
 async def get_db() -> aiosqlite.Connection:
     """Get a database connection."""
-    db = await aiosqlite.connect(str(app_config.DATABASE_PATH))
+    db = await aiosqlite.connect(str(app_config.DATABASE_PATH), detect_types=DETECT_TYPES)
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA journal_mode=WAL")
     await db.execute("PRAGMA foreign_keys=ON")

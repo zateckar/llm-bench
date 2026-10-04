@@ -68,7 +68,7 @@ class PerfTests(unittest.TestCase):
         self.assertTrue(all(c.config.stream_deadline_seconds == 360 for c in FakeClient.instances))
         self.assertEqual([p.requests for p in report.concurrency], [24, 24, 24])
         self.assertEqual([p.errors for p in report.concurrency], [0, 0, 0])
-        self.assertEqual(sum(len(c.calls) for c in FakeClient.instances), 76)
+        self.assertEqual(sum(len(c.calls) for c in FakeClient.instances), 112)
         self.assertEqual([k["retries"] for k in FakeClient.instances[0].calls[:2]], [3, 3])
         self.assertTrue(
             all(
@@ -79,7 +79,7 @@ class PerfTests(unittest.TestCase):
         )
         for c in FakeClient.instances:
             c.session.close.assert_called_once()
-        self.assertEqual(progress.call_args.args[1:], (76, 76))
+        self.assertEqual(progress.call_args.args[1:], (112, 112))
         self.assertTrue(
             all(
                 p.estimated_token_requests == 24 and p.burst_delivery_requests == 24

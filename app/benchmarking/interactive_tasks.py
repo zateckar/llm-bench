@@ -539,7 +539,13 @@ class Environment:
 
 
 def run_interaction(q, client, cancelled=lambda: False):
-    env = Environment(q.interaction)
+    reconstruction = q.interaction.get("kind") == "behavioral-reconstruction"
+    if reconstruction:
+        from app.benchmarking.reconstruction_cases import ReconstructionEnvironment
+
+        env = ReconstructionEnvironment(q)
+    else:
+        env = Environment(q.interaction)
     messages = [
         {"role": "system", "content": q.system_prompt},
         {"role": "user", "content": q.prompt},
@@ -547,6 +553,7 @@ def run_interaction(q, client, cancelled=lambda: False):
     transcript, tokens, aggregate = [], TokenUsage(), RequestMetrics(attempts=0, streamed=True)
     outcome, detail = "task_failure", "Turn budget exhausted"
     completed = False
+    cache_reporting = []
     remaining = q.metadata["total_output_budget"]
     for turn in range(1, q.metadata["max_turns"] + 1):
         if cancelled():
@@ -558,6 +565,7 @@ def run_interaction(q, client, cancelled=lambda: False):
         tokens.prompt_tokens += usage.prompt_tokens
         tokens.completion_tokens += usage.completion_tokens
         tokens.cached_tokens += usage.cached_tokens
+        cache_reporting.append(usage.cached_tokens_reported)
         tokens.prompt_tokens_estimated |= usage.prompt_tokens_estimated
         tokens.completion_tokens_estimated |= usage.completion_tokens_estimated
         aggregate.latency_ms += metrics.latency_ms
@@ -612,13 +620,21 @@ def run_interaction(q, client, cancelled=lambda: False):
         if remaining <= 0:
             outcome, detail = "truncation", "Total output budget exhausted"
             break
-    verdict = env.verdict()
+    verdict = env.verdict(grade=completed) if reconstruction else env.verdict()
     passed = outcome == "complete" and verdict["success"]
     if outcome == "complete":
         outcome = "pass" if passed else "task_failure"
         detail = (
             "Final state reached" if passed else "Final state or authorization constraints failed"
         )
+        if reconstruction and verdict.get("code_outcome") == "evaluator_error":
+            outcome, detail = "evaluator_error", "Replacement evaluator infrastructure failed"
+        elif reconstruction:
+            detail = verdict["code_detail"]
+            if not verdict["probe_count"]:
+                detail += "; required legacy observation missing"
+            if verdict["violations"]:
+                detail += "; protocol violations"
     aggregate.prompt_tokens, aggregate.completion_tokens = (
         tokens.prompt_tokens,
         tokens.completion_tokens,
@@ -626,6 +642,8 @@ def run_interaction(q, client, cancelled=lambda: False):
     aggregate.prompt_tokens_estimated = tokens.prompt_tokens_estimated
     aggregate.completion_tokens_estimated = tokens.completion_tokens_estimated
     aggregate.cached_tokens = tokens.cached_tokens
+    tokens.cached_tokens_reported = bool(cache_reporting) and all(cache_reporting)
+    aggregate.cached_tokens_reported = tokens.cached_tokens_reported
     violations = list(verdict.get("violations", []))
     criteria = [
         CriterionResult(
@@ -665,14 +683,38 @@ def run_interaction(q, client, cancelled=lambda: False):
             evidence={"unnecessary_calls": verdict.get("unnecessary_calls", 0)},
         ),
     ]
+    if reconstruction:
+        code_evaluation = verdict.get("code_evaluation")
+        content = [
+            CriterionResult(criterion_id=criterion["id"],
+                            **{key: value for key, value in criterion.items()
+                               if key in CriterionResult.__dataclass_fields__})
+            for criterion in (code_evaluation or {}).get("criteria", [])
+        ] or [CriterionResult("submission", status="not_evaluated", dimension="content",
+                              reason_code="replacement_not_graded")]
+        observation = CriterionResult(
+            "legacy-observation", status="pass" if verdict["probe_count"] else "fail",
+            earned=float(bool(verdict["probe_count"])), dimension="contract",
+            reason_code="legacy_probed" if verdict["probe_count"] else "legacy_not_probed",
+        )
+        criteria[1].criterion_id = "probe-contract"
+        criteria[1].dimension = "contract"
+        criteria[1].reason_code = "valid_actions" if not violations else "invalid_actions"
+        criteria = content + [observation] + criteria[1:]
+    evaluator_name = "behavioral_reconstruction" if reconstruction else "interactive_state"
+    contract_score = 1.0 if completed else 0.0
+    if reconstruction:
+        contract_score = (code_evaluation or {}).get("contract_score") if completed else 0.0
+        if not verdict["probe_count"] or not verdict["submitted"] or violations:
+            contract_score = 0.0
     evaluation = EvaluationResult(
-        evaluator="interactive_state",
+        evaluator=evaluator_name,
         score=float(passed),
         full_pass=passed,
         outcome=outcome,
         criteria=criteria,
-        contract_score=1.0 if completed else 0.0,
-        evaluator_version=EVALUATOR_VERSIONS["interactive_state"],
+        contract_score=contract_score,
+        evaluator_version=EVALUATOR_VERSIONS[evaluator_name],
     )
     return Result(
         q,
@@ -682,6 +724,7 @@ def run_interaction(q, client, cancelled=lambda: False):
         tokens,
         aggregate,
         outcome=outcome,
-        diagnostics={**verdict, "transcript": transcript},
+        diagnostics={**{key: value for key, value in verdict.items() if key != "code_evaluation"},
+                     "transcript": transcript},
         evaluation=evaluation,
     )

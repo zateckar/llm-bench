@@ -1,0 +1,16 @@
+<div>
+    <label class="block text-sm font-medium text-zinc-300 mb-1">Temperature</label>
+    <input type="number" name="temperature" min="0" max="2" step="any" required
+           value="{{ model.temperature if model is defined else 0 }}" class="input-field">
+    <p class="text-xs text-zinc-500 mt-1">0–2. Use the model's recommended sampling temperature.</p>
+</div>
+<div>
+    <label class="block text-sm font-medium text-zinc-300 mb-1">Reasoning effort</label>
+    <select name="reasoning_effort" class="input-field">
+        <option value="" {% if model is not defined or not model.reasoning_effort %}selected{% endif %}>Provider default</option>
+        {% for effort in ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] %}
+        <option value="{{ effort }}" {% if model is defined and model.reasoning_effort == effort %}selected{% endif %}>{{ effort }}</option>
+        {% endfor %}
+    </select>
+    <p class="text-xs text-zinc-500 mt-1">Choose a level your endpoint supports. Provider default omits this setting.</p>
+</div>

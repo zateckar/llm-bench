@@ -14,7 +14,7 @@ from markupsafe import Markup, escape
 
 from app.database import fetch_all, fetch_one
 from app.templates_config import templates
-from app.benchmarking.quality_report import paired_comparison
+from app.benchmarking.quality_report import paired_comparison, rescore_report, achievement_score
 
 COLORS = ("#3b82f6", "#14b8a6", "#e99b16", "#e879ad", "#9b87f5", "#ef744d")
 
@@ -81,6 +81,18 @@ def fmt(value, unit=""):
     return f"{value:,.1f}" + (f" {unit}" if unit else "")
 
 
+def duration(value):
+    """Compact client-observed timings; stored measurements remain milliseconds."""
+    value = number(value)
+    if value is None:
+        return "n/a"
+    if value >= 60_000:
+        return f"{value / 60_000:,.2f} min"
+    if value >= 1000:
+        return f"{value / 1000:,.2f} s"
+    return f"{value:,.0f} ms"
+
+
 def points(perf, key):
     raw = perf.get(key)
     return [p for p in raw if isinstance(p, dict)] if isinstance(raw, list) else []
@@ -102,7 +114,11 @@ async def load_run(run_id):
     run["quality"] = object_json(run.get("quality_json"))
     if run["quality"].get("schema_version") != 3:
         run["quality"] = {}
+    else:
+        run["quality"] = rescore_report(run["quality"])
     run["perf"] = object_json(run.get("perf_json"))
+    from app.services.sweep_reports import hydrate_sweep
+    run["perf"] = await hydrate_sweep(run_id, run["perf"])
     run["results"] = await fetch_all(
         "SELECT * FROM test_results WHERE run_id = ? ORDER BY category, question_index, id",
         (run_id,),
@@ -117,7 +133,9 @@ async def load_run(run_id):
         )
         metadata = object_json(result.get("quality_metadata_json"))
         result["evaluation"] = metadata.get("evaluation")
+        result["score"] = achievement_score({**result, "evaluation": result["evaluation"]})
         result["attempt_diagnostics"] = metadata.get("metrics", {}).get("attempt_diagnostics", [])
+        result["quality_requests"] = metadata.get("diagnostics", {}).get("quality_requests", [])
         result["outcome"] = metadata.get("outcome") or (
             "excluded" if not result["scored"] else "pass" if result["passed"] else "task_failure"
         )
@@ -188,7 +206,7 @@ def svg_text(x, y, text, extra=""):
     return f'<text x="{x:g}" y="{y:g}" {extra}>{escape(text)}</text>'
 
 
-def line_chart(series, title, x_label, unit):
+def line_chart(series, title, x_label, unit, *, percentile=False):
     """A true numeric x axis; missing observations break the line."""
     valid = [
         (x, y)
@@ -199,12 +217,23 @@ def line_chart(series, title, x_label, unit):
     if not valid:
         return None
     xs = sorted({x for x, _ in valid})
-    xmin, xmax = min(xs), max(xs)
-    ymax = max(.01 if unit in {"%", "req/s"} else 1, max(y for _, y in valid)) * 1.1
+    xmin, xmax = (0, 100) if percentile else (min(xs), max(xs))
+    maximum = max(y for _, y in valid)
+    scale = (
+        60_000
+        if unit == "ms" and maximum >= 120_000
+        else (1000 if unit == "ms" and maximum >= 1000 else 1)
+    )
+    axis_unit = "min" if scale == 60_000 else "s" if scale == 1000 else unit
+    # Round the upper bound to readable ticks instead of e.g. 1.9k milliseconds.
+    target = max(0.01 if unit in {"%", "req/s"} else 1 / scale, maximum / scale) * 1.08
+    magnitude = 10 ** math.floor(math.log10(target / 4))
+    step = next(s * magnitude for s in (1, 2, 2.5, 5, 10) if s * magnitude >= target / 4)
+    ymax = 4 * step * scale
     if unit == "%":
         ymax = min(1, ymax)
-    width, height = 700, 300
-    left, top, pw, ph = 78, 25, 595, 210
+    width, height = 560, 260
+    left, top, pw, ph = 62, 24, 476, 174
 
     def cx(x):
         return left + (x - xmin) / (xmax - xmin) * pw if xmax > xmin else left + pw / 2
@@ -220,18 +249,29 @@ def line_chart(series, title, x_label, unit):
         value = ymax * i / 4
         y = cy(value)
         parts.append(f'<path d="M{left} {y:g}H{left + pw}" stroke="currentColor" opacity=".12"/>')
-        label = (f"{value * 100:.1f}%" if unit == "%" else
-                 f"{value / 1000:.1f}k" if value >= 1000 else f"{value:.1f}")
+        label = (
+            f"{value * 100:g}%"
+            if unit == "%"
+            else f"{value / scale:g}"
+            if scale != 1
+            else f"{value / 1000:g}k"
+            if value >= 1000
+            else f"{value:g}"
+        )
         parts.append(svg_text(left - 12, y + 4, label, 'text-anchor="end"'))
-    ticks = xs if len(xs) <= 7 else [xs[round(i * (len(xs) - 1) / 6)] for i in range(7)]
+    ticks = (
+        [0, 25, 50, 75, 100]
+        if percentile
+        else (xs if len(xs) <= 7 else [xs[round(i * (len(xs) - 1) / 6)] for i in range(7)])
+    )
     for x in ticks:
         parts.append(svg_text(cx(x), top + ph + 24, f"{x:,.0f}", 'text-anchor="middle"'))
     parts.append(svg_text(left + pw / 2, height - 12, x_label, 'text-anchor="middle"'))
-    parts.append(svg_text(left, 14, unit))
+    parts.append(svg_text(left, 14, axis_unit))
     for s in series:
         color = s["color"]
         previous = None
-        for x, y in sorted(s["points"], key=lambda p: p[0]):
+        for x, y in sorted(s["points"], key=lambda p: number(p[0]) or 0):
             if number(x) is None or number(y) is None:
                 previous = None
                 continue
@@ -240,8 +280,10 @@ def line_chart(series, title, x_label, unit):
                 parts.append(
                     f'<path d="M{previous[0]:g} {previous[1]:g}L{px:g} {py:g}" fill="none" stroke="{color}" stroke-width="2.5"/>'
                 )
+            radius = 2 if len(s["points"]) > 40 else 4
+            display = duration(y) if unit == "ms" else fmt(y, unit)
             parts.append(
-                f'<circle cx="{px:g}" cy="{py:g}" r="4.5" fill="{color}"><title>{escape(s["label"])}: {x:g}, {escape(fmt(y, unit))}</title></circle>'
+                f'<circle cx="{px:g}" cy="{py:g}" r="{radius}" fill="{color}"><title>{escape(s["label"])}: {x:g}, {escape(display)}</title></circle>'
             )
             previous = (px, py)
     parts.append("</g></svg>")
@@ -272,12 +314,74 @@ def bar_chart(runs, getter, title, unit="%"):
     return Markup("".join(out) + "</g></svg>")
 
 
-def performance_view(runs):
+def load_performance_view(run):
+    """Tie the headline timings to the same observed load as peak throughput."""
+    perf = run["perf"]
+    loads = sorted(
+        (p for p in points(perf, "concurrency") if number(p.get("concurrency")) is not None),
+        key=lambda p: p["concurrency"],
+    )
+    eligible = [
+        p
+        for p in loads
+        if number(p.get("output_tokens_per_sec")) is not None
+        and number(p.get("requests")) is not None
+        and number(p.get("errors")) is not None
+        and p["requests"] > p["errors"]
+    ]
+    peak = max(eligible, key=lambda p: p["output_tokens_per_sec"], default=None)
+    counts_known = bool(loads) and all(
+        number(p.get("requests")) is not None and number(p.get("errors")) is not None for p in loads
+    )
+    total = sum(p["requests"] for p in loads) if counts_known else None
+    errors = sum(p["errors"] for p in loads) if counts_known else None
+    successful = total - errors if counts_known else None
+    level = fmt(peak["concurrency"], "int") if peak else None
+    return {
+        "label": run["label"],
+        "levels": ", ".join(fmt(p["concurrency"], "int") for p in loads),
+        "level_count": len(loads),
+        "peak_concurrency": peak["concurrency"] if peak else None,
+        "metrics": [
+            {
+                "label": "Peak aggregate output",
+                "value": fmt(at(peak, "output_tokens_per_sec"), "tok/s"),
+                "detail": f"At {level} concurrent request{'s' if peak['concurrency'] != 1 else ''}"
+                if peak
+                else "No successful load measurement",
+            },
+            {
+                "label": "Response time · p95",
+                "value": duration(at(peak, "latency.p95_ms")),
+                "detail": "Request start to completion at peak output",
+            },
+            {
+                "label": "First delivery · p95",
+                "value": duration(at(peak, "ttft.p95_ms")),
+                "detail": "First content or reasoning at peak output",
+            },
+            {
+                "label": "Request success",
+                "value": fmt(successful / total if total else None, "%"),
+                "detail": f"{fmt(successful, 'int')} / {fmt(total, 'int')} timed requests · {fmt(errors, 'int')} errors",
+            },
+        ],
+        "protocol": {
+            "revision": at(perf, "protocol.revision") or "Not recorded",
+            "input": fmt(at(perf, "protocol.input_reference_tokens"), "int"),
+            "output": fmt(at(perf, "protocol.max_output_tokens"), "int"),
+            "attempts": fmt(at(perf, "protocol.attempts_per_request"), "int"),
+        },
+    }
+
+
+def performance_view(runs, *, offline=False):
     def current_perf(run):
         raw = run["perf"]
         return raw if raw.get("schema_version") == 3 else {}
 
-    current = [{**r, "perf": current_perf(r)} for r in runs]
+    current = [{**r, "perf": current_perf(r), "is_sweep": r["perf"].get("schema_version") == 4
+                and r["perf"].get("kind") == "context_sweep"} for r in runs]
     suite_rows = [
         {"label": label, "values": [fmt(at(r["perf"], key), unit) for r in current]}
         for label, key, unit in [
@@ -288,11 +392,15 @@ def performance_view(runs):
         ]
     ]
     charts = []
+    descriptions = {
+        "output_tokens_per_sec": "Successful output across all concurrent requests, divided by elapsed test time.",
+        "latency.p95_ms": "95% of successful requests finished within this time at each load level.",
+    }
     for key, title, unit in [
         ("output_tokens_per_sec", "Delivered output under load", "tok/s"),
+        ("latency.p95_ms", "Response time under load · p95", "ms"),
         ("requests_per_sec", "Successful requests under load", "req/s"),
-        ("latency.p95_ms", "Completed-request latency · p95", "ms"),
-        ("ttft.p95_ms", "First delivered token · p95", "ms"),
+        ("ttft.p95_ms", "First delivery under load · p95", "ms"),
         ("error_rate", "Request failure rate", "%"),
         ("output_token_time.p50_ms", "Mean output token time proxy · p50", "ms/token"),
     ]:
@@ -313,6 +421,8 @@ def performance_view(runs):
             charts.append(
                 {
                     "title": title,
+                    "primary": key in descriptions,
+                    "description": descriptions.get(key, ""),
                     "svg": svg,
                     "series": [s for s in series if any(y is not None for _, y in s["points"])],
                 }
@@ -320,7 +430,8 @@ def performance_view(runs):
     load_rows, notes = [], []
     for r in current:
         perf = r["perf"]
-        if not perf:
+        load_view = load_performance_view(r)
+        if not perf and not r["is_sweep"]:
             notes.append(f"{r['label']}: no performance report for the current protocol.")
         if perf.get("cancelled"):
             notes.append(f"{r['label']}: stopped early; measurements are incomplete.")
@@ -329,6 +440,15 @@ def performance_view(runs):
             load_rows.append(
                 {
                     "run": r["label"],
+                    "concurrency": fmt(p.get("concurrency"), "int"),
+                    "peak": load_view["peak_concurrency"] is not None
+                    and p.get("concurrency") == load_view["peak_concurrency"],
+                    "output": fmt(p.get("output_tokens_per_sec"), "tok/s"),
+                    "request_rate": fmt(p.get("requests_per_sec"), "req/s"),
+                    "requests": fmt(p.get("requests"), "int"),
+                    "errors": fmt(p.get("errors"), "int"),
+                    "latency": duration(at(p, "latency.p95_ms")),
+                    "ttft": duration(at(p, "ttft.p95_ms")),
                     "values": [
                         fmt(at(p, key), unit)
                         for key, unit in [
@@ -371,15 +491,48 @@ def performance_view(runs):
                                    "color": COLORS[len(series) % len(COLORS)],
                                    "points": [(100 * (j + 1) / len(values), v)
                                               for j, v in enumerate(values)]})
-        svg = line_chart(series, title, "Observed percentile (successful requests)", unit)
+        svg = line_chart(series, title, "Successful requests · percentile", unit, percentile=True)
         if svg:
             distributions.append({"title": title, "svg": svg, "series": series})
     revisions = {at(r["perf"], "protocol.revision") for r in current if r["perf"]}
     if len(revisions) > 1:
         notes.append("These runs use different performance revisions; compare protocols before interpreting differences.")
     request_views = [request_performance_view(r) for r in runs if r.get("results")]
+    from app.services.sweep_views import sweep_view
+    sweep_views = [sweep_view(r, offline) for r in runs if r.get("perf", {}).get("schema_version") == 4
+                   and r["perf"].get("kind") == "context_sweep"]
+    cache_rows = []
+    for run in runs:
+        pairs = list(run.get("perf", {}).get("cache_reuse", []))
+        for cell in run.get("perf", {}).get("cells", []):
+            if cell.get("cache_reuse"):
+                pairs.append({"context_tokens": cell["context_tokens"], "concurrency": cell["concurrency"],
+                              "effort": cell.get("effort", "default"), "cold": cell,
+                              "warm": cell["cache_reuse"]})
+        for pair in pairs:
+            for mode in ("cold", "warm"):
+                point = pair.get(mode)
+                if not point:
+                    continue
+                telemetry = point.get("cache_metrics", {})
+                cache_rows.append({
+                    "run": run["label"], "context": fmt(pair["context_tokens"], "int"),
+                    "concurrency": pair["concurrency"], "effort": pair.get("effort", "configured"),
+                    "mode": mode, "status": point.get("status", pair.get("status", "measured")),
+                    "ttft": duration(at(point, "ttft.p50_ms")),
+                    "hit": fmt(telemetry.get("cache_hit_fraction"), "%"),
+                    "coverage": f"{telemetry.get('cache_reporting_requests', 0)}/{telemetry.get('successful_requests', 0)}",
+                    "prefill": fmt(at(telemetry, "uncached_prefill_tokens_per_sec.p50"), "tok/s"),
+                    "effective": fmt(at(telemetry, "effective_prompt_tokens_per_sec.p50"), "tok/s"),
+                    "decode": fmt(at(telemetry, "decode_tokens_per_sec.p50"), "tok/s"),
+                    "output": fmt(point.get("output_tokens_per_sec", point.get("aggregate_tokens_per_sec")), "tok/s"),
+                    "requests": point.get("requests", 0), "errors": point.get("errors", 0),
+                })
     return {
+        "cache_rows": cache_rows,
+        "sweep_views": sweep_views,
         "suite_rows": suite_rows,
+        "load_views": [load_performance_view(r) for r in current if r["perf"]],
         "charts": charts,
         "distributions": distributions,
         "request_views": request_views,
@@ -407,23 +560,97 @@ def request_performance_view(run):
         stats = LatencyStats.from_samples([number(r.get("latency_ms")) for r in successful])
         errors = sum(not r.get("request_ok") for r in items)
         deadlines = sum("stream deadline exceeded" in (r.get("detail") or "") for r in items)
-        rows.append({"category": category, "requests": len(items), "errors": errors,
-                     "deadlines": deadlines, "p50": fmt(stats.p50, "ms"), "p95": fmt(stats.p95, "ms")})
+        rows.append(
+            {
+                "category": category,
+                "requests": len(items),
+                "errors": errors,
+                "deadlines": deadlines,
+                "p50": fmt(stats.p50, "ms"),
+                "p95": fmt(stats.p95, "ms"),
+                "time_p50": duration(stats.p50),
+                "time_p95": duration(stats.p95),
+                "p95_ms": stats.p95,
+            }
+        )
     series = []
     for label, items, key, color in [
-        ("Successful latency", good, "latency_ms", COLORS[0]),
-        ("Failed latency", failed, "latency_ms", COLORS[2]),
+        ("Successful completion", good, "latency_ms", COLORS[0]),
+        ("Failed requests", failed, "latency_ms", COLORS[2]),
         ("First delivery", good, "ttft_ms", COLORS[1]),
     ]:
         values = sorted(number(r.get(key)) for r in items if number(r.get(key)) is not None)
         if values:
-            series.append({"label": label, "color": color,
-                           "points": [(100 * (i + 1) / len(values), v) for i, v in enumerate(values)]})
-    chart = line_chart(series, "Quality request timing distribution", "Observed percentile", "ms")
-    return {"label": run["label"], "rows": rows, "chart": chart, "series": series,
-            "count": len(results), "success_rate": fmt(len(good) / len(results) if results else None, "%"),
-            "latency_p50": fmt(latency.p50, "ms"), "latency_p95": fmt(latency.p95, "ms"),
-            "ttft_p50": fmt(ttft.p50, "ms"), "deadline_count": sum(r["deadlines"] for r in rows)}
+            series.append(
+                {
+                    "label": label,
+                    "color": color,
+                    "points": [(100 * (i + 1) / len(values), v) for i, v in enumerate(values)],
+                }
+            )
+    completion_series = [s for s in series if s["label"] != "First delivery"]
+    delivery_series = [s for s in series if s["label"] == "First delivery"]
+    chart = line_chart(
+        completion_series,
+        "Quality task completion time distribution",
+        "Tasks · percentile",
+        "ms",
+        percentile=True,
+    )
+    delivery_chart = line_chart(
+        delivery_series,
+        "Quality task first-delivery distribution",
+        "Tasks · percentile",
+        "ms",
+        percentile=True,
+    )
+    slowest = sorted(
+        (r for r in rows if r["p95_ms"] is not None), key=lambda r: (-r["p95_ms"], r["category"])
+    )[:5]
+    maximum = max((r["p95_ms"] for r in slowest), default=0)
+    slowest = [{**r, "width": 100 * r["p95_ms"] / maximum if maximum else 0} for r in slowest]
+    deadlines = sum(r["deadlines"] for r in rows)
+    metrics = [
+        {
+            "label": "Request success",
+            "value": fmt(len(good) / len(results) if results else None, "%"),
+            "detail": f"{len(good):,} / {len(results):,} recorded tasks",
+        },
+        {
+            "label": "Typical response · p50",
+            "value": duration(latency.p50),
+            "detail": "Median time to finish a successful task",
+        },
+        {
+            "label": "Slower responses · p95",
+            "value": duration(latency.p95),
+            "detail": "95% of successful tasks finished within this time",
+        },
+        {
+            "label": "First delivery · p50",
+            "value": duration(ttft.p50),
+            "detail": "Median time to first content or reasoning",
+        },
+    ]
+    return {
+        "label": run["label"],
+        "rows": rows,
+        "chart": chart,
+        "series": series,
+        "metrics": metrics,
+        "slowest": slowest,
+        "error_count": len(failed),
+        "completion_series": completion_series,
+        "delivery_chart": delivery_chart,
+        "delivery_series": delivery_series,
+        "failed_categories": [r for r in rows if r["errors"]],
+        "count": len(results),
+        "success_rate": fmt(len(good) / len(results) if results else None, "%"),
+        "latency_p50": fmt(latency.p50, "ms"),
+        "latency_p95": fmt(latency.p95, "ms"),
+        "ttft_p50": fmt(ttft.p50, "ms"),
+        "deadline_count": deadlines,
+    }
 
 
 def render_report(runs):
@@ -431,8 +658,8 @@ def render_report(runs):
     charts = []
     # Never silently substitute a legacy average for balanced capability.
     for title, getter, unit in [
-        ("Strict task success", lambda r: at(r, "quality.summary.category_balanced"), "%"),
-        ("Peak aggregate output", lambda r: at(r, "app.benchmarking.perf.peak_output_tokens_per_sec"), "tok/s"),
+        ("Criterion achievement", lambda r: at(r, "quality.summary.category_balanced"), "%"),
+        ("Peak aggregate output", lambda r: at(r, "perf.peak_output_tokens_per_sec"), "tok/s"),
     ]:
         svg = bar_chart(runs, getter, title, unit)
         if svg:
@@ -440,7 +667,9 @@ def render_report(runs):
     return templates.env.get_template("report_download.html").render(
         runs=runs,
         comparison=len(runs) > 1,
-        performance=performance_view(runs),
+        has_quality_results=any(run.get("results") or run.get("quality") for run in runs),
+        performance=performance_view(runs, offline=True),
+        offline=True,
         generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         overview_charts=charts,
         colors=COLORS,
