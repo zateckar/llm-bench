@@ -392,7 +392,16 @@ class ChatClient:
 
                 choices = _validated_choices(event)
                 if choices and terminated:
-                    raise _ProtocolError("Completion choice after terminal finish reason")
+                    # Gateways such as LiteLLM attach trailing usage to an empty
+                    # choice. Only content or a changed finish reason is a violation.
+                    trailing = choices[0]
+                    delta = trailing.get("delta") or {}
+                    if (not isinstance(delta, dict)
+                        or _content_text(delta.get("content"))
+                        or _content_text(delta.get("reasoning") or delta.get("reasoning_content"))
+                        or trailing.get("finish_reason") not in (None, self._last_finish_reason)):
+                        raise _ProtocolError("Completion choice after terminal finish reason")
+                    choices = []
                 saw_choice |= bool(choices)
 
                 usage_raw = event.get("usage")

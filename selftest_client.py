@@ -84,12 +84,27 @@ class ClientTests(unittest.TestCase):
         self.assertTrue(metrics.ok)
         self.assertEqual(text, "answer")
 
+    def test_empty_trailing_usage_choice_after_finish_is_accepted(self):
+        # LiteLLM sends usage on an empty choice after the finish chunk.
+        for trailing in ({"index": 0, "delta": {}}, {"index": 0, "delta": {}, "finish_reason": "length"}):
+            with self.subTest(trailing=trailing):
+                text, usage, metrics = self.complete(Response([
+                    event("answer"), event(finish="length"),
+                    {"choices": [trailing], "usage": {"prompt_tokens": 90, "completion_tokens": 20}},
+                    b"[DONE]"]))
+                self.assertTrue(metrics.ok, metrics.error)
+                self.assertEqual(text, "answer")
+                self.assertEqual(metrics.finish_reason, "length")
+                self.assertEqual(usage.completion_tokens, 20)
+
     def test_terminal_and_choice_contract_cannot_be_overwritten(self):
         malformed = [
             [b"[DONE]"],
             [{"choices": [], "usage": {"completion_tokens": 100}}, b"[DONE]"],
             [event("partial", finish="length"), event("rest", finish="stop")],
             [event("ok", finish="stop"), event("extra")],
+            [event("ok", finish="stop"), event(reasoning="extra")],
+            [event("ok", finish="length"), event(finish="stop")],
             [event("ok", finish={"type": "stop"})],
             [event("ok", finish=False), b"[DONE]"],
             [{"choices": [{"index": False, "delta": {"content": "ok"}}]}, b"[DONE]"],
