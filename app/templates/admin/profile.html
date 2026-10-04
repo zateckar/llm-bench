@@ -2,70 +2,70 @@
 {% block title %}Profile - LLM Bench{% endblock %}
 
 {% block content %}
-<div class="max-w-lg mx-auto space-y-6">
+<div class="max-w-lg mx-auto space-y-4">
     <div>
-        <h1 class="text-2xl font-bold text-white">Profile</h1>
-        <p class="text-slate-400 mt-1">Change your password</p>
+        <h1 class="text-xl font-bold text-white">Profile</h1>
+        <p class="text-zinc-400 mt-1">Change your password</p>
     </div>
 
     {% if request.query_params.get('error') == '1' %}
-    <div class="p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
+    <div class="p-3 bg-red-900/50 border border-red-700 rounded-md text-red-200 text-sm">
         Current password is incorrect.
     </div>
     {% endif %}
 
     {% if request.query_params.get('error') == '2' %}
-    <div class="p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
+    <div class="p-3 bg-red-900/50 border border-red-700 rounded-md text-red-200 text-sm">
         New password must be at least 8 characters.
     </div>
     {% endif %}
 
     {% if request.query_params.get('error') == '3' %}
-    <div class="p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
+    <div class="p-3 bg-red-900/50 border border-red-700 rounded-md text-red-200 text-sm">
         This account has no local password (OIDC login). Ask an admin to set a password for you first.
     </div>
     {% endif %}
 
     {% if request.query_params.get('error') == '4' %}
-    <div class="p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
+    <div class="p-3 bg-red-900/50 border border-red-700 rounded-md text-red-200 text-sm">
         New password must be at most 72 bytes.
     </div>
     {% endif %}
 
     {% if request.query_params.get('success') %}
-    <div class="p-3 bg-emerald-900/50 border border-emerald-700 rounded-lg text-emerald-200 text-sm">
+    <div class="p-3 bg-emerald-900/50 border border-emerald-700 rounded-md text-emerald-200 text-sm">
         Password updated successfully.
     </div>
     {% endif %}
 
-    <div class="card p-5">
+    <div class="card p-4">
         <form method="POST" action="/admin/profile" class="space-y-4">
             <div>
-                <label class="block text-sm font-medium text-slate-300 mb-1">Current Password</label>
+                <label class="block text-sm font-medium text-zinc-300 mb-1">Current Password</label>
                 <input type="password" name="current_password" required class="input-field">
             </div>
             <div>
-                <label class="block text-sm font-medium text-slate-300 mb-1">New Password</label>
+                <label class="block text-sm font-medium text-zinc-300 mb-1">New Password</label>
                 <input type="password" name="new_password" required minlength="8" class="input-field">
             </div>
             <button type="submit" class="btn-primary">Update Password</button>
         </form>
     </div>
 
-    <div class="card p-5">
-        <h3 class="text-sm font-medium text-slate-400 mb-2">Account Info</h3>
+    <div class="card p-4">
+        <h3 class="text-sm font-medium text-zinc-400 mb-2">Account Info</h3>
         <div class="space-y-2 text-sm">
             <div class="flex justify-between">
-                <span class="text-slate-500">Username</span>
-                <span class="text-slate-200">{{ user.username }}</span>
+                <span class="text-zinc-500">Username</span>
+                <span class="text-zinc-200">{{ user.username }}</span>
             </div>
             <div class="flex justify-between">
-                <span class="text-slate-500">Email</span>
-                <span class="text-slate-200">{{ user.email or 'Not set' }}</span>
+                <span class="text-zinc-500">Email</span>
+                <span class="text-zinc-200">{{ user.email or 'Not set' }}</span>
             </div>
             <div class="flex justify-between">
-                <span class="text-slate-500">Role</span>
-                <span class="text-slate-200">{{ user.role }}</span>
+                <span class="text-zinc-500">Role</span>
+                <span class="text-zinc-200">{{ user.role }}</span>
             </div>
         </div>
     </div>

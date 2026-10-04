@@ -11,14 +11,14 @@ import random
 import re
 import unittest
 
-from evaluators import EVALUATORS, eval_json_match, extract_json
-from hard_cases import build_cases, ledger, revision_data, resolve_revisions, worlds_for
-from hard_code_cases import CODE
-from interactive_tasks import make_tasks, run_interaction
-from models import RequestMetrics, Result, TokenUsage
-from quality_report import result_record, summarize
+from app.benchmarking.evaluators import EVALUATORS, eval_json_match, extract_json
+from app.benchmarking.hard_cases import build_cases, ledger, revision_data, resolve_revisions, worlds_for
+from app.benchmarking.hard_code_cases import CODE
+from app.benchmarking.interactive_tasks import make_tasks, run_interaction
+from app.benchmarking.models import RequestMetrics, Result, TokenUsage
+from app.benchmarking.quality_report import result_record, summarize
 from selftest_specialists import corruptions
-from test_loader import _parse_question, load_all_tests
+from app.benchmarking.test_loader import _parse_question, load_all_tests
 from validate_suite import Report, check_json_match
 
 

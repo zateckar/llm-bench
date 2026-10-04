@@ -435,7 +435,7 @@ def patch_profile(req):
     u = member(req)
     db.patch_member(u.id, req.json)
     return 204""",
-            "models.py": """member_properties = ['id','tenant','display_name','role']
+            "app.benchmarking.models.py": """member_properties = ['id','tenant','display_name','role']
 project_key = ['tenant','local_id']""",
             "tests.py": """def test_export_B():
     cache.clear()

@@ -5,21 +5,19 @@ from contextlib import ExitStack
 import sqlite3
 from dataclasses import replace
 import json
-import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-import benchmark
 from app.routes import admin, plans, runs
-from app.services import benchmark_runner, run_queue, run_submission
-from llm_client import ClientConfig
-from models import Question, RequestMetrics, Result, TokenUsage
-from quality_execution import score_response
-from quality_report import make_report, paired_comparison
-from quality_suite import load_questions, suite_hash
+from app.services import run_queue, run_submission
+from app.benchmarking.llm_client import ClientConfig
+from app.benchmarking.models import Question, RequestMetrics, TokenUsage
+from app.benchmarking.quality_execution import score_response
+from app.benchmarking.quality_report import make_report, paired_comparison
+from app.benchmarking.quality_suite import load_questions, suite_hash
 
 MODEL = {
     "id": 1,
@@ -32,15 +30,10 @@ MODEL = {
 
 class OptionsTests(unittest.TestCase):
     def test_only_two_benchmark_settings(self):
-        self.assertEqual(
-            set(benchmark.parser().parse_args([]).__dict__), {"mode", "max_concurrency", "report"}
-        )
         self.assertEqual(run_submission.make_run_options(), {"mode": "both", "max_concurrency": 8})
         self.assertEqual(
             set(run_submission.spec_defaults()), {"model_id", "mode", "max_concurrency"}
         )
-        self.assertIs(benchmark.run_quality, benchmark_runner.run_quality)
-        self.assertIs(benchmark.run_perf_suite, benchmark_runner.run_perf_suite)
         for mode, maximum in [
             ("v6", 8),
             ("quality", 0),
@@ -71,37 +64,6 @@ class OptionsTests(unittest.TestCase):
         rows = [row for items in categories.values() for row in items]
         self.assertEqual(len(rows), 315)
         self.assertEqual(sum(r["evaluator"] == "interactive_state" for r in rows), 20)
-
-    def test_cli_uses_full_suite_and_writes_schema_three(self):
-        def quality(questions, config, maximum, **kwargs):
-            self.assertEqual(len(questions), 315)
-            self.assertEqual(
-                (config.max_tokens, config.temperature, config.seed, maximum), (65536, 0, 0, 8)
-            )
-            return [Result(q, "fixture", 1, outcome="pass") for q in questions], 100, ""
-
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "result.md"
-            with (
-                patch.object(benchmark, "load_dotenv"),
-                patch.dict(
-                    os.environ,
-                    {
-                        "OPENAI_BASE_URL": "http://fake.invalid",
-                        "OPENAI_MODEL": "fake",
-                        "OPENAI_KEY": "unused",
-                    },
-                ),
-                patch("sys.argv", ["benchmark.py", "--mode", "quality", "--report", str(path)]),
-                patch.object(benchmark, "run_quality", side_effect=quality),
-                patch.object(benchmark, "run_perf_suite") as performance,
-            ):
-                self.assertEqual(benchmark.main(), 0)
-            data = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
-            self.assertEqual(data["quality"]["summary"]["count"], 315)
-            self.assertEqual(data["quality"]["summary"]["category_balanced"], 1)
-            self.assertIn("Balanced strict success", path.read_text(encoding="utf-8"))
-            performance.assert_not_called()
 
     def test_balanced_primary_is_strict_and_paired_metric_matches(self):
         q = Question(

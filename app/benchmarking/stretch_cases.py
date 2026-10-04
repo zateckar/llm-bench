@@ -9,10 +9,8 @@ from fractions import Fraction
 from functools import lru_cache
 import itertools
 import json
-from pathlib import Path
 import random
 
-import yaml
 
 
 SOURCES = {
@@ -798,11 +796,3 @@ BUILDERS = [
 def build_cases():
     return [builder(v) for builder in BUILDERS for v in range(3)]
 
-
-if __name__ == "__main__":
-    cases = build_cases()
-    path = Path(__file__).parent / "tests" / "stretch.yaml"
-    path.write_text(
-        yaml.safe_dump(cases, sort_keys=False, allow_unicode=True, width=100), encoding="utf-8"
-    )
-    print(f"Wrote {len(cases)} stretch-v6 questions to {path}")

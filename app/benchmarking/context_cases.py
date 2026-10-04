@@ -3,14 +3,14 @@
 import hashlib
 import json
 
-from models import Question
-from rigorous_cases import balanced_rubric
+from app.benchmarking.models import Question
+from app.benchmarking.rigorous_cases import balanced_rubric
 
 FAMILIES = ("relational-revisions", "shipment-aggregation")
 
 
 def _records(seed, family):
-    from quality_suite import rng_for
+    from app.benchmarking.quality_suite import rng_for
 
     rng = rng_for(seed, 0, "context-" + family)
     ids = iter(rng.sample(range(100000, 999999), 5000))
@@ -172,7 +172,7 @@ def _records(seed, family):
 
 def context_question(size, seed, family):
     import tiktoken
-    from quality_suite import MAX_OUTPUT_TOKENS, REVISION
+    from app.benchmarking.quality_suite import MAX_OUTPUT_TOKENS, REVISION
 
     encoding = tiktoken.get_encoding("cl100k_base")
     rng, records, answer, rules = _records(seed, family)

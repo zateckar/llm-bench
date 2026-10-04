@@ -2,12 +2,12 @@
 {% block title %}Queue &amp; schedules - LLM Bench{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<div class="space-y-4">
     <div class="flex items-center justify-between">
         <div>
-            <h1 class="text-2xl font-bold text-white">Queue &amp; schedules</h1>
-            <p class="text-slate-400 mt-1">Manage immediate and scheduled submissions. One run executes at a time.
-                Times below are server-local; it is now <span class="text-slate-200">{{ server_now_local }}</span> server time.</p>
+            <h1 class="text-xl font-bold text-white">Queue &amp; schedules</h1>
+            <p class="text-zinc-400 mt-1">Manage immediate and scheduled submissions. One run executes at a time.
+                Times below are server-local; it is now <span class="text-zinc-200">{{ server_now_local }}</span> server time.</p>
         </div>
         <a href="/admin/run" class="btn-primary">Run benchmark</a>
     </div>
@@ -29,8 +29,8 @@
             <tbody>
                 {% for plan in plans %}
                 <tr>
-                    <td class="font-mono text-sm text-slate-400">#{{ plan.id }}</td>
-                    <td class="text-sm text-slate-200">{{ plan.name or '—' }}</td>
+                    <td class="font-mono text-sm text-zinc-400">#{{ plan.id }}</td>
+                    <td class="text-sm text-zinc-200">{{ plan.name or '—' }}</td>
                     <td>
                         {% if plan.status == 'active' and not plan.pending and not plan.running %}
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-completed">Finished</span>
@@ -40,14 +40,14 @@
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-pending">Cancelled</span>
                         {% endif %}
                     </td>
-                    <td class="text-sm text-slate-400">{{ plan.scheduled_local or 'As soon as free' }}</td>
-                    <td class="text-sm text-slate-300">
+                    <td class="text-sm text-zinc-400">{{ plan.scheduled_local or 'As soon as free' }}</td>
+                    <td class="text-sm text-zinc-300">
                         {{ plan.completed }}/{{ plan.total }} done
                         {% if plan.running %}<span class="text-emerald-400">· {{ plan.running }} running</span>{% endif %}
-                        {% if plan.pending %}<span class="text-slate-500">· {{ plan.pending }} queued</span>{% endif %}
+                        {% if plan.pending %}<span class="text-zinc-500">· {{ plan.pending }} queued</span>{% endif %}
                         {% if plan.failed %}<span class="text-amber-400">· {{ plan.failed }} failed</span>{% endif %}
                     </td>
-                    <td class="text-sm text-slate-500">{{ plan.created_at[:16] if plan.created_at else '-' }}</td>
+                    <td class="text-sm text-zinc-500">{{ plan.created_at[:16] if plan.created_at else '-' }}</td>
                     <td class="text-right">
                         <div class="flex items-center justify-end gap-1">
                             <a href="/admin/plans/{{ plan.id }}/edit" class="btn-ghost text-xs px-2 py-1">Edit</a>
@@ -75,7 +75,7 @@
         </table>
     </div>
     {% else %}
-    <div class="card p-12 text-center text-slate-500">
+    <div class="card p-12 text-center text-zinc-500">
         <p>No submissions yet.</p>
         <a href="/admin/run" class="mt-3 inline-block text-sm text-blue-400 hover:text-blue-300">Run benchmark</a>
     </div>

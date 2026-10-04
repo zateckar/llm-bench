@@ -16,9 +16,9 @@ import inspect
 import json
 from pathlib import Path
 
-from challenge_oracles import CODE, REASONING
-from evaluators import EVALUATORS
-from test_loader import load_all_tests
+from app.benchmarking.challenge_oracles import CODE, REASONING
+from app.benchmarking.evaluators import EVALUATORS
+from app.benchmarking.test_loader import load_all_tests
 
 
 def corruptions(value):

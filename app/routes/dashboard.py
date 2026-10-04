@@ -41,7 +41,7 @@ async def dashboard(request: Request):
 
     # Active (running/pending) benchmarks
     active_runs = await fetch_all(
-        """SELECT tr.*, m.name as model_name, m.model_id
+        """SELECT tr.*, m.name as model_name, m.model_id AS provider_model_id
            FROM test_runs tr
            JOIN models m ON tr.model_id = m.id
            WHERE tr.status IN ('running', 'pending')
@@ -49,7 +49,7 @@ async def dashboard(request: Request):
     )
 
     recent_runs = await fetch_all(
-        """SELECT tr.*, m.name as model_name, m.model_id
+        """SELECT tr.*, m.name as model_name, m.model_id AS provider_model_id
            FROM test_runs tr
            JOIN models m ON tr.model_id = m.id
            ORDER BY tr.id DESC LIMIT 10"""

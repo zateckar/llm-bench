@@ -1,4 +1,4 @@
-"""One benchmark pipeline shared with the CLI; SQLite lifecycle for web runs."""
+"""Application benchmark pipeline and SQLite lifecycle."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ import time
 from datetime import datetime, timezone
 from typing import Callable
 
-from llm_client import ClientConfig
-from models import LatencyStats, Result
-from perf import DEFAULT_MAX_CONCURRENCY, PerfConfig, run_perf_suite
-from quality_execution import run_quality
-from quality_report import make_report as make_quality_report, result_record, summarize
-from quality_suite import MAX_OUTPUT_TOKENS, QUALITY_WORKERS, load_questions, provenance, suite_hash
+from app.benchmarking.llm_client import ClientConfig
+from app.benchmarking.models import LatencyStats, Result
+from app.benchmarking.perf import DEFAULT_MAX_CONCURRENCY, PerfConfig, run_perf_suite
+from app.benchmarking.quality_execution import run_quality
+from app.benchmarking.quality_report import make_report as make_quality_report, result_record, summarize
+from app.benchmarking.quality_suite import MAX_OUTPUT_TOKENS, QUALITY_WORKERS, load_questions, provenance, suite_hash
 
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 180.0
@@ -285,6 +285,7 @@ def _build_client_config(model: dict) -> ClientConfig:
         temperature=0,
         seed=0,
         timeout=REQUEST_TIMEOUT,
+        stream_deadline=1800.0,
         stream=True,
     )
 

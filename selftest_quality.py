@@ -15,15 +15,15 @@ import re
 import unittest
 from unittest.mock import patch
 
-from challenge_oracles import CODE as ORIGINAL_CODE
-from independent_oracles import CODE, code_cases
-from interactive_tasks import Environment, make_tasks, run_interaction
-from llm_client import ChatClient, ClientConfig
-from models import Question, RequestMetrics, Result, TokenUsage
-from quality_execution import score_response
-from quality_report import result_record, summarize
-from quality_suite import load_questions
-from test_loader import load_all_tests
+from app.benchmarking.challenge_oracles import CODE as ORIGINAL_CODE
+from app.benchmarking.independent_oracles import CODE, code_cases
+from app.benchmarking.interactive_tasks import Environment, make_tasks, run_interaction
+from app.benchmarking.llm_client import ChatClient, ClientConfig
+from app.benchmarking.models import Question, RequestMetrics, Result, TokenUsage
+from app.benchmarking.quality_execution import score_response
+from app.benchmarking.quality_report import result_record, summarize
+from app.benchmarking.quality_suite import load_questions
+from app.benchmarking.test_loader import load_all_tests
 
 ROOT = Path(__file__).parent
 
@@ -142,7 +142,7 @@ class SuiteTests(unittest.TestCase):
         self.assertEqual(CODE["AC2-04"]([["a", 1, 2], ["b", 0, 9]], [["a", 2]]), [2])
 
     def test_expanded_fixtures_execute_in_real_sandbox(self):
-        from evaluators import eval_code_exec
+        from app.benchmarking.evaluators import eval_code_exec
 
         expanded = [q for q in load_questions() if q.id in CODE]
         for q in expanded:
@@ -318,7 +318,7 @@ class ReportingTests(unittest.TestCase):
         )
 
     def test_failure_attribution_and_denominators(self):
-        from models import CategoryResult
+        from app.benchmarking.models import CategoryResult
 
         cases = [
             ('{"x":1}', RequestMetrics(), "pass", True),

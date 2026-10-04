@@ -33,10 +33,10 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from evaluators import EVALUATORS, TEST_HELPERS
-from models import DIFFICULTY_WEIGHTS, Question
-from test_loader import SuiteError
-from quality_suite import load_questions
+from app.benchmarking.evaluators import EVALUATORS, TEST_HELPERS
+from app.benchmarking.models import DIFFICULTY_WEIGHTS, Question
+from app.benchmarking.test_loader import SuiteError
+from app.benchmarking.quality_suite import load_questions
 
 # format_check check types the evaluator implements. Kept here explicitly so a
 # typo in a suite file is an error rather than a silently-failing check.

@@ -212,6 +212,17 @@ class RequestMetrics:
     stream_chunks: int = 0
     stream_span_ms: float | None = None
     successful_attempt_latency_ms: float | None = None
+    chunk_gaps_ms: list[float] = field(default_factory=list)
+    attempt_diagnostics: list[dict] = field(default_factory=list)
+
+    @property
+    def output_token_time_ms(self) -> float | None:
+        """Client delivery proxy, not token-level or model-side decode latency."""
+        if (not self.ok or not self.streamed or self.burst_delivery
+                or self.completion_tokens_estimated or self.completion_tokens < 2
+                or self.stream_span_ms is None):
+            return None
+        return self.stream_span_ms / (self.completion_tokens - 1)
 
     @property
     def burst_delivery(self) -> bool:
@@ -426,6 +437,11 @@ class ConcurrencyPoint:
     burst_delivery_requests: int = 0
     cached_tokens: int = 0
 
+    output_token_time: LatencyStats = field(default_factory=LatencyStats)
+    chunk_gap: LatencyStats = field(default_factory=LatencyStats)
+    output_length: LatencyStats = field(default_factory=LatencyStats)
+    samples: list[dict] = field(default_factory=list)
+
     @property
     def requests_per_sec(self):
         return (self.requests - self.errors) * 1000 / self.wall_ms if self.wall_ms else 0.0
@@ -433,6 +449,10 @@ class ConcurrencyPoint:
     @property
     def output_tokens_per_sec(self):
         return self.output_tokens * 1000 / self.wall_ms if self.wall_ms else 0.0
+
+    @property
+    def input_tokens_per_sec(self):
+        return self.prompt_tokens * 1000 / self.wall_ms if self.wall_ms else 0.0
 
     @property
     def error_rate(self):
@@ -443,13 +463,17 @@ class ConcurrencyPoint:
             **{
                 key: value
                 for key, value in self.__dict__.items()
-                if key not in {"latency", "ttft", "failure_latency"}
+                if key not in {"latency", "ttft", "failure_latency", "output_token_time", "chunk_gap", "output_length"}
             },
             "latency": self.latency.to_dict(),
             "ttft": self.ttft.to_dict(),
             "failure_latency": self.failure_latency.to_dict(),
+            "output_token_time": self.output_token_time.to_dict(),
+            "chunk_gap": self.chunk_gap.to_dict(),
+            "output_length": {key.removesuffix("_ms"): value for key, value in self.output_length.to_dict().items()},
             "requests_per_sec": self.requests_per_sec,
             "output_tokens_per_sec": self.output_tokens_per_sec,
+            "input_tokens_per_sec": self.input_tokens_per_sec,
             "error_rate": self.error_rate,
         }
 

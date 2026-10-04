@@ -37,7 +37,7 @@ try:
 except ImportError:  # pragma: no cover - dependency is declared in pyproject
     yaml = None
 
-from models import DIFFICULTY_WEIGHTS, Question
+from app.benchmarking.models import DIFFICULTY_WEIGHTS, Question
 
 # The C loader (libyaml) is a byte-for-byte-compatible drop-in for safe_load
 # and roughly an order of magnitude faster; with the pure-Python loader every
@@ -184,7 +184,7 @@ def load_all_tests(tests_dir: str | Path = "tests") -> list[Question]:
 
 def _parse_question(item: Any, where: str) -> Question:
     """Parse a single YAML test item into a Question, or raise SuiteError."""
-    from evaluators import EVALUATORS
+    from app.benchmarking.evaluators import EVALUATORS
 
     if not isinstance(item, dict):
         raise SuiteError(f"{where}: expected a mapping, got {type(item).__name__}")

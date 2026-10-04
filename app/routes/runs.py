@@ -54,6 +54,20 @@ def _parse_perf(raw: str | None) -> dict | None:
     return data if isinstance(data, dict) and data.get("schema_version") == 3 else None
 
 
+@router.get("/runs/{run_id}/performance.json")
+async def performance_download(request: Request, run_id: int):
+    if not await get_current_user(request):
+        return RedirectResponse(url="/login", status_code=302)
+    row = await fetch_one("SELECT perf_json FROM test_runs WHERE id=?", (run_id,))
+    data = _parse_perf(row.get("perf_json")) if row else None
+    if data is None:
+        raise HTTPException(status_code=404, detail="No performance report for this run")
+    return JSONResponse(data, headers={
+        "Content-Disposition": f'attachment; filename="run-{run_id}.performance.json"',
+        "Cache-Control": "no-store",
+    })
+
+
 @router.get("/runs")
 async def runs_list(request: Request):
     user = await get_current_user(request)
@@ -63,7 +77,7 @@ async def runs_list(request: Request):
     # `evaluator_error_count` is deliberately distinct from test_runs.error_count:
     # the former counts suite/evaluator bugs, the latter counts transport failures.
     runs = await fetch_all(
-        """SELECT tr.*, m.name as model_name, m.model_id,
+        """SELECT tr.*, m.name as model_name, m.model_id AS provider_model_id,
                   (SELECT COUNT(*) FROM test_results
                     WHERE run_id = tr.id
                       AND (detail LIKE 'Evaluator error:%' OR detail LIKE 'Unknown evaluator:%')
@@ -87,7 +101,7 @@ async def run_detail(request: Request, run_id: int):
         return RedirectResponse(url="/login", status_code=302)
 
     run = await fetch_one(
-        """SELECT tr.*, m.name as model_name, m.model_id
+        """SELECT tr.*, m.name as model_name, m.model_id AS model_identifier
            FROM test_runs tr
            JOIN models m ON tr.model_id = m.id
            WHERE tr.id = ?""",
@@ -95,6 +109,7 @@ async def run_detail(request: Request, run_id: int):
     )
     if not run:
         return RedirectResponse(url="/runs", status_code=302)
+    run["model_id"] = run.pop("model_identifier")
 
     categories = await fetch_all(
         """SELECT category,
@@ -125,6 +140,7 @@ async def run_detail(request: Request, run_id: int):
         except (TypeError, ValueError):
             metadata = {}
         r["evaluation"] = metadata.get("evaluation")
+        r["attempt_diagnostics"] = metadata.get("metrics", {}).get("attempt_diagnostics", [])
         cat = r["category"]
         if cat not in results_by_category:
             results_by_category[cat] = []
@@ -138,12 +154,7 @@ async def run_detail(request: Request, run_id: int):
            ORDER BY category, question_index""",
         (run_id,),
     )
-    transport_errors = await fetch_all(
-        """SELECT * FROM test_results
-           WHERE run_id = ? AND request_ok = 0
-           ORDER BY category, question_index""",
-        (run_id,),
-    )
+    transport_errors = [r for r in results if not r["request_ok"]]
 
     perf_data = _parse_perf(run.get("perf_json"))
     try:
@@ -158,7 +169,7 @@ async def run_detail(request: Request, run_id: int):
     from app.services.html_reports import performance_view
 
     performance = performance_view(
-        [{"label": f"#{run_id} · {run['model_name']}", "perf": perf_data or {}}]
+        [{"label": f"#{run_id} · {run['model_name']}", "perf": perf_data or {}, "results": results}]
     )
     return templates.TemplateResponse(
         request,

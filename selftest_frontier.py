@@ -11,16 +11,16 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from context_cases import FAMILIES, context_question
-from evaluators import extract_json
-from frontier_cases import UNICODE_REFERENCE, load_frontier_questions
-from interactive_tasks import Environment, make_tasks, run_interaction
-from models import Question, RequestMetrics, TokenUsage
-from quality_execution import score_response
-from quality_suite import load_questions, suite_hash
-from rigorous_cases import balanced_rubric
+from app.benchmarking.context_cases import FAMILIES, context_question
+from app.benchmarking.evaluators import extract_json
+from app.benchmarking.frontier_cases import UNICODE_REFERENCE, load_frontier_questions
+from app.benchmarking.interactive_tasks import Environment, make_tasks, run_interaction
+from app.benchmarking.models import Question, RequestMetrics, TokenUsage
+from app.benchmarking.quality_execution import score_response
+from app.benchmarking.quality_suite import load_questions, suite_hash
+from app.benchmarking.rigorous_cases import balanced_rubric
 from selftest_specialists import corruptions
-from test_loader import (
+from app.benchmarking.test_loader import (
     SuiteError,
     _parse_question,
     compute_test_suite_hash,

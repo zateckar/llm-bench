@@ -4,14 +4,12 @@ Regenerate tests/ceiling.yaml. Each family uses a fixed local seed; variants bel
 to ONE reporting cluster, not four independent measures of capability.
 """
 
-from collections import Counter, defaultdict
+from collections import defaultdict
 from fractions import Fraction
 import itertools
 import json
-from pathlib import Path
 import random
 
-import yaml
 
 SOURCES = {
     "reasoning": "BBEH: https://github.com/google-deepmind/bbeh (compositional reasoning design only)",
@@ -442,16 +440,8 @@ def build_cases():
         result.append(permutation_case(variant))
         result.append(allocation_case(variant))
         result.append(science_case(variant))
-    from hard_code_cases import code_cases
+    from app.benchmarking.hard_code_cases import code_cases
 
     result.extend(code_cases())
     return result
 
-
-if __name__ == "__main__":
-    cases = build_cases()
-    target = Path(__file__).parent / "tests" / "ceiling.yaml"
-    target.write_text(
-        yaml.safe_dump(cases, allow_unicode=True, sort_keys=False, width=100), encoding="utf-8"
-    )
-    print(f"Wrote {len(cases)} questions: {dict(Counter(c['category'] for c in cases))}")

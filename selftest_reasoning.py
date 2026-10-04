@@ -7,12 +7,12 @@ import json
 import sqlite3
 import unittest
 
-from evaluators import values_equal
-from models import Question, RequestMetrics, TokenUsage
-from quality_execution import score_response
-from quality_suite import fingerprint
-from reasoning_cases import load_reasoning_questions
-from rigorous_cases import balanced_rubric, load_new_questions
+from app.benchmarking.evaluators import values_equal
+from app.benchmarking.models import Question, RequestMetrics, TokenUsage
+from app.benchmarking.quality_execution import score_response
+from app.benchmarking.quality_suite import fingerprint
+from app.benchmarking.reasoning_cases import load_reasoning_questions
+from app.benchmarking.rigorous_cases import balanced_rubric, load_new_questions
 from selftest_specialists import corruptions
 from validate_suite import Report, check_json_match
 
@@ -196,7 +196,7 @@ class ReasoningTests(unittest.TestCase):
             self.assertEqual(len(set(contracts)), 1, family)
 
     def test_retrieval_record_order_and_dominated_rows_do_not_change_answer(self):
-        from reasoning_cases import resolve_records
+        from app.benchmarking.reasoning_cases import resolve_records
         for q in self.questions:
             if q.metadata["family"] != "Q9-revision-multihop":
                 continue
@@ -312,7 +312,7 @@ class ReasoningTests(unittest.TestCase):
                     self.assertEqual(q.expected["value"], answer, q.id)
 
     def test_complete_bank_json_keys_satisfy_evaluator_and_rubric(self):
-        from quality_suite import load_questions
+        from app.benchmarking.quality_suite import load_questions
         checked = 0
         for q in load_questions():
             if q.evaluator != "json_match" or q.interaction:

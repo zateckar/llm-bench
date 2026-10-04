@@ -16,9 +16,9 @@ from fastapi.testclient import TestClient
 from app import config as app_config
 from app.routes import admin, runs
 from app.services import benchmark_runner as runner
-from llm_client import ChatClient, ClientConfig
-from models import Question, RequestMetrics, TokenUsage
-from quality_suite import provenance
+from app.benchmarking.llm_client import ChatClient, ClientConfig
+from app.benchmarking.models import Question, RequestMetrics, TokenUsage
+from app.benchmarking.quality_suite import provenance
 
 ROOT = Path(__file__).parent
 
@@ -78,7 +78,7 @@ class RunnerTests(unittest.TestCase):
             patch.object(app_config, "DATABASE_PATH", self.path),
             patch("app.services.url_guard.validate_endpoint"),
             patch.object(runner, "load_questions", return_value=self.questions),
-            patch("llm_client.ChatClient", FakeClient),
+            patch("app.benchmarking.llm_client.ChatClient", FakeClient),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -242,8 +242,8 @@ class RunnerTests(unittest.TestCase):
                 try:
                     with (
                         patch.object(client.session, "post", side_effect=post) as requests,
-                        patch("llm_client.time.perf_counter", side_effect=lambda: elapsed[0]),
-                        patch("llm_client.time.sleep", side_effect=sleep),
+                        patch("app.benchmarking.llm_client.time.perf_counter", side_effect=lambda: elapsed[0]),
+                        patch("app.benchmarking.llm_client.time.sleep", side_effect=sleep),
                     ):
                         _, tokens, metrics = client.complete("test")
                     self.assertFalse(metrics.ok)

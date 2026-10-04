@@ -9,9 +9,9 @@ import copy
 from dataclasses import replace
 import json
 
-from models import CriterionResult, EvaluationResult, Question, RequestMetrics, Result, TokenUsage
-from evaluators import EVALUATOR_VERSIONS, extract_json, strip_think_blocks
-from llm_client import REPETITION_FINISH_REASON
+from app.benchmarking.models import CriterionResult, EvaluationResult, Question, RequestMetrics, Result, TokenUsage
+from app.benchmarking.evaluators import EVALUATOR_VERSIONS, extract_json, strip_think_blocks
+from app.benchmarking.llm_client import REPETITION_FINISH_REASON
 
 PROTOCOL = """You are operating an isolated simulated environment. Respond each turn with
 exactly one JSON object {"tool":"name","args":{...}}, or {"done":true} when finished.
@@ -30,7 +30,7 @@ TOTAL_OUTPUT_BUDGET = 262144
 
 
 def make_tasks(seed, variant):
-    from quality_suite import MAX_OUTPUT_TOKENS, REVISION, rng_for
+    from app.benchmarking.quality_suite import MAX_OUTPUT_TOKENS, REVISION, rng_for
 
     split = "evaluation"
     tasks = []

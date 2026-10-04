@@ -5,9 +5,9 @@ import itertools
 import json
 import unittest
 
-from compositional_cases import load_compositional_questions
-from models import RequestMetrics, TokenUsage
-from quality_execution import score_response
+from app.benchmarking.compositional_cases import load_compositional_questions
+from app.benchmarking.models import RequestMetrics, TokenUsage
+from app.benchmarking.quality_execution import score_response
 from selftest_specialists import corruptions
 
 

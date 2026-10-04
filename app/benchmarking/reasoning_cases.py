@@ -14,8 +14,8 @@ import random
 
 
 def task(family, category, variant, split, prompt, data, answer, *, seed=None, atomic_paths=()):
-    from evaluators import _json_leaf_paths, json_at_path
-    from rigorous_cases import balanced_rubric, structured
+    from app.benchmarking.evaluators import _json_leaf_paths, json_at_path
+    from app.benchmarking.rigorous_cases import balanced_rubric, structured
 
     q = structured(family, category, variant, split,
                    prompt + "\nINPUT=" + json.dumps(data, sort_keys=True), answer)

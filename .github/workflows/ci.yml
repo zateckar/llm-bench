@@ -70,7 +70,9 @@ jobs:
         run: uv run python selftest_benchmark_runner.py
 
       - name: Verify fixed performance measurements
-        run: uv run python selftest_perf.py
+        run: |
+          uv run python selftest_perf.py
+          uv run python selftest_telemetry.py
 
       - name: Verify independent v10 oracles and review regressions
         run: uv run python selftest_frontier.py

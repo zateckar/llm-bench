@@ -9,15 +9,15 @@ import json
 import unittest
 from unittest.mock import patch
 
-from adversarial_cases import load_adversarial_questions
-from llm_client import ClientConfig
-from models import Question, RequestMetrics, TokenUsage
-from quality_execution import score_response
-from quality_report import make_report, paired_comparison
-from quality_suite import load_questions
-from rigorous_cases import schema
+from app.benchmarking.adversarial_cases import load_adversarial_questions
+from app.benchmarking.llm_client import ClientConfig
+from app.benchmarking.models import Question, RequestMetrics, TokenUsage
+from app.benchmarking.quality_execution import score_response
+from app.benchmarking.quality_report import make_report, paired_comparison
+from app.benchmarking.quality_suite import load_questions
+from app.benchmarking.rigorous_cases import schema
 from selftest_specialists import corruptions
-from test_loader import SuiteError, _parse_question
+from app.benchmarking.test_loader import SuiteError, _parse_question
 from validate_suite import Report, check_json_match
 
 
@@ -274,7 +274,7 @@ class DiagnosticValidationTests(unittest.TestCase):
 
     def test_nonfinite_or_out_of_range_scores_are_unscored(self):
         for value in (float("nan"), float("inf"), -0.1, 1.1):
-            with patch.dict("quality_execution.EVALUATORS", json_match=lambda *a, **k: (value, "ok")):
+            with patch.dict("app.benchmarking.quality_execution.EVALUATORS", json_match=lambda *a, **k: (value, "ok")):
                 result = score(self.q, '{"a":1}')
             self.assertEqual(result.outcome, "evaluator_error")
             self.assertFalse(result.is_scored)
@@ -287,7 +287,7 @@ class DiagnosticValidationTests(unittest.TestCase):
             def evaluator(*args, _diagnostics, **kwargs):
                 _diagnostics["criteria"] = criteria
                 return 1, "ok"
-            with patch.dict("quality_execution.EVALUATORS", json_match=evaluator):
+            with patch.dict("app.benchmarking.quality_execution.EVALUATORS", json_match=evaluator):
                 result = score(self.q, '{"a":1}')
             self.assertEqual(result.outcome, "evaluator_error", criteria)
             self.assertFalse(result.is_scored)
@@ -296,12 +296,12 @@ class DiagnosticValidationTests(unittest.TestCase):
         def evaluator(*args, _diagnostics, **kwargs):
             _diagnostics["contract_score"] = float("nan")
             return 1, "ok"
-        with patch.dict("quality_execution.EVALUATORS", json_match=evaluator):
+        with patch.dict("app.benchmarking.quality_execution.EVALUATORS", json_match=evaluator):
             result = score(self.q, '{"a":1}')
         self.assertEqual(result.outcome, "evaluator_error")
 
     def test_invalid_evaluator_detail_is_an_evaluator_error(self):
-        with patch.dict("quality_execution.EVALUATORS", json_match=lambda *a, **k: (1, None)):
+        with patch.dict("app.benchmarking.quality_execution.EVALUATORS", json_match=lambda *a, **k: (1, None)):
             result = score(self.q, '{"a":1}')
         self.assertEqual(result.outcome, "evaluator_error")
         self.assertFalse(result.is_scored)

@@ -8,10 +8,10 @@ import json
 import sqlite3
 import unittest
 
-from evidence_cases import load_evidence_questions
-from evaluators import values_equal, json_at_path
-from models import Question, RequestMetrics, TokenUsage
-from quality_execution import score_response
+from app.benchmarking.evidence_cases import load_evidence_questions
+from app.benchmarking.evaluators import values_equal, json_at_path
+from app.benchmarking.models import Question, RequestMetrics, TokenUsage
+from app.benchmarking.quality_execution import score_response
 from selftest_specialists import corruptions
 
 
@@ -331,9 +331,9 @@ class EvidenceTests(unittest.TestCase):
         print(f"Rejected {rejected} numerically equal float substitutions")
 
     def test_transformed_code_fixtures_reject_small_range_shortcuts(self):
-        from challenge_oracles import CODE
-        from quality_suite import load_questions
-        from test_loader import load_all_tests
+        from app.benchmarking.challenge_oracles import CODE
+        from app.benchmarking.quality_suite import load_questions
+        from app.benchmarking.test_loader import load_all_tests
         from pathlib import Path
         static = {q.id: q for q in load_all_tests(Path(__file__).parent / "tests")}
         active = {q.id: q for q in load_questions()}

@@ -14,7 +14,7 @@ from markupsafe import Markup, escape
 
 from app.database import fetch_all, fetch_one
 from app.templates_config import templates
-from quality_report import paired_comparison
+from app.benchmarking.quality_report import paired_comparison
 
 COLORS = ("#3b82f6", "#14b8a6", "#e99b16", "#e879ad", "#9b87f5", "#ef744d")
 
@@ -117,6 +117,7 @@ async def load_run(run_id):
         )
         metadata = object_json(result.get("quality_metadata_json"))
         result["evaluation"] = metadata.get("evaluation")
+        result["attempt_diagnostics"] = metadata.get("metrics", {}).get("attempt_diagnostics", [])
         result["outcome"] = metadata.get("outcome") or (
             "excluded" if not result["scored"] else "pass" if result["passed"] else "task_failure"
         )
@@ -199,7 +200,9 @@ def line_chart(series, title, x_label, unit):
         return None
     xs = sorted({x for x, _ in valid})
     xmin, xmax = min(xs), max(xs)
-    ymax = max(1, max(y for _, y in valid)) * 1.1
+    ymax = max(.01 if unit in {"%", "req/s"} else 1, max(y for _, y in valid)) * 1.1
+    if unit == "%":
+        ymax = min(1, ymax)
     width, height = 700, 300
     left, top, pw, ph = 78, 25, 595, 210
 
@@ -211,13 +214,14 @@ def line_chart(series, title, x_label, unit):
 
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img" aria-label="{escape(title)}">',
-        f'<title>{escape(title)}</title><g font-family="system-ui,sans-serif" font-size="12" fill="currentColor">',
+        f'<title>{escape(title)}</title><g font-family="system-ui,sans-serif" font-size="16" fill="currentColor">',
     ]
     for i in range(5):
         value = ymax * i / 4
         y = cy(value)
         parts.append(f'<path d="M{left} {y:g}H{left + pw}" stroke="currentColor" opacity=".12"/>')
-        label = f"{value / 1000:.1f}k" if value >= 1000 else f"{value:.1f}"
+        label = (f"{value * 100:.1f}%" if unit == "%" else
+                 f"{value / 1000:.1f}k" if value >= 1000 else f"{value:.1f}")
         parts.append(svg_text(left - 12, y + 4, label, 'text-anchor="end"'))
     ticks = xs if len(xs) <= 7 else [xs[round(i * (len(xs) - 1) / 6)] for i in range(7)]
     for x in ticks:
@@ -286,8 +290,11 @@ def performance_view(runs):
     charts = []
     for key, title, unit in [
         ("output_tokens_per_sec", "Delivered output under load", "tok/s"),
+        ("requests_per_sec", "Successful requests under load", "req/s"),
         ("latency.p95_ms", "Completed-request latency · p95", "ms"),
         ("ttft.p95_ms", "First delivered token · p95", "ms"),
+        ("error_rate", "Request failure rate", "%"),
+        ("output_token_time.p50_ms", "Mean output token time proxy · p50", "ms/token"),
     ]:
         series = [
             {
@@ -338,17 +345,85 @@ def performance_view(runs):
                             ("failure_latency.p95_ms", "ms"),
                             ("estimated_token_requests", "int"),
                             ("burst_delivery_requests", "int"),
+                            ("latency.p99_ms", "ms"),
+                            ("ttft.p99_ms", "ms"),
+                            ("error_rate", "%"),
+                            ("output_length.mean", "tokens"),
+                            ("output_token_time.p50_ms", "ms/token"),
+                            ("chunk_gap.p95_ms", "ms"),
                         ]
                     ],
                 }
             )
+    distributions = []
+    for key, title, unit in [
+        ("latency_ms", "Completed-request latency distribution", "ms"),
+        ("ttft_ms", "First-delivery latency distribution", "ms"),
+        ("completion_tokens", "Delivered output length distribution", "tokens"),
+    ]:
+        series = []
+        for i, r in enumerate(current):
+            for p in points(r["perf"], "concurrency"):
+                values = sorted(number(s.get(key)) for s in points(p, "samples")
+                                if s.get("ok") and number(s.get(key)) is not None)
+                if values:
+                    series.append({"label": f"{r['label']} · c={p['concurrency']}",
+                                   "color": COLORS[len(series) % len(COLORS)],
+                                   "points": [(100 * (j + 1) / len(values), v)
+                                              for j, v in enumerate(values)]})
+        svg = line_chart(series, title, "Observed percentile (successful requests)", unit)
+        if svg:
+            distributions.append({"title": title, "svg": svg, "series": series})
+    revisions = {at(r["perf"], "protocol.revision") for r in current if r["perf"]}
+    if len(revisions) > 1:
+        notes.append("These runs use different performance revisions; compare protocols before interpreting differences.")
+    request_views = [request_performance_view(r) for r in runs if r.get("results")]
     return {
         "suite_rows": suite_rows,
         "charts": charts,
+        "distributions": distributions,
+        "request_views": request_views,
         "load_rows": load_rows,
         "notes": notes,
         "labels": [r["label"] for r in current],
     }
+
+
+def request_performance_view(run):
+    """Historical request timings remain separate from the controlled load suite."""
+    from app.benchmarking.models import LatencyStats
+
+    results = run.get("results", [])
+    good = [r for r in results if r.get("request_ok")]
+    failed = [r for r in results if not r.get("request_ok")]
+    latency = LatencyStats.from_samples([number(r.get("latency_ms")) for r in good])
+    ttft = LatencyStats.from_samples([number(r.get("ttft_ms")) for r in good])
+    categories = defaultdict(list)
+    for r in results:
+        categories[r["category"]].append(r)
+    rows = []
+    for category, items in sorted(categories.items()):
+        successful = [r for r in items if r.get("request_ok")]
+        stats = LatencyStats.from_samples([number(r.get("latency_ms")) for r in successful])
+        errors = sum(not r.get("request_ok") for r in items)
+        deadlines = sum("stream deadline exceeded" in (r.get("detail") or "") for r in items)
+        rows.append({"category": category, "requests": len(items), "errors": errors,
+                     "deadlines": deadlines, "p50": fmt(stats.p50, "ms"), "p95": fmt(stats.p95, "ms")})
+    series = []
+    for label, items, key, color in [
+        ("Successful latency", good, "latency_ms", COLORS[0]),
+        ("Failed latency", failed, "latency_ms", COLORS[2]),
+        ("First delivery", good, "ttft_ms", COLORS[1]),
+    ]:
+        values = sorted(number(r.get(key)) for r in items if number(r.get(key)) is not None)
+        if values:
+            series.append({"label": label, "color": color,
+                           "points": [(100 * (i + 1) / len(values), v) for i, v in enumerate(values)]})
+    chart = line_chart(series, "Quality request timing distribution", "Observed percentile", "ms")
+    return {"label": run["label"], "rows": rows, "chart": chart, "series": series,
+            "count": len(results), "success_rate": fmt(len(good) / len(results) if results else None, "%"),
+            "latency_p50": fmt(latency.p50, "ms"), "latency_p95": fmt(latency.p95, "ms"),
+            "ttft_p50": fmt(ttft.p50, "ms"), "deadline_count": sum(r["deadlines"] for r in rows)}
 
 
 def render_report(runs):
@@ -357,7 +432,7 @@ def render_report(runs):
     # Never silently substitute a legacy average for balanced capability.
     for title, getter, unit in [
         ("Strict task success", lambda r: at(r, "quality.summary.category_balanced"), "%"),
-        ("Peak aggregate output", lambda r: at(r, "perf.peak_output_tokens_per_sec"), "tok/s"),
+        ("Peak aggregate output", lambda r: at(r, "app.benchmarking.perf.peak_output_tokens_per_sec"), "tok/s"),
     ]:
         svg = bar_chart(runs, getter, title, unit)
         if svg:

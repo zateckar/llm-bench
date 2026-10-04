@@ -3,7 +3,7 @@
 import json
 import random
 
-from hard_cases import SOURCES, ledger
+from app.benchmarking.hard_cases import SOURCES, ledger
 
 
 CODE = {

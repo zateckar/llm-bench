@@ -1,14 +1,15 @@
 """Fixed performance protocol and streaming accounting; no network calls."""
 
 import json
+from dataclasses import replace
 import threading
 import time
 import unittest
 from unittest.mock import Mock, patch
 import tiktoken
-import perf
-from llm_client import ChatClient, ClientConfig
-from models import ConcurrencyPoint, LatencyStats, RequestMetrics, TokenUsage
+from app.benchmarking import perf
+from app.benchmarking.llm_client import ChatClient, ClientConfig
+from app.benchmarking.models import ConcurrencyPoint, LatencyStats, RequestMetrics, TokenUsage
 
 CONFIG = ClientConfig("http://fake.invalid", "unused", "fake")
 
@@ -62,8 +63,9 @@ class PerfTests(unittest.TestCase):
     def test_reused_warm_sessions_and_single_attempt_measurements(self):
         progress = Mock()
         with patch.object(perf, "ChatClient", FakeClient):
-            report = perf.run_perf_suite(CONFIG, perf.PerfConfig(3), progress)
+            report = perf.run_perf_suite(replace(CONFIG, stream_deadline=1800), perf.PerfConfig(3), progress)
         self.assertEqual(len(FakeClient.instances), 3)
+        self.assertTrue(all(c.config.stream_deadline_seconds == 360 for c in FakeClient.instances))
         self.assertEqual([p.requests for p in report.concurrency], [24, 24, 24])
         self.assertEqual([p.errors for p in report.concurrency], [0, 0, 0])
         self.assertEqual(sum(len(c.calls) for c in FakeClient.instances), 76)

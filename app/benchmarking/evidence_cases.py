@@ -9,8 +9,8 @@ import itertools
 import json
 import random
 
-from evaluators import _json_leaf_paths, json_at_path
-from rigorous_cases import structured
+from app.benchmarking.evaluators import _json_leaf_paths, json_at_path
+from app.benchmarking.rigorous_cases import structured
 
 
 def _task(family, category, seed, variant, prompt, data, answer):

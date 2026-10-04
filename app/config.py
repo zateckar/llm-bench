@@ -4,9 +4,11 @@ import os
 import secrets
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env", override=False)
 DATA_DIR = BASE_DIR / "data"
 TESTS_DIR = BASE_DIR / "tests"
 

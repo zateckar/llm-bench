@@ -16,9 +16,9 @@ from fastapi.testclient import TestClient
 from app import config as app_config
 from app.routes import compare, runs
 from app.services import html_reports as reports
-from llm_client import ClientConfig
-from models import Question, RequestMetrics, Result, TokenUsage
-from quality_report import make_report
+from app.benchmarking.llm_client import ClientConfig
+from app.benchmarking.models import Question, RequestMetrics, Result, TokenUsage
+from app.benchmarking.quality_report import make_report
 
 ROOT = Path(__file__).parent
 
@@ -224,8 +224,18 @@ class ReportTests(unittest.TestCase):
             self.assertNotIn("private.invalid", response.text)
         self.assertIn("identical capability questions scored by both", response.text)
 
+    def test_performance_json_auth_missing_and_secret_exclusion(self):
+        response = self.client.get("/runs/1/performance.json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["schema_version"], 3)
+        self.assertNotIn("DO_NOT_EXPORT_API_KEY", response.text)
+        self.assertIn("run-1.performance.json", response.headers["content-disposition"])
+        self.assertEqual(self.client.get("/runs/3/performance.json").status_code, 404)
+        with patch.object(runs, "get_current_user", AsyncMock(return_value=None)):
+            self.assertEqual(self.client.get("/runs/1/performance.json", follow_redirects=False).status_code, 302)
+
     def test_challenge_cohort_and_interactive_turns_render_safely(self):
-        from quality_suite import load_questions
+        from app.benchmarking.quality_suite import load_questions
 
         questions = [q for q in load_questions() if q.id in {"H5-CL-worlds-01", "S6-policy-01"}]
         quality = make_report(

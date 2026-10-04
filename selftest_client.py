@@ -7,10 +7,10 @@ import threading
 import unittest
 from unittest.mock import Mock, patch
 
-from llm_client import ChatClient, ClientConfig, _parse_usage, _sse_payloads
-from models import RequestMetrics, TokenUsage
-from quality_execution import run_quality
-from models import Question
+from app.benchmarking.llm_client import ChatClient, ClientConfig, _parse_usage, _sse_payloads
+from app.benchmarking.models import RequestMetrics, TokenUsage
+from app.benchmarking.quality_execution import run_quality
+from app.benchmarking.models import Question
 
 
 CONFIG = ClientConfig("http://fake.invalid/v1", "unused", "fake", max_retries=1)
@@ -252,8 +252,8 @@ class ClientTests(unittest.TestCase):
             clock[0] += seconds
         try:
             with (patch.object(client.session, "post", side_effect=post),
-                  patch("llm_client.time.perf_counter", side_effect=lambda: clock[0]),
-                  patch("llm_client.time.sleep", side_effect=sleep)):
+                  patch("app.benchmarking.llm_client.time.perf_counter", side_effect=lambda: clock[0]),
+                  patch("app.benchmarking.llm_client.time.sleep", side_effect=sleep)):
                 _, _, metrics = client.complete("input")
             self.assertTrue(metrics.ok)
             self.assertEqual(metrics.attempts, 2)
@@ -282,7 +282,7 @@ class ClientTests(unittest.TestCase):
 
     def test_deadline_applies_to_sse_heartbeats(self):
         response = Response(raw=[b": heartbeat"])
-        with patch("llm_client.time.perf_counter", return_value=5):
+        with patch("app.benchmarking.llm_client.time.perf_counter", return_value=5):
             with self.assertRaisesRegex(Exception, "deadline"):
                 list(_sse_payloads(response, 0, 1))
 
@@ -295,7 +295,7 @@ class ClientTests(unittest.TestCase):
             def complete(self, *args, **kwargs):
                 return "ok", TokenUsage(), RequestMetrics()
         q = Question("q", "Test", "return ok", "exact_match", "ok")
-        with patch("llm_client.ChatClient", Client):
+        with patch("app.benchmarking.llm_client.ChatClient", Client):
             results, _, _ = run_quality([q], replace(CONFIG, detect_repetition=True))
         self.assertTrue(results[0].passed)
         self.assertFalse(clients[0].config.detect_repetition)
@@ -325,14 +325,14 @@ class ClientTests(unittest.TestCase):
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
         client = ChatClient(replace(CONFIG, base_url=f"http://127.0.0.1:{server.server_port}", timeout=3))
-        from llm_client import _sse_payloads as original
+        from app.benchmarking.llm_client import _sse_payloads as original
         def observe(*args):
             for payload in original(*args):
                 dispatched.set()
                 yield payload
         result = []
         try:
-            with patch("llm_client._sse_payloads", side_effect=observe):
+            with patch("app.benchmarking.llm_client._sse_payloads", side_effect=observe):
                 worker = threading.Thread(target=lambda: result.append(client.complete("input")))
                 worker.start()
                 self.assertTrue(dispatched.wait(2), "First SSE event waited for body completion")

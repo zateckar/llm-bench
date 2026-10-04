@@ -6,8 +6,8 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 
 from app.database import fetch_all, get_db
-from perf import DEFAULT_MAX_CONCURRENCY, MAX_CONCURRENCY, PerfConfig
-from quality_suite import QUALITY_WORKERS, load_questions, provenance
+from app.benchmarking.perf import DEFAULT_MAX_CONCURRENCY, MAX_CONCURRENCY, PerfConfig
+from app.benchmarking.quality_suite import QUALITY_WORKERS, load_questions, provenance
 
 
 def make_run_options(*, mode="both", max_concurrency=DEFAULT_MAX_CONCURRENCY):

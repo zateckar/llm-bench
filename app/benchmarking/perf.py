@@ -11,10 +11,10 @@ import threading
 import time
 import uuid
 
-from llm_client import ChatClient, client_protocol
-from models import ConcurrencyPoint, LatencyStats, PerfReport, RequestMetrics
+from app.benchmarking.llm_client import ChatClient, client_protocol
+from app.benchmarking.models import ConcurrencyPoint, LatencyStats, PerfReport, RequestMetrics
 
-REVISION = "performance-v5"
+REVISION = "performance-v6"
 DEFAULT_MAX_CONCURRENCY = 8
 MAX_CONCURRENCY = 32
 MIN_SAMPLES = 24
@@ -119,10 +119,21 @@ def _measure_level(clients, level, prompts, cancelled):
         streamed_requests=sum(m.streamed for m in good),
         burst_delivery_requests=sum(m.burst_delivery for m in good),
         cached_tokens=sum(m.cached_tokens for m in good),
+        output_token_time=LatencyStats.from_samples([m.output_token_time_ms for m in good]),
+        chunk_gap=LatencyStats.from_samples([gap for m in good for gap in m.chunk_gaps_ms]),
+        output_length=LatencyStats.from_samples([m.completion_tokens for m in good]),
+        samples=[{
+            "ok": m.ok, "latency_ms": m.latency_ms, "ttft_ms": m.ttft_ms,
+            "completion_tokens": m.completion_tokens,
+            "output_token_time_ms": m.output_token_time_ms,
+            "estimated_tokens": m.completion_tokens_estimated,
+            "burst_delivery": m.burst_delivery, "error": m.error,
+        } for m in samples],
     )
 
 
 def run_perf_suite(client_config, config=None, progress=None, cancelled=None):
+    client_config = replace(client_config, stream_deadline=None)
     config = config or PerfConfig()
     cancelled = cancelled or (lambda: False)
     report = PerfReport(
@@ -140,6 +151,9 @@ def run_perf_suite(client_config, config=None, progress=None, cancelled=None):
             "temperature": 0,
             "model_seed": 0,
             "attempts_per_request": 1,
+            "output_token_time_definition": "first-to-last delivery span / (reported completion tokens - 1); excludes estimated counts and bursts",
+            "chunk_gap_definition": "interval between content/reasoning SSE chunks; not individual token latency",
+            "sample_scope": "timed requests only, including errors; successful requests for distribution percentiles",
         },
     )
     nonce = uuid.uuid4().hex
@@ -232,32 +246,3 @@ def run_perf_suite(client_config, config=None, progress=None, cancelled=None):
             client.session.close()
 
 
-def format_perf_markdown(report):
-    lines = [
-        "## Performance",
-        "",
-        "Fixed workload; client-observed latency and throughput. No measured-call retries.",
-        "",
-        "| Concurrency | Requests | Errors | Latency p50 / p95 ms | TTFT p50 / p95 ms | Output tok/s | Successful req/s | Estimated token counts |",
-        "|---:|---:|---:|---:|---:|---:|---:|---:|",
-    ]
-
-    def n(value):
-        return "n/a" if value is None else f"{value:.1f}"
-
-    for p in report.concurrency:
-        lines.append(
-            f"| {p.concurrency} | {p.requests} | {p.errors} | {n(p.latency.p50)} / {n(p.latency.p95)} | "
-            f"{n(p.ttft.p50)} / {n(p.ttft.p95)} | {n(p.output_tokens_per_sec)} | {n(p.requests_per_sec)} | {p.estimated_token_requests} |"
-        )
-    lines += [
-        "",
-        "Throughput includes the full measured wall time, including failed requests, ramp-up and drain. "
-        "This bounded-concurrency workload does not establish arrival-rate capacity. Tail percentiles are sample estimates.",
-    ]
-    lines += ["", *report.notes]
-    return "\n".join(lines)
-
-
-def format_perf_console(report):
-    return format_perf_markdown(report)

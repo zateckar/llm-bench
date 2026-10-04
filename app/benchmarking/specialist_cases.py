@@ -5,12 +5,10 @@ Legal rules and market inputs are bounded exercise assumptions, not live advice.
 """
 
 from fractions import Fraction
-from pathlib import Path
 
-import yaml
 
-from review_cases import review_cases
-from translation_cases import translation_cases
+from app.benchmarking.review_cases import review_cases
+from app.benchmarking.translation_cases import translation_cases
 
 
 def make_case(id, category, prompt, answer, rationale, source="Original synthetic exercise"):
@@ -389,11 +387,3 @@ other_fleet_controller_effect_identified:bool}.
     cases.extend(review_cases(make_case))
     return cases
 
-
-if __name__ == "__main__":
-    target = Path(__file__).parent / "tests" / "specialists.yaml"
-    target.write_text(
-        yaml.safe_dump(build_cases(), allow_unicode=True, sort_keys=False, width=100),
-        encoding="utf-8",
-    )
-    print(f"Wrote {len(build_cases())} questions to {target}")

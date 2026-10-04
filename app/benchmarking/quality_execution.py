@@ -1,10 +1,10 @@
-"""Shared quality execution and failure attribution for CLI and web."""
+"""Application quality execution and failure attribution."""
 
 import math
 
-from evaluators import EVALUATOR_VERSIONS, EVALUATORS, extract_json, strip_think_blocks
-from llm_client import REPETITION_FINISH_REASON
-from models import CriterionResult, EvaluationResult, Result
+from app.benchmarking.evaluators import EVALUATOR_VERSIONS, EVALUATORS, extract_json, strip_think_blocks
+from app.benchmarking.llm_client import REPETITION_FINISH_REASON
+from app.benchmarking.models import CriterionResult, EvaluationResult, Result
 
 
 def _evaluation_for(
@@ -285,7 +285,7 @@ def score_response(q, response, tokens, metrics, cached=False):
 
 def execute_question(q, client, cancelled=lambda: False):
     if q.interaction:
-        from interactive_tasks import run_interaction
+        from app.benchmarking.interactive_tasks import run_interaction
 
         return run_interaction(q, client, cancelled)
     response, tokens, metrics = client.complete(q.prompt, q.system_prompt, max_tokens=q.max_tokens)
@@ -293,14 +293,14 @@ def execute_question(q, client, cancelled=lambda: False):
 
 
 def run_quality(questions, client_config, max_concurrency=8, on_result=None, cancelled=None):
-    """Shared CLI/web execution; every planned question retains an outcome."""
+    """Every planned question retains an outcome."""
     from concurrent.futures import ThreadPoolExecutor
     from dataclasses import replace
     import threading
     import time
-    from llm_client import ChatClient
-    from models import RequestMetrics
-    from quality_suite import QUALITY_WORKERS
+    from app.benchmarking.llm_client import ChatClient
+    from app.benchmarking.models import RequestMetrics
+    from app.benchmarking.quality_suite import QUALITY_WORKERS
 
     cancelled = cancelled or (lambda: False)
     workers = min(QUALITY_WORKERS, max_concurrency)

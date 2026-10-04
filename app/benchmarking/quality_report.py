@@ -5,10 +5,10 @@ from dataclasses import asdict, replace
 import random
 import statistics
 
-from models import EVALUATION_SCHEMA_VERSION, percentile
-from evaluators import EVALUATOR_VERSIONS
-from llm_client import client_protocol
-from quality_suite import (
+from app.benchmarking.models import EVALUATION_SCHEMA_VERSION, percentile
+from app.benchmarking.evaluators import EVALUATOR_VERSIONS
+from app.benchmarking.llm_client import client_protocol
+from app.benchmarking.quality_suite import (
     REVISION,
     MAX_OUTPUT_TOKENS,
     QUALITY_WORKERS,
@@ -240,42 +240,3 @@ def paired_comparison(left, right):
     }
 
 
-def markdown(report):
-    s = report["summary"]
-
-    def pct(value):
-        return "n/a" if value is None else f"{value * 100:.1f}%"
-
-    lines = [
-        "## Quality",
-        "",
-        f"Suite: {REVISION} · {report['suite_hash']}",
-        "",
-        f"- Balanced strict success: **{pct(s['category_balanced'])}**",
-        f"- Capability criterion achievement: {pct(s['category_balanced_criterion_achievement'])}; coverage {pct(s['capability_criterion_coverage'])}.",
-        f"- Formal writing compliance: {pct(s['compliance_score'])}; artistic quality is not measured.",
-        f"- Scored: {s['scored']}/{s['count']}; full passes: {s['passes']}.",
-        "- Outcomes: " + ", ".join(f"{k}: {v}" for k, v in s["outcomes"].items()),
-        "",
-        s["confidence_method"],
-    ]
-    if s["excluded_capability_count"]:
-        lo, hi = s["missing_outcome_score_bounds"]
-        lines += [
-            f"Excluded capability outcomes: {s['excluded_capability_count']}/{s['planned_capability_count']}. Zero-to-one sensitivity: {pct(lo)}–{pct(hi)}; not a confidence interval."
-        ]
-    lines += ["", "| Category | Strict passes | Balanced strict success |", "|---|---:|---:|"]
-    lines += [
-        f"| {name} | {c['passes']}/{c['count']} | {pct(c['score'])} |"
-        for name, c in s["categories"].items()
-    ]
-    if s["context_quality"]:
-        lines += [
-            "",
-            "Long-context accuracy uses fixed 8k and 32k cl100k_base reference prompts; provider tokenizers can differ.",
-        ]
-        lines += [
-            f"{c['reference_tokens']:,}: accuracy {pct(c['accuracy'])}, {c['unsupported']} unsupported."
-            for c in s["context_quality"]
-        ]
-    return "\n".join(lines)

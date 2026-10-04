@@ -1061,7 +1061,7 @@ def eval_code_exec(response: str, expected: Any, **kwargs) -> tuple[float, str]:
     Values are compared structurally (see ``values_equal``) so an int/float or
     tuple/list difference is not counted as a wrong answer.
     """
-    from code_runner import run_code_tests
+    from app.benchmarking.code_runner import run_code_tests
 
     if isinstance(expected, dict):
         fixtures = list(expected.get("tests") or [])

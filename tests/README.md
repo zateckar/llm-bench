@@ -1,6 +1,6 @@
 # Fixed rigorous question suite
 
-The canonical run bank is assembled by [quality_suite.py](../quality_suite.py). Every quality run uses the same 315 questions; the test browser displays that complete bank.
+The canonical run bank is assembled by [quality_suite.py](../app/benchmarking/quality_suite.py). Every quality run uses the same 315 questions; the test browser displays that complete bank.
 
 | Component | Count |
 |---|---:|

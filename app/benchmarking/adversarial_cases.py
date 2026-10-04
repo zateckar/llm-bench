@@ -4,7 +4,7 @@ from functools import lru_cache
 import itertools
 import json
 
-from rigorous_cases import schema, structured
+from app.benchmarking.rigorous_cases import schema, structured
 
 
 def task(family, category, seed, variant, prompt, answer, data, *, contract=None):
@@ -291,5 +291,5 @@ BUILDERS = (adaptive_decisions, network_failures, transaction_history, grounded_
 
 
 def load_adversarial_questions(seed, variant):
-    from quality_suite import rng_for
+    from app.benchmarking.quality_suite import rng_for
     return [builder(rng_for(seed, variant, builder.__name__), seed, variant) for builder in BUILDERS]

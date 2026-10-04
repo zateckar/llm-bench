@@ -9,14 +9,14 @@ import json
 from pathlib import Path
 import unittest
 
-from evaluators import eval_format_check, eval_json_match
-from models import Result
-from quality_report import make_report, markdown, result_record, summarize
-from llm_client import ClientConfig
-from quality_suite import REVISION, load_questions
+from app.benchmarking.evaluators import eval_format_check, eval_json_match
+from app.benchmarking.models import Result
+from app.benchmarking.quality_report import make_report, result_record, summarize
+from app.benchmarking.llm_client import ClientConfig
+from app.benchmarking.quality_suite import REVISION, load_questions
 from selftest_specialists import corruptions
-import stretch_cases as author
-from test_loader import _parse_question, load_all_tests
+from app.benchmarking import stretch_cases as author
+from app.benchmarking.test_loader import _parse_question, load_all_tests
 from validate_suite import Report, check_format_check
 
 
@@ -457,7 +457,7 @@ class StretchTests(unittest.TestCase):
             [Result(q, "{}", 1, "test") for q in new],
             ClientConfig("https://fake.invalid", "unused", "fake"),
         )
-        self.assertIn("Balanced strict success: **100.0%**", markdown(report))
+        self.assertEqual(report["summary"]["category_balanced"], 1)
 
 
 if __name__ == "__main__":

@@ -8,11 +8,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_client import ClientConfig
-from models import Question, RequestMetrics, TokenUsage
-from quality_execution import score_response
-from quality_report import make_report, paired_comparison, result_record
-from test_loader import SuiteError, load_yaml_tests
+from app.benchmarking.llm_client import ClientConfig
+from app.benchmarking.models import Question, RequestMetrics, TokenUsage
+from app.benchmarking.quality_execution import score_response
+from app.benchmarking.quality_report import make_report, paired_comparison, result_record
+from app.benchmarking.test_loader import SuiteError, load_yaml_tests
 
 
 def score(question: Question, response: str):
@@ -26,7 +26,7 @@ def score(question: Question, response: str):
 
 class GranularEvaluationTests(unittest.TestCase):
     def test_reasoning_envelopes_do_not_rewrite_answer_data(self):
-        from evaluators import strip_think_blocks
+        from app.benchmarking.evaluators import strip_think_blocks
         self.assertEqual(strip_think_blocks('<think>unfinished answer: 42'), '')
         self.assertEqual(strip_think_blocks('<think>x</think><reasoning>y</reasoning>42'), '42')
         for literal in ('<think>secret</think>', '</think>', '<think>unfinished'):
@@ -50,7 +50,7 @@ class GranularEvaluationTests(unittest.TestCase):
         self.assertEqual(result.outcome, 'formatting')
 
     def test_unordered_tolerance_finds_a_complete_matching(self):
-        from evaluators import values_equal
+        from app.benchmarking.evaluators import values_equal
         # 1.5 can match either target; 1.0 can only match 1.0.
         for got in ([1.5, 1.0], [1.0, 1.5]):
             for want in ([1.0, 2.0], [2.0, 1.0]):
@@ -77,10 +77,10 @@ class GranularEvaluationTests(unittest.TestCase):
             result = score(q, code)
             self.assertTrue(result.is_scored)
             self.assertFalse(result.passed)
-        with patch('code_runner.subprocess.run', return_value=SimpleNamespace(
+        with patch('app.benchmarking.code_runner.subprocess.run', return_value=SimpleNamespace(
                 returncode=1, stdout=forged, stderr='child failed')):
             self.assertFalse(score(q, 'def f():\n    return 1').passed)
-        with patch('code_runner.subprocess.run', side_effect=OSError('cannot launch interpreter')):
+        with patch('app.benchmarking.code_runner.subprocess.run', side_effect=OSError('cannot launch interpreter')):
             result = score(q, 'def f():\n    return 1')
             self.assertEqual(result.outcome, 'evaluator_error')
             self.assertFalse(result.is_scored)
@@ -104,8 +104,8 @@ class GranularEvaluationTests(unittest.TestCase):
         self.assertFalse(score(q, 'def f(x): return x - 1').passed)
 
     def test_revised_writing_constraints_reject_near_misses(self):
-        from quality_suite import load_questions
-        from evaluators import eval_format_check
+        from app.benchmarking.quality_suite import load_questions
+        from app.benchmarking.evaluators import eval_format_check
         from validate_suite import Report, check_format_check
         questions = {q.id: q for q in load_questions() if q.category == 'Creative Writing'}
         first = 'Night silent bird wings\nRain taps old stones\nDawn opens iron gates\nHome calls lost echoes'

@@ -29,9 +29,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from evaluators import EVALUATORS
-from models import SCORE_EPSILON, Question
-from test_loader import load_all_tests
+from app.benchmarking.evaluators import EVALUATORS
+from app.benchmarking.models import SCORE_EPSILON, Question
+from app.benchmarking.test_loader import load_all_tests
 
 PASS = "pass"
 FAIL = "fail"

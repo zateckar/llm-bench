@@ -91,7 +91,7 @@ file. There are 171 files; the largest has 1,453 lines. Multiline prompts remain
 literal text and short arrays remain compact. The initial split preserved the
 v9 question fingerprint exactly; subsequent v10 changes deliberately revise it.
 
-[quality_suite.py](quality_suite.py) still assembles one fixed bank: 171 static
+[quality_suite.py](app/benchmarking/quality_suite.py) still assembles one fixed bank: 171 static
 questions, 116 generated questions, 20 interactive tasks and eight exact-length
 context questions, totalling 315 across 30 categories. Splitting source files
 does not introduce selectable banks, profiles or run settings. The recursive
@@ -546,3 +546,14 @@ Reproduce the authoring and evaluation checks with the commands in the
 [selftest_adversarial.py](selftest_adversarial.py),
 [selftest_compositional.py](selftest_compositional.py) and
 [selftest_evidence.py](selftest_evidence.py).
+
+
+## 2026-10-04 application consolidation and deadline investigation
+
+Read-only inspection of the local database found run #67 (Qwen3.8-Flash-Next-FP8, rigorous-v11) recorded 291 outcomes and 19 request failures. All 19 were stream deadlines: Advanced Coding 5/16, Code Generation 5/8, Terminal Algorithms 4/4, Terminal Debugging 3/4, Finances 1/12 and Mathematical Reasoning 1/20. All four Terminal Algorithms tasks belong to Q9-dependency-regression. Their total request latency was 1,045.9–1,091.2 seconds. The three-attempt policy repeated a 360-second stream budget, with backoff; a socket inactivity timeout does not limit total duration when data keeps arriving. Successful coding requests also exceeded six minutes across attempts. The saved data discarded partial stream progress and cannot distinguish continued reasoning, repetition or a stalled stream. No live endpoint was invoked and historical outcomes were not changed.
+
+Client v4 gives quality calls an independent 1,800-second stream budget while keeping the 180-second inactivity timeout. It no longer retries total generation deadlines or invalid stream protocols. It retains progress counters and timing on failed attempts without treating partial output as a completed answer. Total deadlines are observed at receive boundaries and EOF; blocked reads can overrun by the inactivity timeout. The fixed performance budget remains 360 seconds with one measured attempt. Changing the client protocol prevents strict paired comparisons from silently mixing old and new generation policies.
+
+Performance v6 adds request samples, p99 presentation, request/error-rate graphs, output-length distributions, chunk-gap summaries and a mean output-token-time delivery proxy. Reported completion counts may include reasoning, and one SSE event can deliver many tokens. Consequently the proxy excludes estimates and buffered bursts; chunk gaps are never called inter-token latency. Definitions are informed by [NVIDIA GenAI-Perf](https://docs.nvidia.com/deeplearning/triton-inference-server/archives/triton-inference-server-2600/user-guide/docs/perf_benchmark/genai-perf-README.html). It remains a closed-loop load test with successful output over full wall time including failures. Quality-request distributions and category deadline counts are separate from controlled load results. Old records never acquire invented stream diagnostics.
+
+The CLI benchmark and management entry points, console/Markdown formatting and generator command entry points were removed. Runtime benchmark code is under `app/benchmarking`; verification scripts stay at the root. The task bank is unchanged: 315 tasks, hash `b11260da421820b5`, verified against the pre-change Git version. App configuration loads `.env` with process environment precedence. The UI retains the existing stack and adopts compact neutral surfaces, borders and token colors inspired by [Shadcn theming](https://ui.shadcn.com/docs/theming), with mobile navigation and run sections. Review corrected missing container closure, model-ID column collisions, desktop toggle visibility, empty-report notices and percentile graph scaling. Regression checks cover deadlines without retries, retained partial progress, invalid budgets, EOF deadline enforcement, token-time exclusions, wall-clock failure denominators, raw sample distributions and authenticated performance downloads.

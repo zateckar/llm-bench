@@ -10,7 +10,7 @@ import itertools
 import json
 import random
 
-from rigorous_cases import structured
+from app.benchmarking.rigorous_cases import structured
 
 
 class _Uninformative(ValueError):

@@ -1,9 +1,7 @@
 """A single instrumented OpenAI-compatible chat client.
 
-The CLI runner and the web runner previously had two near-identical copies of the
-request code, which meant retry behaviour and (now) timing measurement could
-drift between them. Everything goes through :class:`ChatClient` so latency is
-measured the same way no matter who is calling.
+Application quality and performance requests use :class:`ChatClient` for
+consistent transport validation and timing.
 
 Streaming exposes time to first delivered content or reasoning. Provider
 buffering affects these observations. Without streaming only end-to-end
@@ -14,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import time
 from dataclasses import dataclass, field
@@ -21,10 +20,10 @@ from dataclasses import dataclass, field
 import requests
 import urllib3
 
-from models import RequestMetrics, TokenUsage
+from app.benchmarking.models import RequestMetrics, TokenUsage
 
 logger = logging.getLogger(__name__)
-CLIENT_PROTOCOL_VERSION = "chat-client-v3"
+CLIENT_PROTOCOL_VERSION = "chat-client-v4"
 
 # Rough characters-per-token used only for prompt-size estimates in the perf
 # suite when the server does not report prompt_tokens.
@@ -95,6 +94,8 @@ class ClientConfig:
     temperature: float = 0.0
     seed: int | None = None
     timeout: float = 180.0
+    # Independent total generation budget; timeout remains the socket inactivity limit.
+    stream_deadline: float | None = None
     stream: bool = True
     max_retries: int = 3
     retry_delay: float = 2.0
@@ -107,9 +108,18 @@ class ClientConfig:
     repetition_threshold: float = 0.30
     extra_headers: dict = field(default_factory=dict)
 
+    def __post_init__(self):
+        for name, value in [("timeout", self.timeout), ("stream_deadline", self.stream_deadline)]:
+            if value is not None and (type(value) not in (int, float) or not math.isfinite(value) or value <= 0):
+                raise ValueError(f"{name} must be a positive finite number")
+
     @property
     def endpoint(self) -> str:
         return f"{self.base_url.rstrip('/')}/chat/completions"
+
+    @property
+    def stream_deadline_seconds(self) -> float:
+        return self.stream_deadline if self.stream_deadline is not None else self.timeout * 2
 
 
 class ChatClient:
@@ -164,19 +174,24 @@ class ChatClient:
 
         last_error = "unknown error"
         request_started = time.perf_counter()
+        diagnostics = []
 
         def failed(attempts: int) -> tuple[str, TokenUsage, RequestMetrics]:
-            return self._error(
+            result = self._error(
                 last_error,
                 attempts,
                 latency_ms=(time.perf_counter() - request_started) * 1000.0,
             )
+            result[2].attempt_diagnostics = diagnostics
+            return result
 
         for attempt in range(attempts_allowed):
             started = time.perf_counter()
             self._last_finish_reason = None
             self._stream_chunks = 0
             self._stream_span_ms = None
+            self._stream_diagnostics = {}
+            self._chunk_gaps_ms = []
             # Recomputed per attempt: a fallback branch below may clear the
             # capability flags, and the next retry must honour that instead
             # of re-sending the payload that was just rejected.
@@ -224,6 +239,15 @@ class ChatClient:
                 return failed(attempt + 1)
             except Exception as e:  # noqa: BLE001 - transport errors of any kind
                 last_error = f"{type(e).__name__}: {e}"
+                diagnostics.append({
+                    "attempt": attempt + 1, "error": last_error,
+                    "elapsed_ms": (time.perf_counter() - started) * 1000,
+                    **self._stream_diagnostics,
+                })
+                # Repeating an exhausted generation budget discards progress and
+                # multiplies worker occupancy. Protocol violations are also permanent.
+                if isinstance(e, (_StreamDeadlineExceeded, _ProtocolError)):
+                    return failed(attempt + 1)
                 if attempt < attempts_allowed - 1:
                     self._sleep_backoff(attempt, last_error)
                     continue
@@ -248,6 +272,8 @@ class ChatClient:
                 completion_tokens_estimated=usage.completion_tokens_estimated,
                 stream_chunks=self._stream_chunks,
                 stream_span_ms=self._stream_span_ms,
+                chunk_gaps_ms=self._chunk_gaps_ms,
+                attempt_diagnostics=diagnostics,
             )
             return text, usage, metrics
 
@@ -350,7 +376,7 @@ class ChatClient:
             # Decode complete SSE lines, preserving UTF-8 across TCP fragments.
             # Requests' default 512-byte buffer can delay a short first event.
             # read1 returns available bytes without waiting to fill its buffer.
-            for payload in _sse_payloads(resp, started, self.config.timeout * 2):
+            for payload in _sse_payloads(resp, started, self.config.stream_deadline_seconds):
                 if done_sent:
                     raise _ProtocolError("Completion data after [DONE]")
                 if payload.strip() == "[DONE]":
@@ -409,6 +435,8 @@ class ChatClient:
                     arrival = time.perf_counter()
                     if first_arrival is None:
                         first_arrival = arrival
+                    if last_arrival is not None:
+                        self._chunk_gaps_ms.append((arrival - last_arrival) * 1000)
                     last_arrival = arrival
                     if not self.config.detect_repetition:
                         continue
@@ -439,6 +467,14 @@ class ChatClient:
                 if looped:
                     break
         finally:
+            self._stream_diagnostics = {
+                "ttft_ms": ttft, "stream_chunks": delta_count,
+                "content_chars": sum(map(len, chunks)),
+                "reasoning_chars": sum(map(len, reasoning_chunks)),
+                "last_delivery_ms": (last_arrival - started) * 1000
+                    if last_arrival is not None else None,
+                "finish_reason": self._last_finish_reason,
+            }
             resp.close()
 
         if not saw_choice:
@@ -537,6 +573,8 @@ def _response_lines(response, started, deadline):
         del pending[:consumed]
         if len(pending) > SSE_LINE_LIMIT:
             raise _ProtocolError("Completion SSE line exceeds buffer limit")
+    if time.perf_counter() - started > deadline:
+        raise _StreamDeadlineExceeded(f"stream deadline exceeded after {deadline:.0f}s")
     if pending:
         yield bytes(pending)
 
@@ -682,7 +720,8 @@ def client_protocol(config):
     return {
         "revision": CLIENT_PROTOCOL_VERSION,
         "timeout_seconds": config.timeout,
-        "stream_deadline_seconds": config.timeout * 2,
+        "stream_deadline_seconds": config.stream_deadline_seconds,
+        "deadline_retry_policy": "no_retry",
         "stream_requested": config.stream,
         "stream_usage_requested": config.request_stream_usage,
         "max_attempts": config.max_retries,

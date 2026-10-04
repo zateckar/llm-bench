@@ -5,12 +5,12 @@ from dataclasses import replace
 import json
 import unittest
 
-from llm_client import ClientConfig
-from models import Question, RequestMetrics, TokenUsage
-from quality_execution import score_response
-from quality_report import make_report, paired_comparison, result_record, summarize
-from quality_suite import REVISION, load_questions, fingerprint
-from rigorous_cases import CODE_REFERENCES, balanced_rubric, load_new_questions, schema
+from app.benchmarking.llm_client import ClientConfig
+from app.benchmarking.models import Question, RequestMetrics, TokenUsage
+from app.benchmarking.quality_execution import score_response
+from app.benchmarking.quality_report import make_report, paired_comparison, result_record, summarize
+from app.benchmarking.quality_suite import REVISION, load_questions, fingerprint
+from app.benchmarking.rigorous_cases import CODE_REFERENCES, balanced_rubric, load_new_questions, schema
 from validate_suite import Report, validate_question
 
 
@@ -186,7 +186,7 @@ class RigorousTests(unittest.TestCase):
         self.assertFalse(paired_comparison(report, other)["compatible"])
 
     def test_database_discovered_keyword_and_count_regressions(self):
-        from evaluators import eval_contains_keywords, eval_format_check
+        from app.benchmarking.evaluators import eval_contains_keywords, eval_format_check
 
         expected = {"all": ["mozambique"], "groups": [["ak-47", "ak47", "kalashnikov"]]}
         self.assertEqual(eval_contains_keywords("Mozambique: AK\u201147", expected)[0], 1)

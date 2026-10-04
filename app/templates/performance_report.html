@@ -1,13 +1,31 @@
 <section class="report-section space-y-4">
 <h2 class="text-lg font-semibold">Performance</h2>
-<p class="muted text-sm text-slate-400">One 1,024-token reference workload, 256-token output limit, warm connections, one attempt per timed request. Concurrency increases automatically. Throughput counts successful output over elapsed time including failures. Latency and TTFT percentiles cover successful requests. TTFT measures first delivered content or reasoning; provider buffering can affect it. This is a bounded concurrency test.</p>
+{% for note in performance.notes %}<p class="notice text-sm text-amber-400">{{ note }}</p>{% endfor %}
+{% if performance.load_rows %}
+<p class="muted text-sm text-zinc-400">One 1,024-token reference workload, 256-token output limit, warm connections, one attempt per timed request. Concurrency increases automatically. Throughput counts successful output over elapsed time including failures. Latency and TTFT percentiles cover successful requests. TTFT measures first delivered content or reasoning; provider buffering can affect it. This is a bounded concurrency test.</p>
 <div class="table-wrap overflow-x-auto"><table class="w-full"><thead><tr><th>Metric</th>{% for label in performance.labels %}<th>{{ label }}</th>{% endfor %}</tr></thead><tbody>
 {% for row in performance.suite_rows %}<tr><td>{{ row.label }}</td>{% for value in row['values'] %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}
 </tbody></table></div>
-{% for note in performance.notes %}<p class="notice text-sm text-amber-400">{{ note }}</p>{% endfor %}
 {% if performance.charts %}<div class="report-grid grid lg:grid-cols-3 gap-4">{% for chart in performance.charts %}<div class="panel"><h3>{{ chart.title }}</h3><div class="chart">{{ chart.svg }}</div><div class="legend text-xs">{% for series in chart.series %}<span style="color:{{ series.color }}">{{ series.label }}</span> {% endfor %}</div></div>{% endfor %}
 </div>{% endif %}
-{% if performance.load_rows %}<div class="table-wrap overflow-x-auto"><table class="w-full text-xs"><thead><tr><th>Run</th><th>Concurrency</th><th>Requests</th><th>Errors</th><th>Wall time</th><th>Output</th><th>Request rate</th><th>Latency p50</th><th>Latency p95</th><th>TTFT p50</th><th>TTFT p95</th><th>Failed latency p95</th><th>Estimated tokens (requests)</th><th>Burst delivery (requests)</th></tr></thead><tbody>
+{% if performance.load_rows %}<div class="table-wrap overflow-x-auto"><table class="w-full text-xs"><thead><tr><th>Run</th><th>Concurrency</th><th>Requests</th><th>Errors</th><th>Output tok/s</th><th>Requests/s</th><th>Latency p95</th><th>TTFT p95</th></tr></thead><tbody>{% for row in performance.load_rows %}<tr><td>{{ row.run }}</td>{% for i in [0, 1, 2, 4, 5, 7, 9] %}<td>{{ row['values'][i] }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% endif %}
+<details><summary class="text-sm cursor-pointer">All per-load metrics</summary>
+{% if performance.load_rows %}<div class="table-wrap overflow-x-auto"><table class="w-full text-xs"><thead><tr><th>Run</th><th>Concurrency</th><th>Requests</th><th>Errors</th><th>Wall time</th><th>Output</th><th>Request rate</th><th>Latency p50</th><th>Latency p95</th><th>TTFT p50</th><th>TTFT p95</th><th>Failed latency p95</th><th>Estimated tokens (requests)</th><th>Burst delivery (requests)</th><th>Latency p99</th><th>TTFT p99</th><th>Error rate</th><th>Mean output tokens</th><th>Output token time proxy p50</th><th>Chunk gap p95</th></tr></thead><tbody>
 {% for row in performance.load_rows %}<tr><td>{{ row.run }}</td>{% for value in row['values'] %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}
 </tbody></table></div>{% endif %}
+</details>
+{% if performance.distributions %}<details class="space-y-4"><summary class="text-sm cursor-pointer">Request distributions</summary><div class="report-grid grid lg:grid-cols-3 gap-4">{% for chart in performance.distributions %}<div class="panel"><h3>{{ chart.title }}</h3><div class="chart">{{ chart.svg }}</div><div class="legend text-xs">{% for series in chart.series %}<span style="color:{{ series.color }}">{{ series.label }}</span>{% endfor %}</div></div>{% endfor %}</div></details>{% endif %}
+<p class="muted text-xs text-zinc-400">Output token time is a client delivery proxy: span between first and last output chunks / (reported completion tokens − 1). Buffered bursts, estimated counts and outputs shorter than two tokens are excluded. It is unavailable on historical runs without this measurement. Chunk gaps measure SSE delivery intervals, not individual token latency. Provider token counts can include reasoning. Percentiles use small samples; repeat matched runs to assess variability.</p>
+{% endif %}
+{% for view in performance.request_views %}
+<div class="space-y-4">
+<h3 class="text-sm font-semibold">Quality request performance · {{ view.label }}</h3>
+<p class="muted text-xs text-zinc-400">These timings cover varied quality tasks and include retries. They are separate from the fixed workload above. Failed requests remain visible; successful-request percentiles exclude failures.</p>
+<div class="metric-grid grid grid-cols-2 lg:grid-cols-5 gap-3">
+{% for label, value in [('Request success', view.success_rate), ('Latency p50', view.latency_p50), ('Latency p95', view.latency_p95), ('TTFT p50', view.ttft_p50), ('Stream deadlines', view.deadline_count)] %}<div class="panel"><p class="metric-label text-xs text-zinc-400">{{ label }}</p><p class="metric-value text-xl font-semibold">{{ value }}</p></div>{% endfor %}
+</div>
+{% if view.chart %}<div class="panel"><div class="chart">{{ view.chart }}</div><div class="legend text-xs">{% for s in view.series %}<span style="color:{{ s.color }}">{{ s.label }}</span>{% endfor %}</div></div>{% endif %}
+<details {% if view.deadline_count %}open{% endif %}><summary class="text-sm cursor-pointer">Timing and errors by category</summary><div class="table-wrap overflow-x-auto"><table class="w-full text-xs"><thead><tr><th>Category</th><th>Requests</th><th>Errors</th><th>Deadlines</th><th>Latency p50</th><th>Latency p95</th></tr></thead><tbody>{% for row in view.rows %}<tr><td>{{ row.category }}</td><td>{{ row.requests }}</td><td>{{ row.errors }}</td><td>{{ row.deadlines }}</td><td>{{ row.p50 }}</td><td>{{ row.p95 }}</td></tr>{% endfor %}</tbody></table></div></details>
+</div>
+{% endfor %}
 </section>

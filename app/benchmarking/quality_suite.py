@@ -46,18 +46,18 @@ def suite_hash(questions):
 
 
 def load_questions(tests_dir=None):
-    from adversarial_cases import load_adversarial_questions
-    from compositional_cases import load_compositional_questions
-    from evidence_cases import load_evidence_questions
-    from context_cases import FAMILIES, context_question
-    from frontier_cases import load_frontier_questions
-    from independent_oracles import CODE, code_cases
-    from interactive_tasks import make_tasks
-    from rigorous_cases import load_new_questions
-    from reasoning_cases import load_reasoning_questions
-    from test_loader import load_all_tests
+    from app.benchmarking.adversarial_cases import load_adversarial_questions
+    from app.benchmarking.compositional_cases import load_compositional_questions
+    from app.benchmarking.evidence_cases import load_evidence_questions
+    from app.benchmarking.context_cases import FAMILIES, context_question
+    from app.benchmarking.frontier_cases import load_frontier_questions
+    from app.benchmarking.independent_oracles import CODE, code_cases
+    from app.benchmarking.interactive_tasks import make_tasks
+    from app.benchmarking.rigorous_cases import load_new_questions
+    from app.benchmarking.reasoning_cases import load_reasoning_questions
+    from app.benchmarking.test_loader import load_all_tests
 
-    questions = load_all_tests(tests_dir or Path(__file__).parent / "tests")
+    questions = load_all_tests(tests_dir or Path(__file__).resolve().parents[2] / "tests")
     cases = code_cases(rng_for(QUESTION_SEEDS[0], 0, "code-tests"))
     for q in questions:
         code_id = q.metadata.get("original_anchor_id", q.id)

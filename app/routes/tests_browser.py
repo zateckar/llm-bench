@@ -54,7 +54,7 @@ def load_tests_from_yaml() -> tuple[dict, str | None]:
         return categories, f"Tests directory not found: {TESTS_DIR}"
 
     try:
-        from quality_suite import load_questions
+        from app.benchmarking.quality_suite import load_questions
 
         questions = load_questions()
     except Exception as e:  # noqa: BLE001 - reported in the page instead of a 500

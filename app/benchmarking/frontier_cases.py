@@ -9,8 +9,8 @@ import itertools
 import json
 import unicodedata
 
-from models import Question
-from rigorous_cases import structured
+from app.benchmarking.models import Question
+from app.benchmarking.rigorous_cases import structured
 
 
 def task(family, category, variant, seed, prompt, answer, data):
@@ -422,7 +422,7 @@ BUILDERS = (
 
 
 def load_frontier_questions(seed, variant):
-    from quality_suite import rng_for
+    from app.benchmarking.quality_suite import rng_for
 
     return [
         builder(rng_for(seed, variant, builder.__name__), variant, seed) for builder in BUILDERS

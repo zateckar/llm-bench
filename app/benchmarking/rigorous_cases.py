@@ -15,8 +15,8 @@ import itertools
 import json
 import random
 
-from evaluators import _json_criterion_paths
-from models import Question
+from app.benchmarking.evaluators import _json_criterion_paths
+from app.benchmarking.models import Question
 
 REVISION = "rigorous-v10"
 
@@ -91,7 +91,7 @@ def fraction(value):
 
 
 def probability_case(rng, variant, split):
-    from reasoning_cases import probability_case as build
+    from app.benchmarking.reasoning_cases import probability_case as build
 
     return build(rng, variant, split)
 
@@ -390,7 +390,7 @@ def policy_case(rng, variant, split):
 
 
 def retrieval_case(rng, variant, split):
-    from reasoning_cases import retrieval_case as build
+    from app.benchmarking.reasoning_cases import retrieval_case as build
 
     return build(rng, variant, split)
 

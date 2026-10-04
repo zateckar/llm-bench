@@ -14,26 +14,26 @@
 {%- endmacro %}
 
 {% block content %}
-<div class="space-y-6" x-data="{ expandedCategories: {}, expandedQuestion: null }">
+<div class="space-y-4" x-data="{ expandedCategories: {}, expandedQuestion: null, tab: 'overview' }">
     {% if request.query_params.get('error') == 'running' %}
-    <div class="p-3 bg-amber-900/50 border border-amber-700 rounded-lg text-amber-200 text-sm">
+    <div class="p-3 bg-amber-900/50 border border-amber-700 rounded-md text-amber-200 text-sm">
         This run is still active and cannot be deleted until it finishes.
     </div>
     {% endif %}
 
     {% if request.query_params.get('error') == 'rerun-running' %}
-    <div class="p-3 bg-amber-900/50 border border-amber-700 rounded-lg text-amber-200 text-sm">
+    <div class="p-3 bg-amber-900/50 border border-amber-700 rounded-md text-amber-200 text-sm">
         This run is still active; wait until it finishes before running it again.
     </div>
     {% endif %}
 
     <div class="flex items-center gap-4">
-        <a href="/runs" class="text-slate-400 hover:text-white">
+        <a href="/runs" class="text-zinc-400 hover:text-white">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
         </a>
         <div>
-            <h1 class="text-2xl font-bold text-white">Run #{{ run.id }}</h1>
-            <p class="text-slate-400 mt-1">{{ run.model_name }} ({{ run.model_id }})</p>
+            <h1 class="text-xl font-bold text-white">Run #{{ run.id }}</h1>
+            <p class="text-zinc-400 mt-1">{{ run.model_name }} ({{ run.model_id }})</p>
         </div>
         <div class="ml-auto flex items-center gap-3">
             <a href="/runs/{{ run.id }}/report.html" class="btn-primary" download>Download HTML</a>
@@ -78,33 +78,39 @@
         </div>
     </div>
 
+    <div class="view-tabs" role="group" aria-label="Run sections">
+        <button @click="tab = 'overview'" :class="{ 'active': tab === 'overview' }" :aria-pressed="tab === 'overview'">Overview</button>
+        <button @click="tab = 'performance'" :class="{ 'active': tab === 'performance' }" :aria-pressed="tab === 'performance'">Performance</button>
+        <button @click="tab = 'answers'" :class="{ 'active': tab === 'answers' }" :aria-pressed="tab === 'answers'">Answers ({{ run.total_questions }})</button>
+    </div>
+    <div class="space-y-4" x-show="tab === 'overview'">
     <!-- Run Info -->
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div class="card p-4">
-            <p class="text-xs text-slate-500 uppercase tracking-wider">Started</p>
-            <p class="text-sm text-slate-300 mt-1">{{ run.started_at[:19] if run.started_at else 'N/A' }}</p>
+            <p class="text-xs text-zinc-500 uppercase tracking-wider">Started</p>
+            <p class="text-sm text-zinc-300 mt-1">{{ run.started_at[:19] if run.started_at else 'N/A' }}</p>
         </div>
         <div class="card p-4">
-            <p class="text-xs text-slate-500 uppercase tracking-wider">Completed</p>
-            <p class="text-sm text-slate-300 mt-1">{{ run.completed_at[:19] if run.completed_at else 'N/A' }}</p>
+            <p class="text-xs text-zinc-500 uppercase tracking-wider">Completed</p>
+            <p class="text-sm text-zinc-300 mt-1">{{ run.completed_at[:19] if run.completed_at else 'N/A' }}</p>
         </div>
         <div class="card p-4">
-            <p class="text-xs text-slate-500 uppercase tracking-wider">Test Suite</p>
-            <p class="text-sm text-slate-300 mt-1 font-mono" title="{{ run.test_suite_hash or 'N/A' }}">{{ run.test_suite_hash or 'N/A' }}</p>
+            <p class="text-xs text-zinc-500 uppercase tracking-wider">Test Suite</p>
+            <p class="text-sm text-zinc-300 mt-1 font-mono" title="{{ run.test_suite_hash or 'N/A' }}">{{ run.test_suite_hash or 'N/A' }}</p>
         </div>
         <div class="card p-4">
-            <p class="text-xs text-slate-500 uppercase tracking-wider">Tokens</p>
-            <p class="text-sm text-slate-300 mt-1">{{ "{:,}".format(run.total_prompt_tokens + run.total_completion_tokens) }}</p>
-            <p class="text-xs text-slate-500">{{ "{:,}".format(run.total_prompt_tokens) }} in + {{ "{:,}".format(run.total_completion_tokens) }} out</p>
+            <p class="text-xs text-zinc-500 uppercase tracking-wider">Tokens</p>
+            <p class="text-sm text-zinc-300 mt-1">{{ "{:,}".format(run.total_prompt_tokens + run.total_completion_tokens) }}</p>
+            <p class="text-xs text-zinc-500">{{ "{:,}".format(run.total_prompt_tokens) }} in + {{ "{:,}".format(run.total_completion_tokens) }} out</p>
         </div>
         <div class="card p-4">
-            <p class="text-xs text-slate-500 uppercase tracking-wider">Error</p>
-            <p class="text-sm text-slate-300 mt-1 break-words">{{ run.error_message or 'None' }}</p>
+            <p class="text-xs text-zinc-500 uppercase tracking-wider">Error</p>
+            <p class="text-sm text-zinc-300 mt-1 break-words">{{ run.error_message or 'None' }}</p>
         </div>
     </div>
 
     {% if run.status in ('completed', 'failed') and run.scored_questions == 0 and transport_errors %}
-    <div class="p-4 bg-amber-900/50 border border-amber-700 rounded-lg text-amber-200 text-sm space-y-2">
+    <div class="p-4 bg-amber-900/50 border border-amber-700 rounded-md text-amber-200 text-sm space-y-2">
         <p>No quality score is available. {{ transport_errors|length }} question requests failed at the endpoint.</p>
         <p class="break-words">{{ transport_errors[0].detail }}</p>
     </div>
@@ -113,20 +119,25 @@
     {% if quality and quality.schema_version != 3 %}<p class="text-sm text-amber-400">Historical evaluation protocol. Run the current complete suite for comparable strict scores.</p>{% endif %}
     {% include "quality_summary.html" %}
 
-    {% if perf %}<div class="card p-5">{% include "performance_report.html" %}</div>{% endif %}
+    </div>
+    <div class="space-y-4" x-show="tab === 'performance'" x-cloak>
+        {% if perf %}<a class="btn-ghost" href="/runs/{{ run.id }}/performance.json" download>Download performance JSON</a>{% endif %}
+        <div class="card p-4">{% include "performance_report.html" %}</div>
+    </div>
+    <div class="space-y-4" x-show="tab === 'answers'" x-cloak>
 
     {% if transport_errors %}
-    <div class="card p-5 bg-amber-900/20 border border-amber-800/50">
+    <div class="card p-4 bg-amber-900/20 border border-amber-800/50">
         <h2 class="text-lg font-semibold text-amber-400 mb-2">Infrastructure Errors ({{ transport_errors|length }})</h2>
-        <p class="text-sm text-slate-400 mb-3">
+        <p class="text-sm text-zinc-400 mb-3">
             These outcomes could not be evaluated. Coverage and sensitivity bounds are shown above.
         </p>
         <div class="space-y-2">
             {% for r in transport_errors %}
-            <div class="flex items-center gap-3 px-3 py-2 rounded bg-slate-900/50">
-                <span class="font-mono text-xs text-slate-500">{{ r.test_id }}</span>
-                <span class="text-sm text-slate-300 truncate flex-1">{{ r.category }}</span>
-                <span class="text-xs text-amber-400">{{ r.detail[:100] }}</span>
+            <div class="flex items-center gap-3 px-3 py-2 rounded bg-zinc-900/50">
+                <span class="font-mono text-xs text-zinc-500">{{ r.test_id }}</span>
+                <span class="text-sm text-zinc-300 truncate flex-1">{{ r.category }}</span>
+                <details class="text-xs text-amber-400"><summary class="cursor-pointer">{{ r.detail[:100] }}</summary><p class="py-2">{{ r.detail }}</p>{% for attempt in r.attempt_diagnostics %}<p class="py-1">Attempt {{ attempt.attempt }} · {{ ms(attempt.elapsed_ms) }} · TTFT {{ ms(attempt.ttft_ms) }} · {{ attempt.stream_chunks }} chunks · {{ attempt.content_chars }} content chars · {{ attempt.reasoning_chars }} reasoning chars</p>{% endfor %}{% if not r.attempt_diagnostics %}<p class="py-1 text-zinc-400">Stream progress was not retained by this client version.</p>{% endif %}</details>
             </div>
             {% endfor %}
         </div>
@@ -135,15 +146,15 @@
 
     {% if evaluator_errors %}
     <!-- Evaluator Errors -->
-    <div class="card p-5 bg-red-900/20 border border-red-800/50">
+    <div class="card p-4 bg-red-900/20 border border-red-800/50">
         <h2 class="text-lg font-semibold text-red-400 mb-3">Evaluator Errors ({{ evaluator_errors|length }})</h2>
-        <p class="text-sm text-slate-400 mb-3">These questions had errors during evaluation. Fix the evaluator before running the complete suite again.</p>
+        <p class="text-sm text-zinc-400 mb-3">These questions had errors during evaluation. Fix the evaluator before running the complete suite again.</p>
         <div class="space-y-2">
             {% for r in evaluator_errors %}
-            <div class="flex items-center gap-3 px-3 py-2 rounded bg-slate-900/50">
+            <div class="flex items-center gap-3 px-3 py-2 rounded bg-zinc-900/50">
                 <span class="w-6 h-6 rounded flex items-center justify-center text-xs bg-red-900/50 text-red-400">!</span>
-                <span class="font-mono text-xs text-slate-500">{{ r.test_id }}</span>
-                <span class="text-sm text-slate-300 truncate flex-1">{{ r.prompt[:60] }}{% if r.prompt|length > 60 %}...{% endif %}</span>
+                <span class="font-mono text-xs text-zinc-500">{{ r.test_id }}</span>
+                <span class="text-sm text-zinc-300 truncate flex-1">{{ r.prompt[:60] }}{% if r.prompt|length > 60 %}...{% endif %}</span>
                 <span class="text-xs text-red-400">{{ r.detail[:80] }}</span>
             </div>
             {% endfor %}
@@ -153,12 +164,12 @@
 
     {% if run.status == 'completed' %}
     <!-- Charts -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="card p-5">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card p-4">
             <h2 class="text-lg font-semibold text-white mb-4">Category Scores</h2>
             <div style="position: relative; height: 200px;"><canvas id="barChart"></canvas></div>
         </div>
-        <div class="card p-5">
+        <div class="card p-4">
             <h2 class="text-lg font-semibold text-white mb-4">Score Distribution</h2>
             <div style="position: relative; height: 200px;"><canvas id="pieChart"></canvas></div>
         </div>
@@ -166,30 +177,30 @@
     {% endif %}
 
     <!-- Category Breakdown -->
-    <div class="card p-5">
+    <div class="card p-4">
         <h2 class="text-lg font-semibold text-white mb-4">Category Breakdown</h2>
         <div class="space-y-3">
             {% for cat in categories %}
-            <div class="rounded-lg bg-slate-800/50 overflow-hidden">
-                <button class="w-full flex items-center justify-between p-4 text-left hover:bg-slate-800 transition-colors"
+            <div class="rounded-md bg-zinc-800/50 overflow-hidden">
+                <button class="w-full flex items-center justify-between p-4 text-left hover:bg-zinc-800 transition-colors"
                         @click="expandedCategories['{{ cat.category }}'] = !expandedCategories['{{ cat.category }}']">
                     <div class="flex items-center gap-3">
                         {% if cat.avg_score is not none %}
-                        <div class="w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold
+                        <div class="w-10 h-10 rounded-md flex items-center justify-center text-sm font-bold
                             {% if cat.avg_score >= 0.7 %}bg-emerald-900/50 text-emerald-400
                             {% elif cat.avg_score >= 0.5 %}bg-yellow-900/50 text-yellow-400
                             {% else %}bg-red-900/50 text-red-400{% endif %}">
                             {{ "%.0f"|format(cat.avg_score * 100) }}%
                         </div>
                         {% else %}
-                        <div class="w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold bg-slate-800 text-slate-500"
+                        <div class="w-10 h-10 rounded-md flex items-center justify-center text-sm font-bold bg-zinc-800 text-zinc-500"
                              title="No scored answers in this category">
                             &mdash;
                         </div>
                         {% endif %}
                         <div>
-                            <p class="font-medium text-slate-200">{{ cat.category }}</p>
-                            <p class="text-xs text-slate-500">
+                            <p class="font-medium text-zinc-200">{{ cat.category }}</p>
+                            <p class="text-xs text-zinc-500">
                                 {{ cat.passed }}/{{ cat.scored if cat.scored is not none else cat.total }} passed
                                 {%- if cat.avg_latency_ms %} &middot; {{ ms(cat.avg_latency_ms) }} avg latency{% endif %}
                             </p>
@@ -201,7 +212,7 @@
                             <div class="progress-fill" style="width: {{ cat.avg_score * 100 }}%"></div>
                             {% endif %}
                         </div>
-                        <svg class="w-4 h-4 text-slate-500 transition-transform"
+                        <svg class="w-4 h-4 text-zinc-500 transition-transform"
                              :class="expandedCategories['{{ cat.category }}'] ? 'rotate-180' : ''"
                              fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -213,7 +224,7 @@
                 <div x-show="expandedCategories['{{ cat.category }}']" x-collapse>
                     <div class="px-4 pb-4 space-y-2">
                         {% for r in results_by_category.get(cat.category, []) %}
-                        <div class="rounded-lg bg-slate-900/50 p-3 cursor-pointer hover:bg-slate-900 transition-colors"
+                        <div class="rounded-md bg-zinc-900/50 p-3 cursor-pointer hover:bg-zinc-900 transition-colors"
                              @click="expandedQuestion = expandedQuestion === '{{ r.test_id }}_{{ run.id }}' ? null : '{{ r.test_id }}_{{ run.id }}'">
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-2">
@@ -223,13 +234,13 @@
                                         {% else %}bg-red-900/50 text-red-400{% endif %}">
                                         {% if not r.request_ok %}!{% elif r.passed %}&#10003;{% else %}&#10007;{% endif %}
                                     </span>
-                                    <span class="font-mono text-xs text-slate-500">{{ r.test_id }}</span>
-                                    <span class="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide bg-slate-800 text-slate-400">{{ r.difficulty or 'medium' }}</span>
-                                    <span class="text-sm text-slate-300 truncate max-w-md">{{ r.prompt[:80] }}{% if r.prompt|length > 80 %}...{% endif %}</span>
+                                    <span class="font-mono text-xs text-zinc-500">{{ r.test_id }}</span>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide bg-zinc-800 text-zinc-400">{{ r.difficulty or 'medium' }}</span>
+                                    <span class="text-sm text-zinc-300 truncate max-w-md">{{ r.prompt[:80] }}{% if r.prompt|length > 80 %}...{% endif %}</span>
                                 </div>
                                 <div class="flex items-center gap-3">
-                                    <span class="text-xs text-slate-500">{{ ms(r.latency_ms) }}</span>
-                                    <span class="text-xs text-slate-500">{{ r.prompt_tokens + r.completion_tokens }} tok</span>
+                                    <span class="text-xs text-zinc-500">{{ ms(r.latency_ms) }}</span>
+                                    <span class="text-xs text-zinc-500">{{ r.prompt_tokens + r.completion_tokens }} tok</span>
                                     <span class="text-xs font-medium {% if r.passed %}text-emerald-400{% else %}text-red-400{% endif %}"
                                           title="Needed {{ '%.0f%%'|format((r.pass_threshold or 1.0) * 100) }} to pass">
                                         {{ "%.0f"|format(r.score * 100) }}%
@@ -241,52 +252,52 @@
                             <div x-show="expandedQuestion === '{{ r.test_id }}_{{ run.id }}'" x-collapse class="mt-3 space-y-3">
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
-                                        <p class="text-xs font-medium text-slate-500 mb-1">Prompt</p>
-                                        <div class="bg-slate-950 rounded p-3 text-xs text-slate-300 max-h-40 overflow-auto scrollbar-thin whitespace-pre-wrap">{{ r.prompt }}</div>
+                                        <p class="text-xs font-medium text-zinc-500 mb-1">Prompt</p>
+                                        <div class="bg-zinc-950 rounded p-3 text-xs text-zinc-300 max-h-40 overflow-auto scrollbar-thin whitespace-pre-wrap">{{ r.prompt }}</div>
                                     </div>
                                     <div>
-                                        <p class="text-xs font-medium text-slate-500 mb-1">{{ 'Interactive transcript (each assistant turn is graded separately)' if r.interactive_turns else 'Response' }}</p>
-                                        <div class="bg-slate-950 rounded p-3 text-xs text-slate-300 max-h-64 overflow-auto scrollbar-thin whitespace-pre-wrap">{% if r.interactive_turns %}{% for turn in r.interactive_turns %}<p class="font-semibold">Turn {{ turn.number }} · {{ turn.role }}</p><pre class="whitespace-pre-wrap">{{ turn.content }}</pre>{% endfor %}{% else %}{{ r.response }}{% endif %}</div>
+                                        <p class="text-xs font-medium text-zinc-500 mb-1">{{ 'Interactive transcript (each assistant turn is graded separately)' if r.interactive_turns else 'Response' }}</p>
+                                        <div class="bg-zinc-950 rounded p-3 text-xs text-zinc-300 max-h-64 overflow-auto scrollbar-thin whitespace-pre-wrap">{% if r.interactive_turns %}{% for turn in r.interactive_turns %}<p class="font-semibold">Turn {{ turn.number }} · {{ turn.role }}</p><pre class="whitespace-pre-wrap">{{ turn.content }}</pre>{% endfor %}{% else %}{{ r.response }}{% endif %}</div>
                                     </div>
                                 </div>
                                 <div>
-                                    <p class="text-xs font-medium text-slate-500 mb-1">Evaluation</p>
-                                    <p class="text-sm text-slate-300">{{ r.detail }}</p>
+                                    <p class="text-xs font-medium text-zinc-500 mb-1">Evaluation</p>
+                                    <p class="text-sm text-zinc-300">{{ r.detail }}</p>
                                     {% if r.evaluation %}
                                     <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                                        <span class="text-slate-500">Criterion achievement:</span>
-                                        <span class="text-slate-300">{{ '%.1f%%'|format(r.evaluation.criterion_achievement * 100) if r.evaluation.criterion_achievement is not none else 'n/a' }}</span>
-                                        <span class="text-slate-500">Contract:</span>
-                                        <span class="text-slate-300">{{ '%.1f%%'|format(r.evaluation.contract_score * 100) if r.evaluation.contract_score is not none else 'n/a' }}</span>
-                                        <span class="text-slate-500">{{ r.evaluation.criterion_count }} criteria</span>
+                                        <span class="text-zinc-500">Criterion achievement:</span>
+                                        <span class="text-zinc-300">{{ '%.1f%%'|format(r.evaluation.criterion_achievement * 100) if r.evaluation.criterion_achievement is not none else 'n/a' }}</span>
+                                        <span class="text-zinc-500">Contract:</span>
+                                        <span class="text-zinc-300">{{ '%.1f%%'|format(r.evaluation.contract_score * 100) if r.evaluation.contract_score is not none else 'n/a' }}</span>
+                                        <span class="text-zinc-500">{{ r.evaluation.criterion_count }} criteria</span>
                                     </div>
                                     <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1 text-xs">
                                         {% for criterion in r.evaluation.criteria %}
-                                        <div class="rounded px-2 py-1 {% if criterion.status == 'pass' %}bg-emerald-950/40 text-emerald-300{% elif criterion.status in ['fail', 'error'] %}bg-red-950/40 text-red-300{% else %}bg-slate-800 text-slate-400{% endif %}">
+                                        <div class="rounded px-2 py-1 {% if criterion.status == 'pass' %}bg-emerald-950/40 text-emerald-300{% elif criterion.status in ['fail', 'error'] %}bg-red-950/40 text-red-300{% else %}bg-zinc-800 text-zinc-400{% endif %}">
                                             <span class="font-mono">{{ criterion.id }}</span> · {{ criterion.status|replace('_', ' ') }}{% if criterion.reason_code %} · {{ criterion.reason_code|replace('_', ' ') }}{% endif %}
                                         </div>
                                         {% endfor %}
                                     </div>
                                     {% endif %}
                                 </div>
-                                <div class="flex items-center gap-4 text-xs text-slate-500">
+                                <div class="flex items-center gap-4 text-xs text-zinc-500">
                                     <div class="flex items-center gap-1">
                                         <span>Evaluator:</span>
-                                        <span class="font-mono text-slate-400">{{ r.evaluator }}</span>
+                                        <span class="font-mono text-zinc-400">{{ r.evaluator }}</span>
                                     </div>
                                     <div class="flex items-center gap-1">
                                         <span>Tokens:</span>
-                                        <span class="text-slate-400">{{ r.prompt_tokens }} in + {{ r.completion_tokens }} out = {{ r.prompt_tokens + r.completion_tokens }} total</span>
+                                        <span class="text-zinc-400">{{ r.prompt_tokens }} in + {{ r.completion_tokens }} out = {{ r.prompt_tokens + r.completion_tokens }} total</span>
                                     </div>
                                     <div class="flex items-center gap-1">
                                         <span>Latency:</span>
-                                        <span class="text-slate-400">
+                                        <span class="text-zinc-400">
                                             {{ ms(r.latency_ms) }}{% if r.ttft_ms %} (TTFT {{ ms(r.ttft_ms) }}){% endif %}
                                         </span>
                                     </div>
                                     <div class="flex items-center gap-1">
                                         <span>Pass bar:</span>
-                                        <span class="text-slate-400">{{ "%.0f%%"|format((r.pass_threshold or 1.0) * 100) }}</span>
+                                        <span class="text-zinc-400">{{ "%.0f%%"|format((r.pass_threshold or 1.0) * 100) }}</span>
                                     </div>
                                 </div>
                             </div>
@@ -299,7 +310,9 @@
         </div>
     </div>
 
-{% if run.status == 'completed' %}
+</div>
+</div>
+{% if run.status == 'completed' and categories %}
 <script>
     // Bar chart
     const barCtx = document.getElementById('barChart').getContext('2d');
