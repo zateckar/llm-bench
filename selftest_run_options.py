@@ -224,6 +224,34 @@ class SubmissionTests(unittest.TestCase):
         # There is no separate plan creation endpoint.
         self.assertEqual(self.client.post("/admin/plans").status_code, 405)
 
+    def test_b300_selectors_are_frozen_at_submission_and_mapping_is_optional(self):
+        self.sql("UPDATE models SET b300_metrics_model='test/model' WHERE id=1")
+        with patch.dict("os.environ", {"PROMETHEUS_B300_HOST": "smbea02n01", "PROMETHEUS_TIMESTAMP_SHIFT_SECONDS": "85"}):
+            self.assertEqual(self.post(scheduled="2099-10-03T05:00").status_code, 302)
+        row = self.sql("SELECT * FROM test_runs")[0]
+        scope = json.loads(row["metrics_config_json"])
+        self.assertEqual(scope, {"hardware": "B300", "host": "smbea02n01", "job": "vllm", "model_name": "test/model", "timestamp_shift_seconds": "85"})
+        self.sql("UPDATE models SET b300_metrics_model='different/model' WHERE id=1")
+        self.sql("UPDATE run_plans SET scheduled_at='2020-01-01T00:00:00+00:00'")
+        with patch.object(run_queue, "_spawn_benchmark") as spawn:
+            with patch.dict("os.environ", {"PROMETHEUS_B300_HOST": "other-host", "PROMETHEUS_TIMESTAMP_SHIFT_SECONDS": "0"}):
+                self.real_dispatch()
+            self.assertEqual(spawn.call_args.args[1]["_metrics_scope"], scope)
+        self.assertEqual(self.post([{"model_id": 2}], scheduled="2099-10-03T05:00").status_code, 302)
+        self.assertIsNone(json.loads(self.sql("SELECT metrics_config_json FROM test_runs WHERE model_id=2")[0]["metrics_config_json"]))
+
+    def test_model_form_persists_validates_and_can_disable_b300_mapping(self):
+        form = {"name": "fake1", "model_id": "fake", "base_url": "http://fake.invalid", "b300_metrics_model": "test/model"}
+        with patch("app.services.url_guard.validate_endpoint"):
+            response = self.client.post("/admin/models/1/edit", data=form, follow_redirects=False)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(self.sql("SELECT b300_metrics_model FROM models WHERE id=1")[0]["b300_metrics_model"], "test/model")
+            invalid = self.client.post("/admin/models/1/edit", data={**form, "b300_metrics_model": "bad\nname"}, follow_redirects=False)
+            self.assertEqual(invalid.status_code, 422)
+            self.assertEqual(self.sql("SELECT b300_metrics_model FROM models WHERE id=1")[0]["b300_metrics_model"], "test/model")
+            self.client.post("/admin/models/1/edit", data={**form, "b300_metrics_model": ""}, follow_redirects=False)
+            self.assertIsNone(self.sql("SELECT b300_metrics_model FROM models WHERE id=1")[0]["b300_metrics_model"])
+
     def test_immediate_and_scheduler_dispatch_identical_options(self):
         # Use the real dispatcher. Spawning is still a synchronous local fake.
         self.stack.enter_context(patch.object(run_queue, "dispatch_next", self.real_dispatch))

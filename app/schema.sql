@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS models (
     description TEXT,
     temperature REAL NOT NULL DEFAULT 0,
     reasoning_effort TEXT,
+    b300_metrics_model TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS test_runs (
     quality_json TEXT,
     run_options_json TEXT,                -- full start parameters, so the queue can re-dispatch a pending run
     decoding_config_json TEXT,            -- model settings captured when the run is submitted
+    metrics_config_json TEXT,             -- B300 telemetry selectors, without credentials
     plan_id INTEGER,                      -- set when the run belongs to a run_plans group
     FOREIGN KEY (model_id) REFERENCES models(id),
     FOREIGN KEY (created_by) REFERENCES users(id),

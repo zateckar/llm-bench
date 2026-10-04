@@ -365,7 +365,7 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, **sweep_options):
     validate_endpoint(model["base_url"])
     config = _build_client_config(model)
     if mode == "sweep":
-        _run_context_sweep(run_id, config, sweep_config)
+        _run_context_sweep(run_id, config, sweep_config, model.get("_metrics_scope"))
         return
     questions = load_questions() if mode != "performance" else []
     db = _connect()
@@ -420,6 +420,7 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, **sweep_options):
                 message += " " + results[0].detail
     perf_json = None
     if mode != "quality" and not message and _run_is_active(run_id):
+        telemetry = _begin_telemetry(model.get("_metrics_scope"), run_id)
         started = time.perf_counter()
         try:
             report = run_perf_suite(
@@ -430,16 +431,21 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, **sweep_options):
                 ),
                 cancelled=lambda: not _run_is_active(run_id),
             )
+            measurement_elapsed = (time.perf_counter() - started) * 1000
+            if telemetry:
+                report.telemetry = telemetry.finish()
             perf_json = json.dumps(report.to_dict())
             if not any(p.requests > p.errors for p in report.concurrency):
                 message = "No performance requests completed successfully. " + " ".join(
                     report.notes
                 )
         except Exception as error:
+            if telemetry:
+                telemetry.session.close()
             logger.exception("Performance measurement failed for run %d", run_id)
             message = f"Performance measurement failed: {error}"
         if not questions:
-            elapsed = (time.perf_counter() - started) * 1000
+            elapsed = measurement_elapsed if perf_json else (time.perf_counter() - started) * 1000
     if _run_is_active(run_id):
         _summarise_and_finish(
             run_id, results, len(questions), workers, elapsed, perf_json, message, config
@@ -474,22 +480,46 @@ def _store_sweep_cell(run_id, cell):
         db.close()
 
 
-def _run_context_sweep(run_id, client_config, sweep_config):
+def _begin_telemetry(scope, run_id):
+    if not scope:
+        return None
+    from app.benchmarking.vllm_telemetry import VllmTelemetry
+    collector = VllmTelemetry(scope, cancelled=lambda: not _run_is_active(run_id))
+    collector.begin()
+    return collector
+
+
+def _run_context_sweep(run_id, client_config, sweep_config, metrics_scope=None):
     from app.benchmarking.perf_sweep import run_sweep
 
+    telemetry = _begin_telemetry(metrics_scope, run_id)
+
+    def checkpoint(data):
+        if telemetry:
+            data["telemetry"] = telemetry.data
+        _store_sweep_checkpoint(run_id, data)
+
     started = time.perf_counter()
-    report = run_sweep(
-        client_config, sweep_config, retain_cells=False,
-        on_cell=lambda cell: _store_sweep_cell(run_id, cell),
-        checkpoint=lambda data: _store_sweep_checkpoint(run_id, data),
-        progress=lambda label, n, total: _update_progress(run_id, label, n, total, f"Resolved {n:,}/{total:,} cells", "sweep"),
-        cancelled=lambda: not _run_is_active(run_id),
-    )
+    try:
+        report = run_sweep(
+            client_config, sweep_config, retain_cells=False,
+            on_cell=lambda cell: _store_sweep_cell(run_id, cell),
+            checkpoint=checkpoint,
+            progress=lambda label, n, total: _update_progress(run_id, label, n, total, f"Resolved {n:,}/{total:,} cells", "sweep"),
+            cancelled=lambda: not _run_is_active(run_id),
+        )
+        measurement_elapsed = (time.perf_counter() - started) * 1000
+        payload = report.to_dict()
+        if telemetry:
+            payload["telemetry"] = telemetry.finish()
+    finally:
+        if telemetry:
+            telemetry.session.close()
     if _run_is_active(run_id):
         message = "" if report.successful_requests else "No complete answers were measured in the context sweep."
         _summarise_and_finish(run_id, [], 0, sweep_config.max_concurrency,
-                              (time.perf_counter() - started) * 1000,
-                              json.dumps(report.to_dict()), message, client_config)
+                              measurement_elapsed,
+                              json.dumps(payload), message, client_config)
 
 
 def _summarise_and_finish(

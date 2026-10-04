@@ -77,6 +77,8 @@ jobs:
           uv run python selftest_perf.py
           uv run python selftest_sweep.py
           uv run python selftest_telemetry.py
+          uv run python selftest_vllm_telemetry.py
+          uv run python selftest_capacity.py
           uv run python selftest_cache.py
           uv run python selftest_storage.py
 

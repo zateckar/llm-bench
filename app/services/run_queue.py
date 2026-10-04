@@ -96,7 +96,7 @@ def _try_start(run_id: int) -> bool:
     db = _connect()
     try:
         row = db.execute(
-            """SELECT tr.status, tr.run_options_json, tr.plan_id, tr.decoding_config_json, m.* FROM test_runs tr
+            """SELECT tr.status, tr.run_options_json, tr.plan_id, tr.decoding_config_json, tr.metrics_config_json, m.* FROM test_runs tr
                   JOIN models m ON m.id = tr.model_id
                 WHERE tr.id = ?""",
             (run_id,),
@@ -127,9 +127,10 @@ def _try_start(run_id: int) -> bool:
             # Scheduled for later: the tick dispatches it when due.
             return False
         model_keys = {
-            "status", "run_options_json", "plan_id", "decoding_config_json"}
+            "status", "run_options_json", "plan_id", "decoding_config_json", "metrics_config_json"}
         model = {k: row[k] for k in row.keys() if k not in model_keys}
         try:
+            model["_metrics_scope"] = json.loads(row["metrics_config_json"]) if row["metrics_config_json"] else None
             if row["decoding_config_json"]:
                 from app.services.model_settings import decoding_settings
 

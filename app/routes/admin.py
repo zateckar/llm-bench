@@ -11,6 +11,8 @@ from app.database import fetch_all, fetch_one, execute
 from app.templates_config import templates
 from app.services import run_submission
 from app.services.model_settings import decoding_settings
+from app.benchmarking.vllm_telemetry import metrics_model
+from fastapi import HTTPException
 
 router = APIRouter()
 
@@ -21,6 +23,13 @@ def _admin_required(request: Request):
     if not user or user["role"] != "admin":
         return RedirectResponse(url="/login", status_code=302)
     return user
+
+
+def _metrics_model(value):
+    try:
+        return metrics_model(value)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 # --- Admin: Run Tests ---
@@ -175,12 +184,14 @@ async def admin_create_model(
     description: str = Form(""),
     temperature: str = Form("0"),
     reasoning_effort: str = Form(""),
+    b300_metrics_model: str = Form(""),
 ):
     user = _admin_required(request)
     if isinstance(user, RedirectResponse):
         return user
 
     settings = decoding_settings(temperature, reasoning_effort)
+    metric_name = _metrics_model(b300_metrics_model)
     from app.services.url_guard import validate_endpoint, UnsafeURLError
 
     try:
@@ -196,9 +207,9 @@ async def admin_create_model(
 
     await execute(
         """INSERT INTO models
-           (name, base_url, api_key, model_id, description, temperature, reasoning_effort)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (name, base_url, api_key, model_id, description, settings["temperature"], settings["reasoning_effort"]),
+           (name, base_url, api_key, model_id, description, temperature, reasoning_effort, b300_metrics_model)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (name, base_url, api_key, model_id, description, settings["temperature"], settings["reasoning_effort"], metric_name),
     )
     return RedirectResponse(url="/admin/models", status_code=302)
 
@@ -225,6 +236,7 @@ async def admin_edit_model(
     description: str = Form(""),
     temperature: str | None = Form(None),
     reasoning_effort: str | None = Form(None),
+    b300_metrics_model: str | None = Form(None),
 ):
     user = _admin_required(request)
     if isinstance(user, RedirectResponse):
@@ -235,6 +247,7 @@ async def admin_edit_model(
         return RedirectResponse(url="/admin/models", status_code=302)
 
     posted = await request.form()
+    metric_name = _metrics_model(posted.get("b300_metrics_model", model.get("b300_metrics_model")))
     settings = decoding_settings(
         posted.get("temperature", model["temperature"]),
         posted.get("reasoning_effort", model["reasoning_effort"]),
@@ -254,6 +267,7 @@ async def admin_edit_model(
                     base_url=base_url,
                     model_id=model_id_str,
                     description=description,
+                    b300_metrics_model=metric_name,
                     **settings,
                 ),
                 "error": f"Invalid base URL: {e}",
@@ -267,10 +281,10 @@ async def admin_edit_model(
     new_model_id = model_id_str or model["model_id"]
     await execute(
         """UPDATE models SET name = ?, base_url = ?, api_key = ?, model_id = ?, description = ?,
-                            temperature = ?, reasoning_effort = ?
+                            temperature = ?, reasoning_effort = ?, b300_metrics_model = ?
            WHERE id = ?""",
         (name, base_url, new_key, new_model_id, description,
-         settings["temperature"], settings["reasoning_effort"], model_id),
+         settings["temperature"], settings["reasoning_effort"], metric_name, model_id),
     )
     return RedirectResponse(url="/admin/models", status_code=302)
 

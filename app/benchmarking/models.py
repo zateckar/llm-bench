@@ -451,6 +451,9 @@ class ConcurrencyPoint:
     output_length: LatencyStats = field(default_factory=LatencyStats)
     samples: list[dict] = field(default_factory=list)
     cache_metrics: dict = field(default_factory=dict)
+    started_at: float | None = None
+    ended_at: float | None = None
+    estimated_prompt_requests: int = 0
 
     @property
     def requests_per_sec(self):
@@ -496,6 +499,7 @@ class PerfReport:
     notes: list[str] = field(default_factory=list)
     cancelled: bool = False
     cache_reuse: list[dict] = field(default_factory=list)
+    telemetry: dict | None = None
 
     @property
     def peak_output_tokens_per_sec(self):
@@ -514,6 +518,7 @@ class PerfReport:
             "notes": self.notes,
             "cancelled": self.cancelled,
             "cache_reuse": self.cache_reuse,
+            "telemetry": self.telemetry,
             "peak_output_tokens_per_sec": self.peak_output_tokens_per_sec,
             "peak_requests_per_sec": self.peak_requests_per_sec,
         }

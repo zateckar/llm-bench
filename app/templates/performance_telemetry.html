@@ -1,0 +1,18 @@
+{% for view in performance.telemetry_views %}
+<section class="perf-section" aria-label="B300 vLLM correlation">
+    <div class="perf-section-heading"><div><h3>B300 vLLM timeline · {{ view.label }}</h3>
+        <p class="perf-caption">{{ view.scope.host }} · {{ view.scope.model_name }} · job {{ view.scope.job }} · {{ view.status }}</p></div><span class="perf-tag">Server metrics</span></div>
+    <p class="perf-footnote">All traffic for this deployment is included. Negative times show the baseline. Server rates and p95 values use rolling 60-second windows; benchmark lines show each measured phase. The saved timestamp correction aligns server samples to benchmark UTC; original source timestamps remain in JSON.</p>
+    {% if view.warnings %}<div class="perf-notices" role="note">{% for warning in view.warnings %}<p>{{ warning }}</p>{% endfor %}</div>{% endif %}
+    <p class="perf-caption">API evaluation offset: {{ view.offset }} · applied correction: {{ view.shift }} · query step: {{ view.step or 'n/a' }} seconds. Selectors and correction are captured when the run is submitted.</p>
+    {% if view.charts %}<div class="perf-chart-grid">{% for chart in view.charts %}{{ chart_panel(chart) }}{% endfor %}</div>{% endif %}
+    {% if view.rows %}<details class="perf-details"><summary>Telemetry by measurement phase <span>{{ view.phase_count }} measured phases</span></summary>
+        <div class="perf-table-wrap"><table class="perf-table"><caption>Signals to investigate <span>Server output is the mean rolling rate; queue/KV values are sampled maxima. Uncertain alignment or fewer than three queue samples leaves these summaries unavailable.</span></caption>
+            <thead><tr><th>Phase</th><th>Duration</th><th>Benchmark output</th><th>Client TTFT p95</th><th>Queue samples</th><th>Max waiting</th><th>Max KV</th><th>Server output</th><th>Signals</th></tr></thead>
+            <tbody>{% for row in view.rows %}<tr><td>{{ row.label }}</td><td>{{ row.duration }}</td><td>{{ row.client_output }}</td><td>{{ row.client_ttft }}</td><td>{{ row.samples }}</td><td>{{ row.waiting }}</td><td>{{ row.kv }}</td><td>{{ row.server_output }}</td><td>{{ row.signals }}</td></tr>{% endfor %}</tbody>
+        </table></div>{% if view.phase_count > 120 %}<p class="perf-caption">First 120 phases shown; all phase timestamps are preserved in the JSON report.</p>{% endif %}
+    </details>{% endif %}
+    {% if view.missing %}<p class="perf-caption">Unavailable series: {{ view.missing|join(', ') }}.</p>{% endif %}
+    <p class="perf-footnote">Queue growth alongside flat output suggests a serving constraint. High KV occupancy and preemptions suggest cache pressure. These measurements do not establish physical GPU utilization or a hardware bottleneck.</p>
+</section>
+{% endfor %}

@@ -10,6 +10,10 @@
 
     {% if performance.notes %}<div class="perf-notices" role="note">{% for note in performance.notes %}<p>{{ note }}</p>{% endfor %}</div>{% endif %}
 
+    {% with capacity_views = performance.capacity_views %}{% include "capacity_report.html" %}{% endwith %}
+
+    {% include "performance_telemetry.html" %}
+
     {% include "performance_sweep.html" %}
     {% if performance.cache_rows %}
     <section class="perf-section" aria-label="KV prefix cache comparison">

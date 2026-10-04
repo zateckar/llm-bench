@@ -188,9 +188,11 @@ def measure_cell(clients, concurrency, bank, config, cancelled, cache_mode="cold
         try:
             futures = [pool.submit(worker, slot) for slot in range(concurrency)]
             started = time.perf_counter()
+            started_at = time.time()
             barrier.wait()
             samples = [sample for future in futures for sample in future.result()]
             wall_ms = (time.perf_counter() - started) * 1000
+            ended_at = time.time()
         finally:
             barrier.abort()
     good = [m for m, complete in samples if complete]
@@ -213,7 +215,13 @@ def measure_cell(clients, concurrency, bank, config, cancelled, cache_mode="cold
         "errors": len(bad),
         "incomplete": len(transport_good) - len(good),
         "wall_ms": wall_ms,
+        "started_at": started_at,
+        "ended_at": ended_at,
         "latency": LatencyStats.from_samples([m.latency_ms for m in good]).to_dict(),
+        "output_tokens": scalar_stats([m.completion_tokens for m in good]),
+        "output_token_time": LatencyStats.from_samples([
+            m.output_token_time_ms for m in good if m.output_token_time_ms is not None
+        ]).to_dict(),
         "ttft": LatencyStats.from_samples([m.ttft_ms for m in transport_good]).to_dict(),
         "request_tokens_per_sec": scalar_stats(
             [m.completion_tokens * 1000 / m.latency_ms for m in good if m.latency_ms > 0]

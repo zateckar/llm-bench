@@ -141,22 +141,24 @@ def form_context(
 
 async def _insert_runs(db, prepared, user_id, plan_id):
     from app.services.model_settings import decoding_settings
+    from app.benchmarking.vllm_telemetry import metrics_scope
 
     run_ids = []
     created_at = datetime.now(timezone.utc).isoformat()
     for model_id, quality_config, options in prepared:
         model_cursor = await db.execute(
-            "SELECT temperature, reasoning_effort FROM models WHERE id = ?", (model_id,)
+            "SELECT temperature, reasoning_effort, b300_metrics_model FROM models WHERE id = ?", (model_id,)
         )
         model_settings = await model_cursor.fetchone()
         if model_settings is None:
             raise HTTPException(status_code=422, detail="Model no longer exists")
-        decoding = decoding_settings(*model_settings)
+        decoding = decoding_settings(*model_settings[:2])
+        metrics = metrics_scope({"b300_metrics_model": model_settings[2]})
         cursor = await db.execute(
             """INSERT INTO test_runs
                (model_id, status, created_by, workers, quality_config_json,
-                run_options_json, plan_id, created_at, decoding_config_json)
-               VALUES (?, 'pending', ?, ?, ?, ?, ?, ?, ?)""",
+                run_options_json, plan_id, created_at, decoding_config_json, metrics_config_json)
+               VALUES (?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 model_id,
                 user_id,
@@ -166,6 +168,7 @@ async def _insert_runs(db, prepared, user_id, plan_id):
                 plan_id,
                 created_at,
                 json.dumps(decoding),
+                json.dumps(metrics),
             ),
         )
         run_ids.append(cursor.lastrowid)

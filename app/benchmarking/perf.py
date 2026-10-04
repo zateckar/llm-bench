@@ -102,10 +102,12 @@ def _measure_level(clients, level, prompts, cancelled):
     with ThreadPoolExecutor(max_workers=level) as pool:
         futures = [pool.submit(worker, i) for i in range(level)]
         started = time.perf_counter()
+        started_at = time.time()
         barrier.wait()
         for future in futures:
             future.result()
         wall_ms = (time.perf_counter() - started) * 1000
+        ended_at = time.time()
     good = [m for m in samples if m.ok]
     bad = [m for m in samples if not m.ok]
     return ConcurrencyPoint(
@@ -123,6 +125,9 @@ def _measure_level(clients, level, prompts, cancelled):
         burst_delivery_requests=sum(m.burst_delivery for m in good),
         cached_tokens=sum(m.cached_tokens for m in good),
         cache_metrics=cache_metrics(samples, wall_ms),
+        estimated_prompt_requests=sum(m.prompt_tokens_estimated for m in good),
+        started_at=started_at,
+        ended_at=ended_at,
         output_token_time=LatencyStats.from_samples([m.output_token_time_ms for m in good]),
         chunk_gap=LatencyStats.from_samples([gap for m in good for gap in m.chunk_gaps_ms]),
         output_length=LatencyStats.from_samples([m.completion_tokens for m in good]),

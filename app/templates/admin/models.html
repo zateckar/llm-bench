@@ -23,6 +23,7 @@
                     <p class="text-sm text-zinc-400 mt-1">{{ model.model_id }}</p>
                     <p class="text-xs text-zinc-500 font-mono mt-1">{{ model.base_url }}</p>
                     <p class="text-xs text-zinc-400 mt-1">Temperature {{ model.temperature }} · Reasoning {{ model.reasoning_effort or 'provider default' }}</p>
+                    {% if model.b300_metrics_model %}<p class="text-xs text-zinc-400 mt-1">B300 vLLM telemetry · {{ model.b300_metrics_model }}</p>{% endif %}
                     {% if model.description %}
                     <p class="text-sm text-zinc-400 mt-2">{{ model.description }}</p>
                     {% endif %}
@@ -69,6 +70,7 @@
                        class="input-field">
             </div>
             {% include "admin/decoding_fields.html" %}
+            {% include "admin/metrics_fields.html" %}
             <div class="md:col-span-2">
                 <label class="block text-sm font-medium text-zinc-300 mb-1">Description (optional)</label>
                 <input type="text" name="description" placeholder="Brief description of this model"

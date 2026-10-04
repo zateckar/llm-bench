@@ -2,13 +2,15 @@
 
 import json
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 
 from app.auth import get_current_user, require_admin
 from app.database import execute_transaction, fetch_all, fetch_one
 from app.templates_config import templates
+from app.services.capacity import CapacityAssumptions, estimate_capacity
 
 logger = logging.getLogger(__name__)
 
@@ -60,16 +62,47 @@ def _parse_perf(raw: str | None) -> dict | None:
 async def performance_download(request: Request, run_id: int):
     if not await get_current_user(request):
         return RedirectResponse(url="/login", status_code=302)
-    row = await fetch_one("SELECT perf_json FROM test_runs WHERE id=?", (run_id,))
+    row = await fetch_one("""SELECT perf_json,status,duration_ms,workers,total_questions,
+        total_completion_tokens FROM test_runs WHERE id=?""", (run_id,))
     data = _parse_perf(row.get("perf_json")) if row else None
     if data is None:
         raise HTTPException(status_code=404, detail="No performance report for this run")
     from app.services.sweep_reports import hydrate_sweep
     data = await hydrate_sweep(run_id, data)
+    data["capacity_estimate"] = estimate_capacity({**row, "id": run_id, "perf": data})
     return JSONResponse(data, headers={
         "Content-Disposition": f'attachment; filename="run-{run_id}.performance.json"',
         "Cache-Control": "no-store",
     })
+
+
+@router.get("/runs/{run_id}/capacity")
+@router.get("/runs/{run_id}/capacity.json")
+@router.get("/runs/{run_id}/capacity.html")
+async def capacity_results(request: Request, run_id: int, assumptions: Annotated[CapacityAssumptions, Query()]):
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    if not 0 < run_id <= 2**63-1:
+        raise HTTPException(status_code=404, detail="Run not found")
+    run = await fetch_one("""SELECT tr.id,tr.status,tr.perf_json,tr.duration_ms,tr.workers,
+        tr.total_questions,tr.total_completion_tokens,m.name AS model_name
+        FROM test_runs tr JOIN models m ON m.id=tr.model_id WHERE tr.id=?""", (run_id,))
+    perf = _parse_perf(run.get("perf_json")) if run else None
+    if perf is None:
+        raise HTTPException(status_code=404, detail="No performance report for this run")
+    from app.services.sweep_reports import hydrate_sweep
+    run["perf"] = await hydrate_sweep(run_id, perf)
+    run["label"] = f"#{run_id} · {run['model_name']}"
+    capacity = estimate_capacity(run, assumptions)
+    if request.url.path.endswith(".json"):
+        return JSONResponse(capacity, headers={"Content-Disposition": f'attachment; filename="run-{run_id}.capacity.json"',
+                                               "Cache-Control": "no-store"})
+    offline = request.url.path.endswith(".html")
+    return templates.TemplateResponse(request, "capacity_download.html" if offline else "capacity.html", {
+        "user": user, "run_id": run_id, "capacity_views": [capacity], "offline": offline,
+        "assumptions": assumptions.model_dump(), "query_suffix": "?"+str(request.query_params) if request.query_params else "",
+    }, headers={"Cache-Control": "no-store", **({"Content-Disposition": f'attachment; filename="run-{run_id}.capacity.html"'} if offline else {})})
 
 
 @router.get("/runs")

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Serving capacity · Run #{{ run_id }}{% endblock %}
+{% block content %}
+<style>{% include "performance_styles.css" %}
+.capacity-form { display:grid; gap:16px; margin:16px 0; }
+.capacity-inputs { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:12px; }
+.capacity-inputs label { display:grid; gap:5px; color:var(--pf-muted); font-size:11px; }
+.capacity-inputs input,.capacity-inputs select { width:100%; padding:7px 9px; background:var(--pf-bg); color:var(--pf-text); border:1px solid var(--pf-line); border-radius:5px; }
+</style>
+<main class="measurement-view">
+    <header class="perf-page-heading"><div><p class="perf-eyebrow">CAPACITY PLANNING</p><h2>Serving capacity · Run #{{ run_id }}</h2><p class="perf-intro">Compare achieved rates with traffic budgets under your assumptions. Capped tests leave maximum capacity unknown.</p></div><a href="/runs/{{ run_id }}" class="btn-ghost">Benchmark results →</a></header>
+    <form class="capacity-form" method="get" action="/runs/{{ run_id }}/capacity">
+        <details class="perf-details" open><summary>Traffic and capacity assumptions</summary><div class="capacity-inputs">
+            {% for key,label,min,max,step in [('headroom_percent','Headroom (%)',0,80,1),('availability_percent','Availability (%)',1,100,0.1),('busy_hours','Busy hours / day',0.1,23.9,0.1),('busy_traffic_percent','Traffic in busy hours (%)',1,99,1),('peak_factor','Peak / busy average',1,20,0.1),('chat_mix_percent','Chat share of requests (%)',0,100,1)] %}<label>{{ label }}<input name="{{ key }}" type="number" min="{{ min }}" max="{{ max }}" step="{{ step }}" value="{{ assumptions[key] }}" required></label>{% endfor %}
+            <label>Reasoning setting<select name="effort">{% for value in ['default','none','minimal','low','medium','high','xhigh','max'] %}<option value="{{ value }}" {% if assumptions.effort == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+            <label>Prefix cache behavior<select name="cache_mode">{% for value in ['cold','warm'] %}<option value="{{ value }}" {% if assumptions.cache_mode == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+        </div></details>
+        {% for key,title in [('chat','Simple chat'),('agent','Long-context agents')] %}<details class="perf-details"><summary>{{ title }} workload and latency targets</summary><div class="capacity-inputs">
+            {% for suffix,label,min,max,step in [('context','Reference input tokens',128,1048576,1),('output','Output tokens / request',16,65536,1),('ttft_seconds','First-token p95 target (s)',0.1,1800,0.1),('response_seconds','Response p95 target (s)',0.1,3600,0.1),('stream_tokens_minute','Minimum streaming tokens/min',1,60000,1),('user_tokens_minute','Average output tokens/min/user',1,60000,1)] %}{% set name = key ~ '_' ~ suffix %}<label>{{ label }}<input name="{{ name }}" type="number" min="{{ min }}" max="{{ max }}" step="{{ step }}" value="{{ assumptions[name] }}" required></label>{% endfor %}
+        </div></details>{% endfor %}
+        <div class="flex items-center gap-3"><button class="btn-primary" type="submit">Recalculate</button><a class="btn-ghost" href="/runs/{{ run_id }}/capacity">Reset defaults</a><a class="btn-ghost" href="/runs/{{ run_id }}/capacity.json{{ query_suffix }}" download>Download JSON</a><a class="btn-ghost" href="/runs/{{ run_id }}/capacity.html{{ query_suffix }}" download>Download HTML</a></div>
+    </form>
+    {% include "capacity_report.html" %}
+</main>
+{% endblock %}

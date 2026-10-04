@@ -206,7 +206,7 @@ def svg_text(x, y, text, extra=""):
     return f'<text x="{x:g}" y="{y:g}" {extra}>{escape(text)}</text>'
 
 
-def line_chart(series, title, x_label, unit, *, percentile=False):
+def line_chart(series, title, x_label, unit, *, percentile=False, x_range=None, x_precision=0):
     """A true numeric x axis; missing observations break the line."""
     valid = [
         (x, y)
@@ -218,6 +218,8 @@ def line_chart(series, title, x_label, unit, *, percentile=False):
         return None
     xs = sorted({x for x, _ in valid})
     xmin, xmax = (0, 100) if percentile else (min(xs), max(xs))
+    if x_range is not None:
+        xmin, xmax = x_range
     maximum = max(y for _, y in valid)
     scale = (
         60_000
@@ -259,13 +261,16 @@ def line_chart(series, title, x_label, unit, *, percentile=False):
             else f"{value:g}"
         )
         parts.append(svg_text(left - 12, y + 4, label, 'text-anchor="end"'))
-    ticks = (
+    ticks = [xmin + (xmax-xmin)*i/6 for i in range(7)] if x_range is not None else (
         [0, 25, 50, 75, 100]
         if percentile
         else (xs if len(xs) <= 7 else [xs[round(i * (len(xs) - 1) / 6)] for i in range(7)])
     )
     for x in ticks:
-        parts.append(svg_text(cx(x), top + ph + 24, f"{x:,.0f}", 'text-anchor="middle"'))
+        label = f"{x:,.{x_precision}f}"
+        if x_precision:
+            label = label.rstrip("0").rstrip(".")
+        parts.append(svg_text(cx(x), top + ph + 24, label, 'text-anchor="middle"'))
     parts.append(svg_text(left + pw / 2, height - 12, x_label, 'text-anchor="middle"'))
     parts.append(svg_text(left, 14, axis_unit))
     for s in series:
@@ -376,6 +381,8 @@ def load_performance_view(run):
 
 
 def performance_view(runs, *, offline=False):
+    from app.services.telemetry_views import telemetry_view
+    from app.services.capacity import estimate_capacity
     def current_perf(run):
         raw = run["perf"]
         return raw if raw.get("schema_version") == 3 else {}
@@ -529,6 +536,8 @@ def performance_view(runs, *, offline=False):
                 })
     return {
         "cache_rows": cache_rows,
+        "capacity_views": [estimate_capacity(r) for r in runs if r.get("perf")],
+        "telemetry_views": [view for r in runs if (view := telemetry_view(r))],
         "sweep_views": sweep_views,
         "suite_rows": suite_rows,
         "load_views": [load_performance_view(r) for r in current if r["perf"]],
@@ -543,6 +552,7 @@ def performance_view(runs, *, offline=False):
 def quality_timing_view(run):
     """Model-call timings belong to quality diagnostics, independently of load tests."""
     from app.benchmarking.models import LatencyStats
+    from app.services.capacity import observed_quality
 
     results = run.get("results", [])
     good = [r for r in results if r.get("request_ok")]
@@ -632,6 +642,7 @@ def quality_timing_view(run):
     ]
     return {
         "label": run["label"],
+        "usage": observed_quality(run),
         "rows": rows,
         "chart": chart,
         "series": series,
