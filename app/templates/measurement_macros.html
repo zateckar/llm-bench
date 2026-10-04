@@ -1,0 +1,20 @@
+{% macro metrics(items) %}
+<div class="perf-metrics">
+    {% for metric in items %}
+    <div class="perf-metric">
+        <p class="perf-label">{{ metric.label }}</p>
+        <p class="perf-value">{{ metric.value }}</p>
+        <p class="perf-caption">{{ metric.detail }}</p>
+    </div>
+    {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro chart_panel(chart, show_legend=true) %}
+<article class="perf-panel">
+    <h3>{{ chart.title }}</h3>
+    {% if chart.description %}<p class="perf-caption">{{ chart.description }}</p>{% endif %}
+    <div class="perf-chart">{{ chart.svg }}</div>
+    {% if show_legend %}<div class="perf-legend">{% for series in chart.series %}<span><i style="background:{{ series.color }}"></i>{{ series.label }}</span>{% endfor %}</div>{% endif %}
+</article>
+{% endmacro %}

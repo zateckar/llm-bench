@@ -14,7 +14,7 @@
 {%- endmacro %}
 
 {% block content %}
-<div class="space-y-4" x-data="{ expandedCategories: {}, expandedQuestion: null, tab: '{{ 'performance' if perf and perf.schema_version == 4 else 'overview' }}' }">
+<div class="space-y-4" x-data="{ expandedCategories: {}, expandedQuestion: null, tab: '{{ 'performance' if run.total_questions == 0 else 'quality' }}' }">
     {% if request.query_params.get('error') == 'running' %}
     <div class="p-3 bg-amber-900/50 border border-amber-700 rounded-md text-amber-200 text-sm">
         This run is still active and cannot be deleted until it finishes.
@@ -38,18 +38,17 @@
         <div class="ml-auto flex items-center gap-3">
             <a href="/runs/{{ run.id }}/report.html" class="btn-primary" download>Download HTML</a>
             {% if run.status == 'completed' %}
-            {% if run.total_questions == 0 %}
-            <span class="badge-pass rounded px-3 py-1">Performance complete</span>
-            {% elif run.scored_questions == 0 %}
-            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-fail">No scored answers</span>
-            {% else %}
-            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-pass"
+            <span class="badge-pass rounded px-3 py-1">Completed</span>
+            {% if run.total_questions > 0 and run.scored_questions == 0 %}
+            <span x-show="tab !== 'performance'" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-fail">No scored answers</span>
+            {% elif run.total_questions > 0 %}
+            <span x-show="tab !== 'performance'" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium badge-pass"
                   title="A question passes only when it reaches its own pass threshold, so partial credit never counts as a pass.">
                 {{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }} passed · {{ "%.1f"|format(run.avg_score * 100) }}% {{ "criterion achievement" if quality and quality.schema_version == 3 else "historical average" }}
             </span>
             {% endif %}
             {% if run.error_count %}
-            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-900/50 text-amber-400"
+            <span x-show="tab !== 'performance'" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-900/50 text-amber-400"
                   title="Requests that failed at the transport layer. These are excluded from the percentages.">
                 {{ run.error_count }} request error{{ 's' if run.error_count != 1 }}
             </span>
@@ -79,11 +78,11 @@
     </div>
 
     <div class="view-tabs" role="group" aria-label="Run sections">
-        <button @click="tab = 'overview'" :class="{ 'active': tab === 'overview' }" :aria-pressed="tab === 'overview'">Overview</button>
+        <button @click="tab = 'quality'" :class="{ 'active': tab === 'quality' }" :aria-pressed="tab === 'quality'">Quality</button>
         <button @click="tab = 'performance'" :class="{ 'active': tab === 'performance' }" :aria-pressed="tab === 'performance'">Performance</button>
         <button @click="tab = 'answers'" :class="{ 'active': tab === 'answers' }" :aria-pressed="tab === 'answers'">Answers ({{ run.total_questions }})</button>
     </div>
-    <div class="space-y-4" x-show="tab === 'overview'">
+    <section class="space-y-4" x-show="tab === 'quality'" aria-label="Quality results">
     <!-- Run Info -->
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div class="card p-4">
@@ -118,8 +117,10 @@
 
     {% if quality and quality.schema_version != 3 %}<p class="text-sm text-amber-400">Historical evaluation protocol. Run the current complete suite for comparable scores.</p>{% endif %}
     {% include "quality_summary.html" %}
+    {% if not quality and not quality_timings %}<div class="card p-4"><h2 class="text-lg font-semibold">No quality results</h2><p class="text-sm text-zinc-400">This run has no recorded quality tasks.</p></div>{% endif %}
+    {% include "quality_timing_report.html" %}
 
-    </div>
+    </section>
     <div class="space-y-4" x-show="tab === 'performance'" x-cloak>
         {% set performance_json_url = '/runs/' ~ run.id ~ '/performance.json' if perf else none %}
         {% include "performance_report.html" %}

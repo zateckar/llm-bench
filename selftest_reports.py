@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app import config as app_config
-from app.routes import compare, runs
+from app.routes import compare, dashboard, runs
 from app.services import html_reports as reports
 from app.benchmarking.llm_client import ClientConfig
 from app.benchmarking.models import Question, RequestMetrics, Result, TokenUsage
@@ -176,6 +176,34 @@ class AssetParser(HTMLParser):
                 self.external.append(value)
 
 
+class ResultSectionParser(HTMLParser):
+    """Read visible text within the result sections, including nested diagnostics."""
+
+    def __init__(self):
+        super().__init__()
+        self.stack = []
+        self.text = {"Quality results": [], "Performance results": []}
+        self.ignored = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {"style", "script"}:
+            self.ignored += 1
+        if tag == "section":
+            self.stack.append(dict(attrs).get("aria-label"))
+
+    def handle_endtag(self, tag):
+        if tag in {"style", "script"}:
+            self.ignored -= 1
+        if tag == "section":
+            self.stack.pop()
+
+    def handle_data(self, data):
+        if not self.ignored:
+            for label in self.text:
+                if label in self.stack:
+                    self.text[label].append(data)
+
+
 class ReportTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -186,10 +214,11 @@ class ReportTests(unittest.TestCase):
         app = FastAPI()
         app.include_router(runs.router)
         app.include_router(compare.router)
+        app.include_router(dashboard.router)
         self.client = TestClient(app)
         self.auth = [
             patch.object(module, "get_current_user", new=AsyncMock(return_value={"id": 1}))
-            for module in (runs, compare)
+            for module in (runs, compare, dashboard)
         ]
         for p in self.auth:
             p.start()
@@ -301,8 +330,106 @@ class ReportTests(unittest.TestCase):
             for value in row["values"]:
                 self.assertIn(value, online.text)
         self.assertIn("Delivered output under load", online.text)
-        self.assertIn('aria-label="Peak aggregate output"', reports.render_report(selected))
+        self.assertIn('aria-label="Delivered output under load"', reports.render_report(selected))
         self.assertIn("/compare/report.html?runs=1&amp;runs=2", online.text)
+
+    def assert_results_separated(self, html, *, quality=True, performance=True):
+        parser = ResultSectionParser()
+        parser.feed(html)
+        quality_text = " ".join(parser.text["Quality results"])
+        performance_text = " ".join(parser.text["Performance results"])
+        if quality:
+            self.assertIn("Criterion achievement", quality_text)
+            self.assertIn("Quality-task timing diagnostics", quality_text)
+        if performance:
+            self.assertIn("Fixed-workload load test", performance_text)
+            self.assertIn("130.0 tok/s", performance_text)
+        else:
+            self.assertIn("No fixed-workload measurements", performance_text)
+        self.assertNotIn("tok/s", quality_text)
+        self.assertNotIn("Peak aggregate output", quality_text)
+        self.assertNotIn("Fixed-workload load test", quality_text)
+        self.assertNotIn("Quality-task", performance_text)
+        self.assertNotIn("Slowest categories", performance_text)
+        self.assertNotIn("Advanced Coding", performance_text)
+        self.assertNotIn("Criterion achievement", performance_text)
+        self.assertNotIn("Successful completion", html)
+
+    def test_quality_and_performance_sections_are_separate_on_all_reports(self):
+        for url in ("/runs/1", "/compare?runs=1&runs=2", "/runs/1/report.html",
+                    "/compare/report.html?runs=1&runs=2"):
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assert_results_separated(response.text)
+        html = self.client.get("/runs/1/report.html").text
+        quality_cards = html.split('aria-label="Quality results"')[0]
+        self.assertNotIn("Peak output under load", quality_cards)
+        self.assertNotIn("Question latency p50", quality_cards)
+        self.assertIn("Full task success", quality_cards)
+
+    def test_quality_only_run_keeps_timings_out_of_empty_performance_section(self):
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute("UPDATE test_runs SET perf_json=NULL WHERE id=1")
+            db.commit()
+        for url in ("/runs/1", "/runs/1/report.html"):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            self.assert_results_separated(response.text, performance=False)
+
+    def test_performance_only_run_and_comparison_have_no_quality_charts(self):
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute("DELETE FROM test_results WHERE run_id IN (1,2)")
+            db.execute("UPDATE test_runs SET quality_json=NULL,total_questions=0 WHERE id IN (1,2)")
+            db.commit()
+        for url in ("/runs/1", "/compare?runs=1&runs=2", "/runs/1/report.html",
+                    "/compare/report.html?runs=1&runs=2"):
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assert_results_separated(response.text, quality=False)
+                self.assertNotIn("Quality-task timing diagnostics", response.text)
+                self.assertNotIn("compareRadar", response.text)
+                self.assertNotIn("Return the answer as JSON.", response.text)
+                if "report.html" not in url:
+                    self.assertIn("tab: 'performance'", response.text)
+
+    def test_performance_view_is_independent_of_quality_results(self):
+        run = asyncio.run(reports.load_run(1))
+        baseline = reports.performance_view([run])
+        self.assertNotIn("request_views", baseline)
+        run["results"] = [{"category": "POISON", "request_ok": 1, "latency_ms": 999999999}]
+        run["quality"] = {"summary": {"category_balanced": 0}}
+        self.assertEqual(reports.performance_view([run]), baseline)
+        run["perf"] = {}
+        self.assertEqual(reports.performance_view([run])["load_views"], [])
+
+    def test_mixed_comparison_keeps_quality_only_and_performance_only_runs_separate(self):
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute("UPDATE test_runs SET perf_json=NULL WHERE id=1")
+            db.execute("DELETE FROM test_results WHERE run_id=2")
+            db.execute("UPDATE test_runs SET quality_json=NULL,total_questions=0 WHERE id=2")
+            db.commit()
+        for url in ("/compare?runs=1&runs=2", "/compare/report.html?runs=1&runs=2"):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            parser = ResultSectionParser()
+            parser.feed(response.text)
+            quality_text = " ".join(parser.text["Quality results"])
+            performance_text = " ".join(parser.text["Performance results"])
+            self.assertIn("Quality-task timing diagnostics", quality_text)
+            self.assertNotIn("tok/s", quality_text)
+            self.assertIn("214.5 tok/s", performance_text)
+            self.assertNotIn("Quality-task", performance_text)
+            self.assertNotIn("Advanced Coding", performance_text)
+
+    def test_run_lists_do_not_present_quality_timings_as_performance(self):
+        for url in ("/runs", "/dashboard"):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            self.assertNotIn("tok/s", response.text)
+            self.assertNotIn("Quality output rate", response.text)
+            self.assertNotIn("p50 / p95", response.text)
 
     def test_legacy_zero_missing_partial_and_invalid_json(self):
         run = asyncio.run(reports.load_run(3))
@@ -419,14 +546,14 @@ class ReportTests(unittest.TestCase):
              "detail": "stream deadline exceeded"},
             {"category": "Failed only", "request_ok": 0, "latency_ms": 950000},
         ]
-        view = reports.request_performance_view({"label": "fixture", "results": rows})
+        view = reports.quality_timing_view({"label": "fixture", "results": rows})
         self.assertEqual(view["metrics"][0]["value"], "50.0%")
         self.assertEqual(view["error_count"], 2)
         self.assertEqual(view["deadline_count"], 1)
         self.assertEqual([r["category"] for r in view["slowest"]], ["Slow", "Fast"])
         self.assertEqual(view["slowest"][0]["time_p95"], "2.00 min")
         self.assertEqual(len(view["rows"]), 3)
-        self.assertIn("Failed requests", view["chart"])
+        self.assertIn("Request error", view["chart"])
         self.assertNotIn("First delivery:", view["chart"])
         self.assertIn("First delivery:", view["delivery_chart"])
 

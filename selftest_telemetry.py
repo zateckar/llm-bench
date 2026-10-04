@@ -8,7 +8,7 @@ from app.benchmarking import perf
 from app.benchmarking.llm_client import ChatClient, ClientConfig, _StreamDeadlineExceeded, _response_lines
 from app.benchmarking.models import RequestMetrics
 from app.services.benchmark_runner import _build_client_config
-from app.services.html_reports import performance_view, request_performance_view
+from app.services.html_reports import performance_view, quality_timing_view
 from selftest_client import Response, event
 
 
@@ -92,7 +92,7 @@ class TelemetryTests(unittest.TestCase):
              "detail": "stream deadline exceeded", "ttft_ms": None},
             {"category": "Code", "request_ok": 1, "latency_ms": 1000, "ttft_ms": 50},
         ]
-        view = request_performance_view({"label": "run", "results": rows})
+        view = quality_timing_view({"label": "run", "results": rows})
         self.assertEqual(view["deadline_count"], 1)
         self.assertEqual(view["latency_p50"], "1,000.0 ms")
         self.assertEqual(view["success_rate"], "50.0%")

@@ -1,0 +1,20 @@
+{% if quality_timings %}
+{% from "measurement_macros.html" import metrics %}
+<style>{% include "performance_styles.css" %}</style>
+<div class="measurement-view quality-timings">
+    {% for view in quality_timings %}
+    <details class="perf-details"><summary>Quality-task timing diagnostics{% if quality_timings|length > 1 %} · {{ view.label }}{% endif %} <span>{{ view.count }} recorded tasks</span></summary>
+    <section class="perf-section" aria-label="Quality-task timings for {{ view.label }}">
+        <div class="perf-section-heading"><div><h3>Quality-task timings{% if quality_timings|length > 1 %} · {{ view.label }}{% endif %}</h3><p class="perf-caption">Elapsed model-call time for varied quality tasks, including retries and followups where used. Delivered responses can be wrong or incomplete. These timings diagnose this quality run; compare speed using the dedicated performance tests.</p></div><span class="perf-tag">{{ view.count }} recorded tasks</span></div>
+        {{ metrics(view.metrics) }}
+        <p class="perf-reliability {% if view.error_count %}perf-warning{% endif %}">{{ view.error_count }} request error{{ 's' if view.error_count != 1 }} <span aria-hidden="true">·</span> {{ view.deadline_count }} stream deadline{{ 's' if view.deadline_count != 1 }} exceeded. Timing percentiles cover delivered responses and exclude request errors.</p>
+        <div class="perf-chart-grid">
+            {% if view.chart %}<article class="perf-panel"><h3>Model-call time per quality task</h3><p class="perf-caption">Each curve orders its observations from fastest to slowest.</p><div class="perf-chart">{{ view.chart }}</div><div class="perf-legend">{% for series in view.completion_series %}<span><i style="background:{{ series.color }}"></i>{{ series.label }}</span>{% endfor %}</div></article>{% endif %}
+            {% if view.slowest %}<article class="perf-panel"><div class="perf-section-heading"><h3>Slowest categories</h3><span class="perf-caption">Response · p95</span></div><p class="perf-caption">Delivered responses only. Workload, model calls and output length vary by category. Small category samples give unstable tail percentiles.</p><ol class="perf-slowest">{% for row in view.slowest %}<li><div class="perf-slow-label"><span>{{ row.category }}<small>{{ row.requests }} recorded · {{ row.errors }} errors</small></span><strong>{{ row.time_p95 }}</strong></div><div class="perf-bar"><span style="width:{{ row.width }}%"></span></div></li>{% endfor %}</ol></article>{% endif %}
+        </div>
+        {% if view.delivery_chart %}<details class="perf-details"><summary>First-delivery distribution <span>Time to first content or reasoning</span></summary><div class="perf-chart-grid"><article class="perf-panel"><h3>Time to first delivery</h3><div class="perf-chart">{{ view.delivery_chart }}</div><div class="perf-legend">{% for series in view.delivery_series %}<span><i style="background:{{ series.color }}"></i>{{ series.label }}</span>{% endfor %}</div></article></div></details>{% endif %}
+        <details class="perf-details" {% if view.error_count %}open{% endif %}><summary>Timing and errors by category <span>{{ view.rows|length }} categories{% if view.error_count %} · {{ view.error_count }} request errors{% endif %}</span></summary><div class="perf-table-wrap"><table class="perf-table"><thead><tr><th scope="col">Category</th><th scope="col">Recorded tasks</th><th scope="col">Request errors</th><th scope="col">Stream deadlines</th><th scope="col">Response · p50</th><th scope="col">Response · p95</th></tr></thead><tbody>{% for row in view.rows %}<tr {% if row.errors %}class="perf-error-row"{% endif %}><th scope="row">{{ row.category }}</th><td>{{ row.requests }}</td><td>{{ row.errors }}</td><td>{{ row.deadlines }}</td><td>{{ row.time_p50 }}</td><td>{{ row.time_p95 }}</td></tr>{% endfor %}</tbody></table></div></details>
+    </section></details>
+    {% endfor %}
+</div>
+{% endif %}

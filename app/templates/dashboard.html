@@ -107,10 +107,6 @@
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-pass">
                             {{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }} passed · {{ "%.0f"|format(run.avg_score * 100) }}% average
                         </span>
-                        <p class="text-xs text-zinc-500 mt-1">
-                            {%- if run.latency_p50_ms %} &middot; p50 {{ "%.0f"|format(run.latency_p50_ms) }} ms{% endif %}
-                            {%- if run.output_tokens_per_sec %} &middot; {{ "%.0f"|format(run.output_tokens_per_sec) }} tok/s{% endif %}
-                        </p>
                         {% elif run.status == 'running' %}
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium badge-running">Running</span>
                         {% elif run.status == 'failed' %}

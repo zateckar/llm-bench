@@ -183,11 +183,11 @@ async def run_detail(request: Request, run_id: int):
             summary = quality_data["summary"]["categories"].get(category["category"])
             if summary:
                 category["avg_score"] = summary["score"]
-    from app.services.html_reports import performance_view
+    from app.services.html_reports import performance_view, quality_timing_view
 
-    performance = performance_view(
-        [{"label": f"#{run_id} · {run['model_name']}", "perf": perf_data or {}, "results": results}]
-    )
+    label = f"#{run_id} · {run['model_name']}"
+    performance = performance_view([{"label": label, "perf": perf_data or {}}])
+    quality_timings = [quality_timing_view({"label": label, "results": results})] if results else []
     return templates.TemplateResponse(
         request,
         "run_detail.html",
@@ -200,6 +200,7 @@ async def run_detail(request: Request, run_id: int):
             "transport_errors": transport_errors,
             "perf": perf_data,
             "performance": performance,
+            "quality_timings": quality_timings,
         },
     )
 

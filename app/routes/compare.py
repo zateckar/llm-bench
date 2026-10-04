@@ -5,7 +5,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.auth import get_current_user
 from app.database import fetch_all
-from app.services.html_reports import comparison_context, load_run, performance_view, render_report
+from app.services.html_reports import (
+    comparison_context, load_run, performance_view, quality_timing_view, render_report,
+)
 from app.templates_config import templates
 
 router = APIRouter()
@@ -75,6 +77,8 @@ async def compare_page(request: Request):
             "selected_runs": selected_runs,
             "selected_ids": [str(run["id"]) for run in selected_runs],
             "performance": performance_view(selected_runs),
+            "has_quality_results": any(r["results"] or r["quality"] for r in selected_runs),
+            "quality_timings": [quality_timing_view(r) for r in selected_runs if r["results"]],
             **context,
         },
     )

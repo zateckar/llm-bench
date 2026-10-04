@@ -497,7 +497,6 @@ def performance_view(runs, *, offline=False):
     revisions = {at(r["perf"], "protocol.revision") for r in current if r["perf"]}
     if len(revisions) > 1:
         notes.append("These runs use different performance revisions; compare protocols before interpreting differences.")
-    request_views = [request_performance_view(r) for r in runs if r.get("results")]
     from app.services.sweep_views import sweep_view
     sweep_views = [sweep_view(r, offline) for r in runs if r.get("perf", {}).get("schema_version") == 4
                    and r["perf"].get("kind") == "context_sweep"]
@@ -535,15 +534,14 @@ def performance_view(runs, *, offline=False):
         "load_views": [load_performance_view(r) for r in current if r["perf"]],
         "charts": charts,
         "distributions": distributions,
-        "request_views": request_views,
         "load_rows": load_rows,
         "notes": notes,
         "labels": [r["label"] for r in current],
     }
 
 
-def request_performance_view(run):
-    """Historical request timings remain separate from the controlled load suite."""
+def quality_timing_view(run):
+    """Model-call timings belong to quality diagnostics, independently of load tests."""
     from app.benchmarking.models import LatencyStats
 
     results = run.get("results", [])
@@ -575,8 +573,8 @@ def request_performance_view(run):
         )
     series = []
     for label, items, key, color in [
-        ("Successful completion", good, "latency_ms", COLORS[0]),
-        ("Failed requests", failed, "latency_ms", COLORS[2]),
+        ("Request delivered", good, "latency_ms", COLORS[0]),
+        ("Request error", failed, "latency_ms", COLORS[2]),
         ("First delivery", good, "ttft_ms", COLORS[1]),
     ]:
         values = sorted(number(r.get(key)) for r in items if number(r.get(key)) is not None)
@@ -612,19 +610,19 @@ def request_performance_view(run):
     deadlines = sum(r["deadlines"] for r in rows)
     metrics = [
         {
-            "label": "Request success",
+            "label": "Request delivery",
             "value": fmt(len(good) / len(results) if results else None, "%"),
             "detail": f"{len(good):,} / {len(results):,} recorded tasks",
         },
         {
             "label": "Typical response · p50",
             "value": duration(latency.p50),
-            "detail": "Median time to finish a successful task",
+            "detail": "Median model-call time for tasks with delivered responses",
         },
         {
             "label": "Slower responses · p95",
             "value": duration(latency.p95),
-            "detail": "95% of successful tasks finished within this time",
+            "detail": "95th percentile of model-call time for delivered responses",
         },
         {
             "label": "First delivery · p50",
@@ -657,18 +655,16 @@ def render_report(runs):
     context = comparison_context(runs)
     charts = []
     # Never silently substitute a legacy average for balanced capability.
-    for title, getter, unit in [
-        ("Criterion achievement", lambda r: at(r, "quality.summary.category_balanced"), "%"),
-        ("Peak aggregate output", lambda r: at(r, "perf.peak_output_tokens_per_sec"), "tok/s"),
-    ]:
-        svg = bar_chart(runs, getter, title, unit)
-        if svg:
-            charts.append({"title": title, "svg": svg})
+    svg = bar_chart(runs, lambda r: at(r, "quality.summary.category_balanced"),
+                    "Criterion achievement", "%")
+    if svg:
+        charts.append({"title": "Criterion achievement", "svg": svg})
     return templates.env.get_template("report_download.html").render(
         runs=runs,
         comparison=len(runs) > 1,
         has_quality_results=any(run.get("results") or run.get("quality") for run in runs),
         performance=performance_view(runs, offline=True),
+        quality_timings=[quality_timing_view(r) for r in runs if r.get("results")],
         offline=True,
         generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         overview_charts=charts,

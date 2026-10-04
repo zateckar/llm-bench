@@ -21,10 +21,8 @@
                     <th class="text-left">ID</th>
                     <th class="text-left">Model</th>
                     <th class="text-left">Status</th>
-                    <th class="text-left">Score</th>
-                    <th class="text-left">Questions</th>
-                    <th class="text-left">p50 / p95</th>
-                    <th class="text-left">Quality output rate</th>
+                    <th class="text-left">Quality score</th>
+                    <th class="text-left">Quality tasks</th>
                     <th class="text-left">Suite</th>
                     <th class="text-left">Created</th>
                     <th class="text-right">Actions</th>
@@ -72,20 +70,6 @@
                         {% if run.error_count %}
                         <span class="text-xs text-amber-400" title="Transport errors, excluded from the score">+{{ run.error_count }} err</span>
                         {% endif %}
-                        {% else %}-{% endif %}
-                    </td>
-                    <td class="text-xs text-zinc-400 whitespace-nowrap">
-                        {% if run.latency_p50_ms %}
-                        {{ "%.0f"|format(run.latency_p50_ms) }} / {{ "%.0f"|format(run.latency_p95_ms or 0) }} ms
-                        {% if (run.workers or 1) > 1 %}
-                        <span class="text-zinc-600" title="Measured with {{ run.workers }} concurrent workers, so it includes queueing">&times;{{ run.workers }}</span>
-                        {% endif %}
-                        {% else %}-{% endif %}
-                    </td>
-                    <td class="text-xs text-zinc-400 whitespace-nowrap">
-                        {% if run.output_tokens_per_sec %}
-                        {{ "%.1f"|format(run.output_tokens_per_sec) }} tok/s
-                        {% if run.perf_json %}<span class="text-violet-400" title="A dedicated performance suite was run">&#9679;</span>{% endif %}
                         {% else %}-{% endif %}
                     </td>
                     <td class="text-xs font-mono text-zinc-500 whitespace-nowrap" title="{{ run.test_suite_hash or 'N/A' }}">{{ (run.test_suite_hash or '-')[:8] }}</td>

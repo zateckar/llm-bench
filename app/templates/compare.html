@@ -2,7 +2,7 @@
 {% block title %}Compare Runs - LLM Bench{% endblock %}
 
 {% block content %}
-<div class="space-y-4" x-data="{ showResults: {{ 'true' if selected_runs|length >= 2 else 'false' }} }">
+<div class="space-y-4" x-data="{ tab: '{{ 'quality' if has_quality_results else 'performance' }}' }">
     <div>
         <h1 class="text-xl font-bold text-white">Compare Runs</h1>
         <p class="text-zinc-400 mt-1">Select 2+ completed runs to compare side-by-side</p>
@@ -14,7 +14,7 @@
         {% for run in completed_runs %}
         { "id": {{ run.id }},
           "model": {{ run.model_name|tojson }},
-          "text": {{ ('#' ~ run.id ~ ' ' ~ run.model_name ~ ' ' ~ run.model_id ~ ' ' ~ (run.avg_score * 100)|round(1) ~ '% ' ~ (run.test_suite_hash or ''))|tojson|lower }} }{% if not loop.last %},{% endif %}
+          "text": {{ ('#' ~ run.id ~ ' ' ~ run.model_name ~ ' ' ~ run.model_id ~ ' ' ~ (run.test_suite_hash or ''))|tojson|lower }} }{% if not loop.last %},{% endif %}
         {% endfor %}
         ]
     </script>
@@ -28,7 +28,7 @@
                     <span class="text-xs text-zinc-400"><span x-text="count"></span> selected</span>
                 </div>
             </div>
-            <input type="text" x-model="query" placeholder="Filter by model, id, score, hash…"
+            <input type="text" x-model="query" placeholder="Filter by model, id, hash…"
                    class="w-full bg-zinc-800 border border-zinc-600 rounded-md px-3 py-2 text-white text-sm focus:outline-hidden focus:border-blue-500">
 
             <div class="max-h-64 overflow-y-auto rounded-md border border-zinc-700 divide-y divide-zinc-800">
@@ -45,10 +45,7 @@
                         <p class="text-sm text-zinc-200 truncate">{{ run.model_name }} <span class="text-zinc-500 text-xs">({{ run.model_id }})</span></p>
                     </div>
                     <span class="text-xs text-zinc-500">{{ run.created_at[:10] if run.created_at else '' }}</span>
-                    <span class="text-sm font-medium w-14 text-right {% if run.avg_score >= 0.7 %}text-emerald-400{% elif run.avg_score >= 0.5 %}text-yellow-400{% else %}text-red-400{% endif %}">
-                        {{ "%.1f"|format(run.avg_score * 100) }}%
-                    </span>
-                    <span class="text-xs text-zinc-500 w-16 text-right">{{ run.passed_questions }}/{{ run.scored_questions if run.scored_questions is not none else run.total_questions }}</span>
+                    <span class="text-xs text-zinc-500">{% if run.total_questions %}{{ run.total_questions }} quality tasks{% else %}Performance run{% endif %}</span>
                     {% if run.test_suite_hash %}<span class="text-xs font-mono text-zinc-600">[{{ run.test_suite_hash[:8] }}]</span>{% endif %}
                 </label>
                 {% endfor %}
@@ -93,6 +90,13 @@
     <div class="flex justify-end">
         <a class="btn-primary" href="/compare/report.html?{% for run in selected_runs %}runs={{ run.id }}{% if not loop.last %}&amp;{% endif %}{% endfor %}" download>Download comparison HTML</a>
     </div>
+    <div class="view-tabs" role="group" aria-label="Comparison sections">
+        <button @click="tab = 'quality'" :class="{ 'active': tab === 'quality' }" :aria-pressed="tab === 'quality'">Quality</button>
+        <button @click="tab = 'performance'" :class="{ 'active': tab === 'performance' }" :aria-pressed="tab === 'performance'">Performance</button>
+        <button @click="tab = 'answers'" :class="{ 'active': tab === 'answers' }" :aria-pressed="tab === 'answers'">Answers</button>
+    </div>
+    <section class="space-y-4" x-show="tab === 'quality'" x-cloak aria-label="Quality results">
+    {% if has_quality_results %}
     <!-- Version mismatch warning -->
     {% set hashes = [] %}
     {% for run in selected_runs %}
@@ -194,12 +198,17 @@
         </table>
     </div>
 
+    {% include "quality_timing_report.html" %}
+    {% else %}<div class="card p-4"><h2 class="text-lg font-semibold">No quality results</h2><p class="text-sm text-zinc-400">These runs have no recorded quality tasks.</p></div>{% endif %}
+    </section>
+
     {% if performance is defined %}
-    <div>
+    <div x-show="tab === 'performance'" x-cloak>
         {% include "performance_report.html" %}
     </div>
     {% endif %}
 
+    <section class="space-y-4" x-show="tab === 'answers'" x-cloak aria-label="Quality answers">
     <!-- Per-question diff -->
     {% if comparison_data %}
     <div class="card p-4">
@@ -243,7 +252,8 @@
             {% endfor %}
         </div>
     </div>
-    {% endif %}
+    {% else %}<div class="card p-4"><p class="text-sm text-zinc-400">No quality answers recorded.</p></div>{% endif %}
+    </section>
     {% elif selected_runs|length == 1 %}
     <div class="card p-8 text-center text-zinc-500">
         <p>Please select at least 2 runs to compare.</p>
@@ -255,7 +265,7 @@
     {% endif %}
 </div>
 
-{% if selected_runs|length >= 2 %}
+{% if selected_runs|length >= 2 and has_quality_results %}
 <script>
     const ctx = document.getElementById('compareRadar').getContext('2d');
     const colors = [
