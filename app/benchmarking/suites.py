@@ -1,14 +1,18 @@
-"""Registry of separately versioned quality suites.
+"""Registry of quality suites.
 
-Each suite owns its question inventory, provenance and execution protocol.
-Suites never share fingerprints, so reports from different suites are never
-paired, and adding a suite cannot change an existing suite's identity.
+New runs use the one built-in ``standard`` suite (docs/design-consolidation.md)
+or an uploaded use-case suite. The four formerly separate built-in suites are
+retired: no longer offered, but still loadable so historical runs, reports,
+studies and comparisons keep working. Reports of different suites are never
+paired.
 """
 
 from dataclasses import dataclass
 from typing import Callable
 
-DEFAULT_SUITE = "rigorous"
+DEFAULT_SUITE = "standard"
+# Runs and reports without a stored suite name predate named suites.
+HISTORICAL_SUITE = "rigorous"
 
 
 @dataclass(frozen=True)
@@ -95,13 +99,40 @@ def _safety_language():
     )
 
 
-_FACTORIES = {"rigorous": _rigorous, "tool-conformance": _tool_conformance,
+def _standard():
+    from app.benchmarking import quality_protocol, standard_suite, tool_protocol
+    from app.benchmarking.llm_client import TOOL_CLIENT_REVISION
+
+    return SuiteDef(
+        name="standard",
+        label="Standard quality suite",
+        description="Reasoning & knowledge, tool calling & structured output, safety & language, plus "
+                    "open-ended requests answered for blind A/B studies.",
+        revision=lambda: standard_suite.REVISION,
+        load=standard_suite.load_questions,
+        provenance=standard_suite.provenance,
+        # Text tasks use the bounded protocol; tool tasks run natively.
+        execution=lambda max_tokens: {**quality_protocol.protocol(max_tokens),
+                                      "native": tool_protocol.protocol(standard_suite.REVISION)},
+        client_extra=lambda: {"native_tools": TOOL_CLIENT_REVISION},
+    )
+
+
+_FACTORIES = {"standard": _standard, "rigorous": _rigorous, "tool-conformance": _tool_conformance,
               "assistant-open": _assistant_open, "safety-language": _safety_language}
-SUITE_NAMES = tuple(_FACTORIES)
+# Offered for new runs, canaries and scorecard gates.
+SUITE_NAMES = ("standard",)
+# Merged into the standard suite; kept for historical runs only.
+RETIRED_SUITES = ("rigorous", "tool-conformance", "assistant-open", "safety-language")
+
+
+def is_builtin(name) -> bool:
+    return name in _FACTORIES
 
 
 def get_suite(name=None) -> SuiteDef:
-    key = name or DEFAULT_SUITE
+    # A missing name means a historical rigorous run, not a new default.
+    key = name or HISTORICAL_SUITE
     if key.startswith("usecase:"):
         # Uploaded suites live in the database; the key pins one version.
         from app.benchmarking.usecase_suites import suite_def
@@ -113,8 +144,8 @@ def get_suite(name=None) -> SuiteDef:
 
 
 def suite_name(report) -> str:
-    """Suite of a saved report; historical reports are rigorous-suite reports."""
-    return ((report or {}).get("suite") or {}).get("name") or DEFAULT_SUITE
+    """Suite of a saved report; reports without a name are rigorous-suite reports."""
+    return ((report or {}).get("suite") or {}).get("name") or HISTORICAL_SUITE
 
 
 def suite_choices():

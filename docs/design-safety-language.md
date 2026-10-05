@@ -2,6 +2,8 @@
 
 Status: accepted (recommended decisions), 2026-10-05. Item 8 of the evaluation roadmap.
 
+Update: the safety-language suite is now the safety & language area of the standard suite and is no longer offered on its own ([design-consolidation.md](design-consolidation.md)).
+
 ## Problem
 
 People in the company talk to the models in Czech, German, English and Slovak. Applications feed the models documents, e-mails and tool results they did not write. Several failures matter here that the capability suite does not measure:

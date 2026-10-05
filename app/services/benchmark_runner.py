@@ -351,22 +351,33 @@ def _run_benchmark(run_id, model, mode, max_concurrency, on_finish: Callable[[in
 
 
 def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, load=None, performance=None,
-                        **sweep_options):
+                        in_flight_cap=None, context_max=None, **sweep_options):
     from app.services.run_modes import normalise
     from app.services.url_guard import validate_endpoint
 
-    # Quality runs first, then the chosen performance test, into the same run.
+    # Quality runs first, then the performance test, into the same run. New
+    # runs use the staged standard test; queued runs of a former test
+    # ("fixed", "sweep", "load") still run that test.
     quality, kind = normalise(mode, performance)
     suite_def = get_suite(suite)
-    perf_config = PerfConfig(max_concurrency) if kind == "fixed" or kind is None else None
-    if kind == "load":
-        from app.benchmarking.load_workload import MAX_IN_FLIGHT, parse_settings
-        load_settings = parse_settings(load)
-        if not 1 <= max_concurrency <= MAX_IN_FLIGHT:
+    perf_config = PerfConfig(max_concurrency) if kind in ("fixed", "standard") or kind is None else None
+    if kind in ("load", "standard"):
+        from app.benchmarking.load_workload import DEFAULT_IN_FLIGHT, MAX_IN_FLIGHT, default_settings, parse_settings
+        load_settings = parse_settings(load if load is not None else default_settings())
+        if kind == "load":
+            # The former load test stored its in-flight cap as max_concurrency.
+            in_flight_cap = max_concurrency
+        in_flight_cap = DEFAULT_IN_FLIGHT if in_flight_cap is None else in_flight_cap
+        if not 1 <= in_flight_cap <= MAX_IN_FLIGHT:
             raise ValueError(f"The in-flight cap must be between 1 and {MAX_IN_FLIGHT}")
+    if kind == "standard" and context_max is not None:
+        from app.benchmarking.staged_performance import context_limit
+        context_limit(context_max)
     if kind == "sweep":
-        from app.benchmarking.perf_sweep import SweepConfig
-        sweep_config = SweepConfig(max_concurrency=max_concurrency, **sweep_options)
+        from app.benchmarking.perf_sweep import MAX_CONTEXT, SweepConfig
+        sweep_config = SweepConfig(max_concurrency=max_concurrency,
+                                   context_max=MAX_CONTEXT if context_max is None else context_max,
+                                   **sweep_options)
     workers = min(QUALITY_WORKERS, max_concurrency)
     db = _connect()
     try:
@@ -390,7 +401,14 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, load=N
         _run_context_sweep(run_id, config, sweep_config, model.get("_metrics_scope"))
         return
     if not quality and kind == "load":
-        _run_open_loop(run_id, config, load_settings, max_concurrency, model.get("_metrics_scope"))
+        _run_open_loop(run_id, config, load_settings, in_flight_cap, model.get("_metrics_scope"))
+        return
+    if not quality and kind == "standard":
+        measured = _measure_staged(run_id, config, perf_config, load_settings, in_flight_cap, context_max,
+                                   model.get("_metrics_scope"))
+        if _run_is_active(run_id):
+            perf_json, message, elapsed = measured
+            _summarise_and_finish(run_id, [], 0, workers, elapsed, perf_json, message, config)
         return
     if not quality:
         questions = []
@@ -451,13 +469,16 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, load=N
             if results:
                 message += " " + results[0].detail
     perf_json = None
-    if kind in ("sweep", "load") and not message and _run_is_active(run_id):
+    if kind in ("standard", "sweep", "load") and not message and _run_is_active(run_id):
         try:
-            if kind == "sweep":
+            if kind == "standard":
+                perf_json, message, _ = _measure_staged(run_id, config, perf_config, load_settings,
+                                                        in_flight_cap, context_max, model.get("_metrics_scope"))
+            elif kind == "sweep":
                 perf_json, message, _ = _measure_context_sweep(run_id, config, sweep_config,
                                                                model.get("_metrics_scope"))
             else:
-                perf_json, message, _ = _measure_open_loop(run_id, config, load_settings, max_concurrency,
+                perf_json, message, _ = _measure_open_loop(run_id, config, load_settings, in_flight_cap,
                                                            model.get("_metrics_scope"))
         except Exception as error:
             # Keep the quality results; the performance part failed.
@@ -620,6 +641,131 @@ def _measure_open_loop(run_id, client_config, settings, in_flight_cap, metrics_s
     completed = sum(step["completed"] for step in report.steps)
     message = "" if completed else (report.stop_reason or "No open-loop request completed.")
     return json.dumps(payload, separators=(",", ":")), message, measurement_elapsed
+
+
+def _declared_context(run_id):
+    """Context limit the deployment declared in this run's snapshot, or None."""
+    db = _connect()
+    try:
+        row = db.execute("""SELECT snapshot_json FROM deployment_checks WHERE run_id=? AND ok=1
+                            ORDER BY id DESC LIMIT 1""", (run_id,)).fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    finally:
+        db.close()
+    try:
+        snapshot = json.loads(row[0]) if row else {}
+    except (TypeError, ValueError):
+        return None
+    served = ((snapshot if isinstance(snapshot, dict) else {}).get("hard") or {}).get("served") or {}
+    value = served.get("max_model_len") if isinstance(served, dict) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _measure_staged(run_id, client_config, perf_config, load_settings, in_flight_cap, context_max=None,
+                    metrics_scope=None):
+    """Run the standard performance test's three stages into one report.
+
+    Returns ``(perf_json, error message, elapsed ms)``. The report is saved
+    after every stage and while the context and capacity stages progress. A
+    failing stage does not stop the next one unless nothing succeeded in it
+    (docs/design-consolidation.md)."""
+    from app.benchmarking import staged_performance as staged
+    from app.benchmarking.load_test import run_load_test
+    from app.benchmarking.perf_sweep import SweepConfig, run_sweep
+
+    limit, source = staged.context_limit_for(_declared_context(run_id), context_max)
+    effort = staged.context_effort(client_config.reasoning_effort)
+    sweep_config = SweepConfig(context_max=limit, max_concurrency=1, sweep_rounds=1,
+                               sweep_output_tokens=staged.CONTEXT_OUTPUT_TOKENS,
+                               context_lengths=staged.contexts_for(limit), effort_list=(effort,))
+    report = staged.new_report(client_config.model, {
+        "latency": {"levels": list(perf_config.levels), "max_concurrency": perf_config.max_concurrency},
+        "context": {"contexts": list(sweep_config.contexts), "limit": limit, "limit_source": source,
+                    "effort": effort, "concurrency": 1, "max_output_tokens": staged.CONTEXT_OUTPUT_TOKENS},
+        "capacity": {"preset": load_settings.preset, "rates": list(load_settings.rates),
+                     "step_seconds": load_settings.step_seconds, "in_flight_cap": in_flight_cap},
+    })
+    cancelled = lambda: not _run_is_active(run_id)  # noqa: E731
+
+    def save():
+        _store_sweep_checkpoint(run_id, report)
+
+    def progress(stage, phase, unit):
+        label = staged.STAGE_LABELS[stage]
+        return lambda item, n, total: _update_progress(
+            run_id, f"{label} · {item}", n, total, f"{label} stage · {unit} {n:,}/{total:,}", phase)
+
+    def latency(telemetry):
+        result = run_perf_suite(client_config, perf_config, progress=progress("latency", "perf", "requests"),
+                                cancelled=cancelled)
+        if telemetry:
+            result.telemetry = telemetry.finish()
+        ok = any(p.requests > p.errors for p in result.concurrency)
+        return result.to_dict(), ok, "" if ok else " ".join(
+            ["No latency-stage request completed successfully.", *result.notes])
+
+    def context(telemetry):
+        def checkpoint(data):
+            if telemetry:
+                data["telemetry"] = telemetry.data
+            report["stages"]["context"] = data
+            save()
+
+        result = run_sweep(client_config, sweep_config, retain_cells=False,
+                           on_cell=lambda cell: _store_sweep_cell(run_id, cell), checkpoint=checkpoint,
+                           progress=progress("context", "sweep", "resolved cells"), cancelled=cancelled)
+        data = result.to_dict()
+        if telemetry:
+            data["telemetry"] = telemetry.finish()
+        ok = bool(result.successful_requests)
+        return data, ok, result.stop_error or ("" if ok else "No complete answers were measured in the context stage.")
+
+    def capacity(telemetry):
+        def on_step(result):
+            report["stages"]["capacity"] = result.to_dict()
+            save()
+
+        result = run_load_test(client_config, load_settings, in_flight_cap,
+                               progress=progress("capacity", "load", "expected arrivals"),
+                               cancelled=cancelled, on_step=on_step)
+        if telemetry:
+            result.telemetry = telemetry.finish()
+        ok = any(step["completed"] for step in result.steps)
+        return result.to_dict(), ok, "" if ok else (result.stop_reason or "No capacity-stage request completed.")
+
+    started = time.perf_counter()
+    message = ""
+    for key, measure in (("latency", latency), ("context", context), ("capacity", capacity)):
+        if cancelled():
+            break
+        report["running_stage"] = key
+        save()
+        telemetry = _begin_telemetry(metrics_scope, run_id)
+        try:
+            data, ok, error = measure(telemetry)
+            report["stages"][key] = data
+        except Exception as exc:
+            # A crash in one stage says nothing about the endpoint; the next stage still runs.
+            logger.exception("%s stage failed for run %d", staged.STAGE_LABELS[key], run_id)
+            ok, error = None, f"{exc}"
+        finally:
+            if telemetry:
+                telemetry.session.close()
+        if error:
+            error = f"{staged.STAGE_LABELS[key]} stage: {error}"
+            report["stage_errors"][key] = error
+            message = message or error
+        if ok is False and not cancelled():
+            # Nothing succeeded: the endpoint is down, so later stages would only fail too.
+            report["notes"].append(f"Stopped after the {staged.STAGE_LABELS[key].lower()} stage: "
+                                   "no request succeeded.")
+            break
+    report["cancelled"] = cancelled()
+    report["finished"] = not report["cancelled"] and all(key in report["stages"] for key in staged.STAGE_KEYS)
+    report["running_stage"] = report["running_stage"] if report["cancelled"] else None
+    _sanitize_sweep_errors(report)
+    return json.dumps(report, separators=(",", ":")), message, (time.perf_counter() - started) * 1000
 
 
 def _summarise_and_finish(

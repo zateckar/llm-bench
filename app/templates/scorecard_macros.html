@@ -70,7 +70,7 @@
 <script>
 function gateEditor(initial, options) {
     let uid = 0;
-    const defaults = () => ({uid: ++uid, type: 'quality', suite: (options.suites[0] || {}).key || 'rigorous', metric: 'score',
+    const defaults = () => ({uid: ++uid, type: 'quality', suite: (options.suites[0] || {}).key || 'standard', metric: 'score',
                               category: '', pct: 70, workload: (options.workloads[0] || {}).key || 'chat',
                               threshold: '', concurrency: 1});
     return {

@@ -181,6 +181,9 @@ def summarize(rows):
             "outcomes": dict(Counter(r["outcome"] for r in open_ended)),
             "categories": sorted({r["category"] for r in open_ended}),
         }
+    areas = area_summary(rows)
+    if areas:
+        extra["areas"] = areas
     return {
         "count": len(rows),
         "total": len(rows),
@@ -227,6 +230,38 @@ def summarize(rows):
         },
         **extra,
     }
+
+
+def area_summary(rows):
+    """Per-area results of the standard suite (docs/design-consolidation.md, decision 2).
+
+    Reported next to the headline score, never instead of it. Empty unless the
+    rows span more than one area."""
+    from app.benchmarking.standard_suite import AREAS, area_of
+
+    by_area = defaultdict(list)
+    for row in rows:
+        area = area_of(row["metadata"])
+        if area:
+            by_area[area].append(row)
+    if len(by_area) < 2:
+        return {}
+    out = {}
+    for key, label, _, graded in AREAS:
+        items = by_area.get(key)
+        if not items:
+            continue
+        usable = [r for r in items if r["scored"]]
+        capability = [r for r in usable if r["scope"] == "capability"]
+        out[key] = {
+            "label": label, "graded": graded, "count": len(items), "scored": len(usable),
+            "passes": sum(r["passed"] for r in usable),
+            "categories": len({r["category"] for r in items}),
+            "score": balanced(clusters(capability)) if graded else None,
+            "full_pass_rate": balanced(clusters(capability, "passed")) if graded else None,
+            "recorded": sum(r["outcome"] == "recorded" for r in items),
+        }
+    return out
 
 
 def _failed_criteria(row):

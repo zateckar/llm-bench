@@ -9,6 +9,13 @@
 .measurement-view .perf-intro { margin-top:7px; color:var(--pf-muted); font-size:13px; }
 .measurement-view .perf-download { white-space:nowrap; gap:14px; }
 .measurement-view .perf-section { margin-top:24px; }
+.measurement-view .perf-stage-nav { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-bottom:8px; }
+.measurement-view .perf-stage-chip { display:flex; align-items:center; gap:10px; padding:12px 14px; border:1px solid var(--pf-line); border-radius:10px; background:var(--pf-bg); color:var(--pf-text); font-weight:600; text-decoration:none; }
+.measurement-view .perf-stage-chip span { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:#2563eb; color:#fff; font-size:11px; }
+.measurement-view .perf-stage-chip small { margin-left:auto; color:var(--pf-muted); font-weight:400; font-size:11px; }
+.measurement-view .perf-stage-chip-empty span { background:var(--pf-muted); }
+.measurement-view .perf-stage { margin-top:32px; padding-top:24px; border-top:1px solid var(--pf-line); }
+.measurement-view .perf-stage-heading h3 { font-size:18px; }
 .measurement-view .perf-section-heading { display:flex; justify-content:space-between; align-items:start; gap:16px; margin-bottom:16px; }
 .measurement-view h3 { color:var(--pf-text); font-size:15px; font-weight:600; line-height:1.4; letter-spacing:-.15px; }
 .measurement-view .perf-caption { color:var(--pf-muted); font-size:12px; line-height:1.6; margin-top:4px; }

@@ -1,19 +1,22 @@
-"""What a run measures: quality, performance or both (docs/design-run-modes.md).
+"""What a run measures: quality, performance or both.
 
-``mode`` says what runs; ``performance`` says which performance test runs. A
-fixed workload is implicit, so historical option snapshots stay identical.
-The former performance-only modes ``sweep`` and ``load`` are still accepted:
-queued runs, saved plans and API callers keep working.
+``mode`` says what runs; ``performance`` names the performance test. New runs
+use the one staged ``standard`` test (docs/design-consolidation.md). The
+former tests ``fixed``, ``sweep`` and ``load`` and the former modes ``sweep``
+and ``load`` still describe historical and already queued runs; a stored
+performance run without a ``performance`` key is a historical fixed workload.
 """
 
 MODES = ("quality", "performance", "both")
-PERFORMANCE_KINDS = ("fixed", "sweep", "load")
+LEGACY_KINDS = ("fixed", "sweep", "load")
+PERFORMANCE_KINDS = ("standard", *LEGACY_KINDS)
 LEGACY_MODES = ("sweep", "load")
-PERFORMANCE_LABELS = {"fixed": "Fixed workload", "sweep": "Context & reasoning sweep", "load": "Open-loop load"}
+PERFORMANCE_LABELS = {"standard": "Performance · latency, context, capacity", "fixed": "Fixed workload",
+                      "sweep": "Context & reasoning sweep", "load": "Open-loop load"}
 
 
 def normalise(mode="both", performance=None):
-    """``(runs quality, performance kind or None)`` for current and legacy options.
+    """``(runs quality, performance kind or None)`` for current and stored options.
 
     Raises ValueError for unknown or contradictory values."""
     if mode in LEGACY_MODES:
@@ -29,7 +32,7 @@ def normalise(mode="both", performance=None):
     if performance is None:
         performance = "fixed"
     if not isinstance(performance, str) or performance not in PERFORMANCE_KINDS:
-        raise ValueError("Choose a fixed workload, a context sweep or an open-loop load test")
+        raise ValueError("Unknown performance test")
     return mode == "both", performance
 
 
@@ -46,7 +49,7 @@ def describe(run_options_json):
     """Label for a stored run, with the quality suite's name; None without stored options."""
     import json
 
-    from app.benchmarking.suites import DEFAULT_SUITE
+    from app.benchmarking.suites import HISTORICAL_SUITE
     from app.services.scorecard import suite_label
 
     try:
@@ -55,11 +58,11 @@ def describe(run_options_json):
         return None
     if not isinstance(options, dict):
         return None
-    return label(options, suite_label(options.get("suite") or DEFAULT_SUITE))
+    return label(options, suite_label(options.get("suite") or HISTORICAL_SUITE))
 
 
 def label(options, suite_label=None):
-    """Short description such as ``Quality · rigorous + Open-loop load``."""
+    """Short description such as ``Quality · Standard quality suite + Performance · …``."""
     quality, kind = parts(options)
     items = []
     if quality:

@@ -70,7 +70,9 @@ def validate_report(run, report):
     if (any(not isinstance(row["fingerprint"], str) or len(row["fingerprint"]) != 64
             or any(char not in "0123456789abcdef" for char in row["fingerprint"])
             or not all(isinstance(row[key], str) and row[key] for key in ("id", "category", "family", "scope", "outcome"))
-            or row["scope"] not in {"capability", "compliance"}
+            or row["scope"] not in {"capability", "compliance", "open_ended"}
+            # Open-ended answers (standard suite) are recorded, never scored.
+            or (row["scope"] == "open_ended" and row["scored"])
             or type(row["scored"]) is not bool or type(row["passed"]) is not bool
             or (row["passed"] and not row["scored"])
             or (row["passed"] != (row["outcome"] == "pass")) for row in rows)
@@ -143,7 +145,8 @@ def analyze_runs(runs, *, suite_hash=None, run_ids=None):
         family_rows = defaultdict(list)
         run_summaries = []
         for entry in entries:
-            rows = entry["report"]["results"]
+            # Unscored open-ended answers have no verdict to calibrate.
+            rows = [row for row in entry["report"]["results"] if row["scope"] != "open_ended"]
             run_summaries.append({
                 "run_id": entry["id"], "model_id": entry["model_id"],
                 "model_name": entry["model_name"], "model": entry["report"].get("model"),

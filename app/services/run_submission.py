@@ -11,60 +11,74 @@ from app.benchmarking.perf import DEFAULT_MAX_CONCURRENCY, MAX_CONCURRENCY, Perf
 from app.benchmarking.load_workload import (
     DEFAULT_IN_FLIGHT, MAX_IN_FLIGHT, PRESET_LABELS, PRESETS, default_settings, error_text, parse_settings,
 )
-from app.benchmarking.perf_sweep import SweepConfig
-from app.benchmarking.quality_suite import QUALITY_WORKERS, load_questions, provenance
-from app.benchmarking.suites import DEFAULT_SUITE, SUITE_NAMES, get_suite, suite_choices
+from app.benchmarking import staged_performance
+from app.benchmarking.quality_suite import QUALITY_WORKERS
+from app.benchmarking.suites import DEFAULT_SUITE, RETIRED_SUITES, SUITE_NAMES, get_suite, suite_choices
 from app.benchmarking.usecase_suites import is_key as is_usecase_key
 
 MAX_REPEATS = 10
 MAX_PLAN_RUNS = 50
 
 
-def make_run_options(*, mode="both", performance=None, max_concurrency=DEFAULT_MAX_CONCURRENCY,
-                     context_max=1_048_576, sweep_rounds=1, sweep_output_tokens=8192,
-                     suite=DEFAULT_SUITE, load=None):
-    """Canonical options: ``mode`` (quality, performance, both) plus the performance test.
+def _integer(raw):
+    if isinstance(raw, bool):
+        raise ValueError("Benchmark settings must be integers")
+    value = int(raw)
+    if str(value) != str(raw).strip():
+        raise ValueError("Benchmark settings must be integers")
+    return value
 
-    The legacy modes ``sweep`` and ``load`` are normalised to performance runs."""
+
+def make_run_options(*, mode="both", performance=None, max_concurrency=DEFAULT_MAX_CONCURRENCY,
+                     context_max=None, sweep_rounds=None, sweep_output_tokens=None,
+                     suite=DEFAULT_SUITE, load=None, in_flight_cap=None):
+    """Canonical options of a new run (docs/design-consolidation.md).
+
+    ``mode`` is quality, performance or both. Quality runs store their suite;
+    performance runs store the standard staged test with its stage settings:
+    ``max_concurrency`` (latency stage, also capping quality workers),
+    ``context_max`` (optional context-stage limit), ``load`` and
+    ``in_flight_cap`` (capacity stage). Legacy performance kinds and modes are
+    mapped to the standard test, keeping compatible settings; the legacy sweep
+    settings ``sweep_rounds`` and ``sweep_output_tokens`` are accepted and ignored."""
+    requested = performance
+    if requested is None and mode in ("performance", "both"):
+        requested = "standard"
     try:
-        quality, kind = run_modes.normalise(mode, performance)
+        quality, kind = run_modes.normalise(mode, requested)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     mode = "both" if quality and kind else "quality" if quality else "performance"
     if not isinstance(suite, str) or not (suite in SUITE_NAMES or is_usecase_key(suite)):
-        raise HTTPException(status_code=422, detail="Choose a known quality suite")
+        detail = ("This suite is now part of the standard quality suite" if suite in RETIRED_SUITES
+                  else "Choose a known quality suite")
+        raise HTTPException(status_code=422, detail=detail)
     if suite != DEFAULT_SUITE and not quality:
         raise HTTPException(status_code=422, detail="A quality suite applies only to quality runs")
-
-    def integer(raw):
-        if isinstance(raw, bool):
-            raise ValueError("Sweep settings must be integers")
-        value = int(raw)
-        if str(value) != str(raw).strip():
-            raise ValueError("Benchmark settings must be integers")
-        return value
-
     options = {"mode": mode}
     try:
-        value = integer(max_concurrency)
-        options["max_concurrency"] = value
         if kind == "load":
-            if not 1 <= value <= MAX_IN_FLIGHT:
+            # The legacy load test's concurrency was its in-flight cap.
+            in_flight_cap = max_concurrency if in_flight_cap is None else in_flight_cap
+            max_concurrency = DEFAULT_MAX_CONCURRENCY
+        elif kind == "sweep" and _integer(max_concurrency) > MAX_CONCURRENCY:
+            # A sweep's concurrency does not fit the latency stage.
+            max_concurrency = DEFAULT_MAX_CONCURRENCY
+        options["max_concurrency"] = _integer(max_concurrency)
+        PerfConfig(options["max_concurrency"])
+        if quality:
+            options["suite"] = suite
+        if kind:
+            options["performance"] = "standard"
+            cap = DEFAULT_IN_FLIGHT if in_flight_cap is None else _integer(in_flight_cap)
+            if not 1 <= cap <= MAX_IN_FLIGHT:
                 raise ValueError(f"The in-flight cap must be between 1 and {MAX_IN_FLIGHT}")
-            settings = parse_settings(load if load is not None else default_settings())
-            options.update(performance=kind, load=settings.model_dump())
-        elif kind == "sweep":
-            config = SweepConfig(integer(context_max), value, integer(sweep_rounds), integer(sweep_output_tokens))
-            options.update(performance=kind, context_max=config.context_max, sweep_rounds=config.sweep_rounds,
-                           sweep_output_tokens=config.sweep_output_tokens)
-        else:
-            PerfConfig(value)
+            options["in_flight_cap"] = cap
+            if context_max is not None:
+                options["context_max"] = staged_performance.context_limit(_integer(context_max))
+            options["load"] = parse_settings(load if load is not None else default_settings()).model_dump()
     except (TypeError, ValueError) as error:
         raise HTTPException(status_code=422, detail=error_text(error)) from error
-    # The default suite and the fixed workload are implicit so historical
-    # option snapshots stay identical.
-    if suite != DEFAULT_SUITE:
-        options["suite"] = suite
     return options
 
 
@@ -73,20 +87,23 @@ def spec_defaults():
 
 
 def spec_from_run(run):
-    """Reuse supported settings; historical runs always use the current suite.
+    """Reuse supported settings with the current suite and performance test.
 
-    A member of a repeat group yields the whole group's specification."""
+    Runs of a retired built-in suite rerun the standard suite. A member of a
+    repeat group yields the whole group's specification."""
     try:
         previous = json.loads(run.get("run_options_json") or "{}")
+        suite = previous.get("suite") or DEFAULT_SUITE
+        if suite in RETIRED_SUITES:
+            suite = DEFAULT_SUITE
         options = make_run_options(
             mode=previous.get("mode", "both"),
             performance=previous.get("performance"),
             max_concurrency=previous.get("max_concurrency", DEFAULT_MAX_CONCURRENCY),
-            context_max=previous.get("context_max", 1_048_576),
-            sweep_rounds=previous.get("sweep_rounds", 1),
-            sweep_output_tokens=previous.get("sweep_output_tokens", 8192),
-            suite=previous.get("suite", DEFAULT_SUITE),
+            context_max=previous.get("context_max"),
+            suite=suite,
             load=previous.get("load"),
+            in_flight_cap=previous.get("in_flight_cap"),
         )
     except (ValueError, TypeError, AttributeError, HTTPException):
         options = make_run_options()
@@ -122,10 +139,12 @@ def _repeats(raw, index):
 
 
 def quality_config_for(options):
-    suite = get_suite(options.get("suite"))
-    if suite.name == DEFAULT_SUITE:
-        return provenance()
+    suite = get_suite(options.get("suite") or DEFAULT_SUITE)
     return {**suite.provenance(), "name": suite.name}
+
+
+PERFORMANCE_SETTINGS = {"context_max", "load", "in_flight_cap"}
+LEGACY_SETTINGS = {"sweep_rounds", "sweep_output_tokens"}
 
 
 async def validated_specs(raw: str) -> list[tuple[int, dict, dict, int]]:
@@ -137,8 +156,8 @@ async def validated_specs(raw: str) -> list[tuple[int, dict, dict, int]]:
         raise HTTPException(status_code=422, detail=f"Submit between 1 and {MAX_PLAN_RUNS} runs")
     models = {model["id"] for model in await fetch_all("SELECT id FROM models")}
     prepared = []
-    allowed = set(spec_defaults()) | {"performance", "context_max", "sweep_rounds", "sweep_output_tokens",
-                                      "suite", "repeats", "load"}
+    allowed = {"model_id", "mode", "performance", "max_concurrency", "suite", "repeats",
+               *PERFORMANCE_SETTINGS, *LEGACY_SETTINGS}
     for index, spec in enumerate(specs, 1):
         if not isinstance(spec, dict):
             raise HTTPException(status_code=422, detail=f"Run {index} is malformed")
@@ -153,23 +172,18 @@ async def validated_specs(raw: str) -> list[tuple[int, dict, dict, int]]:
         unknown = set(spec) - allowed
         if unknown:
             raise HTTPException(status_code=422, detail=f"Run {index} has unsupported settings")
-        try:
-            _, kind = run_modes.normalise(spec.get("mode", "both"), spec.get("performance"))
-        except ValueError as error:
-            raise HTTPException(status_code=422, detail=f"Run {index}: {error}") from error
-        if kind != "sweep" and set(spec) & {"context_max", "sweep_rounds", "sweep_output_tokens"}:
-            raise HTTPException(status_code=422, detail=f"Run {index}: context sweep settings require the context sweep")
-        if kind != "load" and "load" in spec:
-            raise HTTPException(status_code=422, detail=f"Run {index}: load settings require open-loop load")
+        mode = spec.get("mode", "both")
+        if mode == "quality" and set(spec) & (PERFORMANCE_SETTINGS | LEGACY_SETTINGS):
+            raise HTTPException(status_code=422,
+                                detail=f"Run {index}: performance settings require a performance run")
         options = make_run_options(
-            mode=spec.get("mode", "both"),
+            mode=mode,
             performance=spec.get("performance"),
             max_concurrency=spec.get("max_concurrency", DEFAULT_MAX_CONCURRENCY),
-            context_max=spec.get("context_max", 1_048_576),
-            sweep_rounds=spec.get("sweep_rounds", 1),
-            sweep_output_tokens=spec.get("sweep_output_tokens", 8192),
+            context_max=spec.get("context_max"),
             suite=spec.get("suite", DEFAULT_SUITE),
             load=spec.get("load"),
+            in_flight_cap=spec.get("in_flight_cap"),
         )
         prepared.append((model_id, options, _repeats(spec.get("repeats"), index)))
     if sum(repeats for _, _, repeats in prepared) > MAX_PLAN_RUNS:
@@ -211,19 +225,15 @@ def form_context(
     heading="Run benchmark",
     submit_label="Run benchmark",
 ):
-    try:
-        question_count, suite_error = len(load_questions()), None
-    except Exception as error:
-        question_count, suite_error = 0, str(error)
     from app.benchmarking import usecase_suites
 
-    suites = []
-    for choice in suite_choices():
-        try:
-            count = question_count if choice["name"] == DEFAULT_SUITE else len(get_suite(choice["name"]).load())
-        except Exception:
-            count = None
-        suites.append({**choice, "questions": count})
+    try:
+        standard, suite_error = get_suite(DEFAULT_SUITE).provenance(), None
+    except Exception as error:
+        standard, suite_error = {"questions": 0, "areas": []}, str(error)
+    question_count = standard["questions"]
+    suites = [{**choice, "questions": question_count if choice["name"] == DEFAULT_SUITE else None}
+              for choice in suite_choices()]
     suites.extend(usecase_suites.choice(row) for row in usecase_suites.latest_versions())
     # Edited plans keep a pinned older (or archived) version selectable.
     for spec in specs or []:
@@ -235,6 +245,8 @@ def form_context(
     return {
         "models": models,
         "question_count": question_count,
+        "standard_areas": standard["areas"],
+        "stages": staged_performance.form_info(),
         "suite_error": suite_error,
         "suites": suites,
         "max_repeats": MAX_REPEATS,

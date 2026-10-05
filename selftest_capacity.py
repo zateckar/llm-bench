@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from app.routes import runs
 from app.services.capacity import REVISION, CapacityAssumptions, daily_budget, estimate_capacity
-from app.services.html_reports import performance_view
+from app.services.html_reports import staged_view
 from app.templates_config import templates
 
 
@@ -203,7 +203,7 @@ class CapacityRouteTests(unittest.TestCase):
         self.assertEqual(benchmark["capacity_estimate"]["revision"], REVISION)
 
     def test_capacity_is_embedded_in_shared_performance_report(self):
-        view = performance_view([self.data], offline=True)
+        view = staged_view([self.data], offline=True)
         html = templates.get_template("performance_report.html").render(performance=view, offline=True)
         self.assertIn("Serving capacity", html)
         self.assertIn("Active users @ tested rate", html)

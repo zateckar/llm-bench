@@ -117,6 +117,35 @@ async def _apply_migrations(db: aiosqlite.Connection) -> None:
               SET created_at = COALESCE(started_at, completed_at)
             WHERE created_at IS NULL"""
     )
+    await _migrate_retired_suites(db)
+
+
+async def _migrate_retired_suites(db: aiosqlite.Connection) -> None:
+    """Move canaries and scorecard gates off retired built-in suites (docs/design-consolidation.md).
+
+    A migrated canary's baseline is cleared: a run of the old suite is not
+    comparable with a run of the standard suite."""
+    from app.benchmarking.suites import DEFAULT_SUITE, RETIRED_SUITES
+
+    marks = ",".join("?" * len(RETIRED_SUITES))
+    await db.execute(f"UPDATE canaries SET suite = ?, baseline_run_id = NULL WHERE suite IN ({marks})",
+                     (DEFAULT_SUITE, *RETIRED_SUITES))
+    cursor = await db.execute("SELECT id, gates_json FROM decision_profiles")
+    for profile_id, raw in await cursor.fetchall():
+        try:
+            gates = json.loads(raw or "[]")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(gates, list):
+            continue
+        changed = False
+        for gate in gates:
+            if isinstance(gate, dict) and gate.get("type") == "quality" and gate.get("suite") in RETIRED_SUITES:
+                gate["suite"] = DEFAULT_SUITE
+                changed = True
+        if changed:
+            await db.execute("UPDATE decision_profiles SET gates_json = ? WHERE id = ?",
+                             (json.dumps(gates), profile_id))
 
 
 async def get_db() -> aiosqlite.Connection:

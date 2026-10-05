@@ -555,18 +555,15 @@ class SweepStorageTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn('aria-label="Measurement"', response.text)
             self.assertIn("sweepExplorer", response.text)
-        options = run_submission.spec_from_run(
-            {
-                "model_id": 1,
-                "run_options_json": json.dumps(
-                    run_submission.make_run_options(mode="sweep", max_concurrency=256)
-                ),
-            }
-        )
-        self.assertEqual(options["context_max"], 1048576)
-        for kwargs in ({"context_max": 1048577}, {"sweep_rounds": True}):
+        # Rerunning a former sweep runs the standard test and keeps its context maximum.
+        legacy = {"mode": "sweep", "max_concurrency": 256, "context_max": 1048576,
+                  "sweep_rounds": 1, "sweep_output_tokens": 8192}
+        options = run_submission.spec_from_run({"model_id": 1, "run_options_json": json.dumps(legacy)})
+        self.assertEqual((options["mode"], options["performance"], options["context_max"], options["max_concurrency"]),
+                         ("performance", "standard", 1048576, 8))
+        for kwargs in ({"context_max": 1048577}, {"context_max": 255}, {"context_max": True}):
             with self.assertRaises(HTTPException):
-                run_submission.make_run_options(mode="sweep", **kwargs)
+                run_submission.make_run_options(mode="performance", **kwargs)
 
     def test_stop_guards_checkpoints_cells_and_retains_saved_results(self):
         report = sweep.SweepReport("fixture", {"contexts": [256], "concurrencies": [1]}).to_dict()

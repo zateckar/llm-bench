@@ -28,11 +28,23 @@ MODEL = {
 }
 
 
+def slim(options):
+    """Stored options without the capacity stage's (default) workload settings."""
+    return {key: value for key, value in options.items() if key != "load"}
+
+
+# The standard performance test's stored settings (docs/design-consolidation.md).
+PERF = {"performance": "standard", "in_flight_cap": 256}
+
+
 class OptionsTests(unittest.TestCase):
     def test_only_two_benchmark_settings(self):
-        self.assertEqual(run_submission.make_run_options(), {"mode": "both", "max_concurrency": 8})
+        options = run_submission.make_run_options()
+        self.assertEqual(slim(options), {"mode": "both", "max_concurrency": 8, "suite": "standard", **PERF})
+        self.assertEqual(options["load"]["preset"], "mixed")
         self.assertEqual(
-            set(run_submission.spec_defaults()), {"model_id", "mode", "max_concurrency"}
+            set(run_submission.spec_defaults()),
+            {"model_id", "mode", "max_concurrency", "suite", "performance", "in_flight_cap", "load"},
         )
         for mode, maximum in [
             ("v6", 8),
@@ -62,7 +74,8 @@ class OptionsTests(unittest.TestCase):
         categories, error = load_tests_from_yaml()
         self.assertIsNone(error)
         rows = [row for items in categories.values() for row in items]
-        self.assertEqual(len(rows), 323)
+        # The browser shows the whole standard suite.
+        self.assertEqual(len(rows), 495)
         self.assertEqual(sum(r["evaluator"] == "interactive_state" for r in rows), 20)
         self.assertEqual(sum(r["evaluator"] == "behavioral_reconstruction" for r in rows), 8)
 
@@ -95,7 +108,7 @@ class OptionsTests(unittest.TestCase):
                     '[{"model_id":"1","mode":"both","max_concurrency":5}]'
                 )
             )
-        self.assertEqual(prepared[0][2], {"mode": "both", "max_concurrency": 5})
+        self.assertEqual(slim(prepared[0][2]), {"mode": "both", "max_concurrency": 5, "suite": "standard", **PERF})
         self.assertEqual(
             run_submission.parse_browser_local("2026-10-03T05:00", "-120"),
             "2026-10-03T03:00:00+00:00",
@@ -194,7 +207,7 @@ class SubmissionTests(unittest.TestCase):
         page = self.client.get("/admin/run")
         self.assertEqual(page.status_code, 200)
         self.assertIn('action="/admin/run"', page.text)
-        self.assertIn("323 questions", page.text)
+        self.assertIn("standard suite of 495 tasks", page.text)
         for word in (
             "Question limit",
             "Quality profile",
@@ -203,13 +216,13 @@ class SubmissionTests(unittest.TestCase):
             "Create Plan",
         ):
             self.assertNotIn(word, page.text)
-        # Quality and performance are chosen independently; the performance
-        # test is one of the fixed workload, the sweep and open-loop load.
-        self.assertIn('<option value="load">Open-loop load · SLO capacity</option>', page.text)
+        # Quality and performance are chosen independently; there is one
+        # performance test, and its settings are folded under Advanced.
+        self.assertNotIn('<option value="load">', page.text)
         self.post(scheduled="2099-10-03T05:00")
         editor = self.client.get("/admin/plans/1/edit")
         self.assertEqual(editor.status_code, 200)
-        for word in ("Maximum concurrency", "> Quality</label>", "> Performance</label>", "Performance test",
+        for word in ("Maximum concurrency", "> Quality</label>", "> Performance</label>", "Advanced settings",
                      "Add another run"):
             self.assertIn(word, page.text)
             self.assertIn(word, editor.text)
@@ -291,7 +304,10 @@ class SubmissionTests(unittest.TestCase):
                     run_queue.dispatch_next()
                     self.assertEqual(self.started[-2][2], self.started[-1][2])
                     self.assertEqual(
-                        self.started[-1][2], {"mode": mode, "max_concurrency": maximum}
+                        slim(self.started[-1][2]),
+                        {"mode": mode, "max_concurrency": maximum,
+                         **({"suite": "standard"} if mode != "performance" else {}),
+                         **(PERF if mode != "quality" else {})},
                     )
                     self.sql(
                         "UPDATE test_runs SET status = 'completed' WHERE id = ?", (future["id"],)
@@ -370,7 +386,7 @@ class SubmissionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         repeated = self.sql("SELECT * FROM test_runs ORDER BY id DESC LIMIT 1")[0]
         self.assertEqual(
-            json.loads(repeated["run_options_json"]), {"mode": "quality", "max_concurrency": 3}
+            json.loads(repeated["run_options_json"]), {"mode": "quality", "max_concurrency": 3, "suite": "standard"}
         )
         self.assertIsNotNone(repeated["plan_id"])
         self.assertIsNone(
@@ -395,7 +411,7 @@ class SubmissionTests(unittest.TestCase):
         edited = self.sql("SELECT * FROM test_runs WHERE plan_id = 1")[0]
         self.assertEqual((edited["model_id"], edited["workers"]), (2, 4))
         self.assertEqual(
-            json.loads(edited["run_options_json"]), {"mode": "performance", "max_concurrency": 5}
+            slim(json.loads(edited["run_options_json"])), {"mode": "performance", "max_concurrency": 5, **PERF}
         )
         self.assertIsNone(
             self.sql("SELECT scheduled_at FROM run_plans WHERE id = 1")[0]["scheduled_at"]
@@ -404,7 +420,7 @@ class SubmissionTests(unittest.TestCase):
     def test_repeat_groups_and_suites_round_trip(self):
         specs = [
             {"model_id": 1, "mode": "quality", "max_concurrency": 3,
-             "suite": "tool-conformance", "repeats": 3},
+             "suite": "standard", "repeats": 3},
             {"model_id": 2, "mode": "quality", "max_concurrency": 3},
         ]
         self.assertEqual(self.post(specs, scheduled="2099-10-03T05:00").status_code, 302)
@@ -419,13 +435,15 @@ class SubmissionTests(unittest.TestCase):
         self.assertEqual([json.loads(r["decoding_config_json"]).get("seed") for r in group[1:]], [1, 2])
         for row in group:
             self.assertEqual(json.loads(row["run_options_json"]),
-                             {"mode": "quality", "max_concurrency": 3, "suite": "tool-conformance"})
-            self.assertEqual(json.loads(row["quality_config_json"])["name"], "tool-conformance")
+                             {"mode": "quality", "max_concurrency": 3, "suite": "standard"})
+            self.assertEqual(json.loads(row["quality_config_json"])["name"], "standard")
         single = rows[3]
         self.assertEqual((single["repeat_group_id"], single["repeat_index"], single["repeat_count"]),
                          (None, None, None))
-        self.assertEqual(json.loads(single["run_options_json"]), {"mode": "quality", "max_concurrency": 3})
-        self.assertNotIn("name", json.loads(single["quality_config_json"]))
+        # New runs store the suite explicitly, also when it is the default.
+        self.assertEqual(json.loads(single["run_options_json"]),
+                         {"mode": "quality", "max_concurrency": 3, "suite": "standard"})
+        self.assertEqual(json.loads(single["quality_config_json"])["name"], "standard")
 
         # The dispatcher hands each member its own seed and the suite option.
         self.stack.enter_context(patch.object(run_queue, "dispatch_next", self.real_dispatch))
@@ -435,8 +453,7 @@ class SubmissionTests(unittest.TestCase):
             self.sql("UPDATE test_runs SET status = 'completed' WHERE id = ?", (row["id"],))
             run_queue.on_run_finished(row["id"])
         self.assertEqual(self.seeds, [0, 1, 2, 0])
-        self.assertEqual([s[2].get("suite") for s in self.started],
-                         ["tool-conformance"] * 3 + [None])
+        self.assertEqual([s[2].get("suite") for s in self.started], ["standard"] * 4)
 
         # Editing and cloning collapse the group back into one specification.
         self.assertEqual(self.client.post("/admin/plans/1/clone", follow_redirects=False).status_code, 302)
@@ -462,6 +479,9 @@ class SubmissionTests(unittest.TestCase):
             [{"model_id": 1, "repeats": 1.5}],
             [{"model_id": 1, "suite": "nope"}],
             [{"model_id": 1, "mode": "performance", "suite": "tool-conformance"}],
+            # Retired built-in suites are part of the standard suite now.
+            [{"model_id": 1, "mode": "quality", "suite": "tool-conformance"}],
+            [{"model_id": 1, "mode": "quality", "suite": "rigorous"}],
             [{"model_id": 1, "repeats": 10}] * 6,
         ]
         for specs in invalid:
@@ -472,7 +492,8 @@ class SubmissionTests(unittest.TestCase):
                                    scheduled="2099-10-03T05:00").status_code, 302)
         self.assertEqual(len(self.sql("SELECT * FROM test_runs")), 50)
         page = self.client.get("/admin/run")
-        self.assertIn("Tool-calling &amp; structured-output conformance", page.text)
+        self.assertIn("Standard quality suite", page.text)
+        self.assertNotIn("Tool-calling &amp; structured-output conformance", page.text)
 
     def test_creation_and_replacement_roll_back_all_rows(self):
         prepared = asyncio.run(run_submission.validated_specs(json.dumps([{"model_id": 1}])))

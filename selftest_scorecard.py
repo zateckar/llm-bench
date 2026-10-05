@@ -165,7 +165,8 @@ class DatabaseCase(unittest.TestCase):
                                       run_options_json, scored_questions, repeat_group_id, canary_id)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (model_id, status, when, when, when, pack_text(json.dumps(quality)) if quality else None,
-             pack_text(json.dumps(perf)) if perf else None, json.dumps(options or {"mode": "quality"}),
+             pack_text(json.dumps(perf)) if perf else None,
+             json.dumps(options or {"mode": "quality", "suite": "standard"}),
              scored if scored is not None else (quality["summary"]["scored"] if quality else 0),
              group, canary)).lastrowid
         if group == 0:
@@ -199,22 +200,23 @@ class EvidenceTests(DatabaseCase):
         latest = self.add_run(1, report(half), days_ago=3)
         self.add_run(1, report(True), status="failed", days_ago=2)
         self.add_run(1, report(True), scored=0, days_ago=2)
+        # Runs of retired built-in suites, including historical runs without a suite, are not columns.
         self.add_run(1, report(True), options={"mode": "quality", "suite": "assistant-open"})
-        canary = self.add_run(1, report(True), options={"mode": "quality", "suite": "tool-conformance"}, canary=None)
+        self.add_run(1, report(True), options={"mode": "quality", "suite": "tool-conformance"})
+        self.add_run(1, report(True), options={"mode": "quality"})
         e = self.evidence(1)
-        self.assertEqual(set(e["quality"]), {"rigorous", "tool-conformance"})
-        q = e["quality"]["rigorous"]
+        self.assertEqual(set(e["quality"]), {"standard"})
+        q = e["quality"]["standard"]
         self.assertEqual((q["run_id"], q["score"], q["runs"]), (latest, 0.5, 1))
         self.assertEqual(q["categories"]["Cat0"], {"score": 0.5, "full_pass": 0.5})
-        self.assertEqual(e["quality"]["tool-conformance"]["run_id"], canary)
         self.assertEqual(q["freshness"], "unverified")
-        self.assertEqual(self.collect()["suites"][0], {"key": "rigorous", "label": "Rigorous capability suite"})
+        self.assertEqual(self.collect()["suites"], [{"key": "standard", "label": "Standard quality suite"}])
 
     def test_repeat_group(self):
         first = self.add_run(2, report(True), group=0, days_ago=3)
         self.add_run(2, report(half), group=first, days_ago=2)
         self.add_run(2, None, group=first, status="failed", days_ago=1)
-        q = self.evidence(2)["quality"]["rigorous"]
+        q = self.evidence(2)["quality"]["standard"]
         self.assertEqual((q["group_id"], q["runs"], q["score"]), (first, 2, 0.75))
         self.assertIsNotNone(q["score_ci95"])
         self.assertEqual(q["run_id"], first + 1)
@@ -222,19 +224,19 @@ class EvidenceTests(DatabaseCase):
     def test_freshness_and_age(self):
         current = self.add_run(1, report(True), days_ago=2)
         self.check(1, "f1", run_id=current, days_ago=2)
-        self.assertEqual(self.evidence(1)["quality"]["rigorous"]["freshness"], "current")
+        self.assertEqual(self.evidence(1)["quality"]["standard"]["freshness"], "current")
         self.check(1, "f2", changed="deployment", days_ago=1)
-        self.assertEqual(self.evidence(1)["quality"]["rigorous"]["freshness"], "stale")
+        self.assertEqual(self.evidence(1)["quality"]["standard"]["freshness"], "stale")
         self.check(1, "f1", changed="deployment")  # rolled back: the run's deployment is served again
         e = self.evidence(1)
-        self.assertEqual((e["quality"]["rigorous"]["freshness"], e["fingerprint"]), ("current", "f1"))
+        self.assertEqual((e["quality"]["standard"]["freshness"], e["fingerprint"]), ("current", "f1"))
 
         old = self.add_run(2, report(True), days_ago=200)
         self.check(2, "g2", changed="deployment", days_ago=100)
-        q = self.evidence(2)["quality"]["rigorous"]
+        q = self.evidence(2)["quality"]["standard"]
         self.assertEqual((q["run_id"], q["freshness"], q["old"], q["age_days"]), (old, "stale", True, 200))
         self.add_run(3, report(True), days_ago=120)
-        q = self.evidence(3)["quality"]["rigorous"]
+        q = self.evidence(3)["quality"]["standard"]
         self.assertEqual((q["freshness"], q["old"]), ("unverified", True))
 
     def test_performance_evidence(self):
@@ -282,7 +284,7 @@ class TieTests(DatabaseCase):
         self.add_run(1, report(True))
         self.add_run(2, report(lambda c, f: not (c == 0 and f == 0)))
         self.add_run(3, report(False))
-        marks = scorecard.ties(self.collect(), "rigorous")
+        marks = scorecard.ties(self.collect(), "standard")
         self.assertEqual(marks[1], {"mark": "leader"})
         self.assertEqual(marks[2]["mark"], "tied")
         self.assertEqual(marks[3]["mark"], "below")
@@ -290,18 +292,18 @@ class TieTests(DatabaseCase):
         self.assertLess(marks[3]["difference"], 0)
 
         self.add_run(3, report(True, temperature=0.7))
-        marks = scorecard.ties(self.collect(), "rigorous")
+        marks = scorecard.ties(self.collect(), "standard")
         self.assertEqual((marks[1]["mark"], marks[3]["mark"]), ("leader", "not_comparable"))
         self.assertIn("decoding", marks[3]["reason"])
         self.check(1, "new", changed="deployment")
-        marks = scorecard.ties(self.collect(), "rigorous")
+        marks = scorecard.ties(self.collect(), "standard")
         self.assertEqual(marks[1], {"mark": "stale"})
         self.assertEqual(marks[3]["mark"], "leader")  # 1.0 achievement, alphabetically after the stale leader
         self.assertEqual(scorecard.ties(self.collect(), "tool-conformance"), {})
 
 
 class ProfileTests(DatabaseCase):
-    GATES = [{"type": "quality", "suite": "rigorous", "threshold": 0.7}, {"type": "operations"}]
+    GATES = [{"type": "quality", "suite": "standard", "threshold": 0.7}, {"type": "operations"}]
 
     def test_profiles_and_decisions(self):
         for fields, needle in (({"name": ""}, "name"), ({"gates": "nope"}, "JSON"),
@@ -318,7 +320,7 @@ class ProfileTests(DatabaseCase):
         rows = scorecard.evaluate_profile(profile, self.collect())
         self.assertEqual([(r["model"]["name"], r["evaluation"]["verdict"]) for r in rows],
                          [("alpha", "meets"), ("gamma", "incomplete"), ("beta", "fails")])
-        self.assertEqual(scorecard.gate_labels(profile), ["Rigorous capability suite: achievement ≥ 70%",
+        self.assertEqual(scorecard.gate_labels(profile), ["Standard quality suite: achievement ≥ 70%",
                                                           "No open monitoring alert and every canary ok"])
         overview = scorecard.profile_overview(self.collect())
         self.assertEqual((overview[0]["counts"], overview[0]["meeting"]),
@@ -339,7 +341,7 @@ class ProfileTests(DatabaseCase):
         self.assertEqual((snapshot["verdict"], snapshot["results"][0]["run_id"], snapshot["results"][0]["value"]),
                          ("meets", run_id, 1.0))
         self.assertEqual((records[0]["fingerprint"], records[0]["revision"]), ("f1", decision_gates.REVISION))
-        self.assertEqual(snapshot["requirements"][0], "Rigorous capability suite: achievement ≥ 70%")
+        self.assertEqual(snapshot["requirements"][0], "Standard quality suite: achievement ≥ 70%")
         self.assertEqual(len(scorecard.decisions(model_id=2)), 0)
 
         scorecard.update_profile(profile_id, name="Chat v2", description="", gates=self.GATES[:1])
@@ -380,9 +382,9 @@ class PageTests(DatabaseCase):
         self.add_run(1, perf=closed_loop(), options={"mode": "performance"})
         self.add_run(1, perf=open_loop(), options={"mode": "load"})
         page = self.client.get("/scorecard").text
-        for text in ("Rigorous capability suite", "Chat", "100.0%", "50.0%", "400 ms", "Create one", "unverified"):
+        for text in ("Standard quality suite", "Chat", "100.0%", "50.0%", "400 ms", "Create one", "unverified"):
             self.assertIn(text, page)
-        ties = self.client.get("/scorecard/ties", params={"suite": "rigorous"}).json()
+        ties = self.client.get("/scorecard/ties", params={"suite": "standard"}).json()
         self.assertEqual((ties["1"]["mark"], ties["2"]["mark"]), ("leader", "below"))
 
         created = self.client.post("/scorecard/profiles", data={"name": "Coding agents", "description": "",
@@ -392,7 +394,7 @@ class PageTests(DatabaseCase):
         bad = self.client.post("/scorecard/profiles", data={"name": "x", "gates": "[]"}, follow_redirects=False)
         self.assertIn("error=A%20profile%20needs", bad.headers["location"])
         profile_page = self.client.get("/scorecard/profiles/1").text
-        for text in ("Coding agents", "Rigorous capability suite: achievement ≥ 70%", "meets", "does not meet",
+        for text in ("Coding agents", "Standard quality suite: achievement ≥ 70%", "meets", "does not meet",
                      "Record a decision", "Edit profile"):
             self.assertIn(text, profile_page)
         decided = self.client.post("/scorecard/profiles/1/decisions",
@@ -406,7 +408,7 @@ class PageTests(DatabaseCase):
         self.assertEqual(self.client.get("/scorecard/models/99").status_code, 404)
         exported = self.client.get("/scorecard.json").json()
         self.assertEqual(exported["profiles"][0]["models"][0]["evaluation"]["verdict"], "meets")
-        self.assertEqual(exported["ties"]["rigorous"]["1"]["mark"], "leader")
+        self.assertEqual(exported["ties"]["standard"]["1"]["mark"], "leader")
         profile_json = self.client.get("/scorecard/profiles/1/export.json").json()
         self.assertEqual((profile_json["kind"], profile_json["decisions"][0]["note"]), ("decision_profile", "Best fit"))
         dashboard = self.client.get("/dashboard").text

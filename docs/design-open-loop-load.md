@@ -2,7 +2,7 @@
 
 Status: accepted (recommended decisions), 2026-10-05. Item 5 of the evaluation roadmap.
 
-Update: open-loop load is now a *performance test* and can follow a quality suite in the same run. It is stored as `mode: "performance"` or `"both"` with `performance: "load"`, and `mode: "load"` is still accepted. See [design-run-modes.md](design-run-modes.md).
+Update: open-loop load is now the capacity stage of the standard performance test ([design-consolidation.md](design-consolidation.md)). `performance: "load"` and `mode: "load"` are still accepted and map to the staged test.
 
 ## Problem
 

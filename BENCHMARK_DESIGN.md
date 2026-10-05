@@ -845,3 +845,32 @@ No report schema, evaluator, suite or comparison protocol changed; the rigorous 
   - keeping quality and checkpointed steps after a performance failure;
   - unchanged performance-only dispatch.
 - **Pages:** the run list, run detail, progress page and form.
+
+## 2026-10-05 one quality suite and one staged performance test
+
+The full design is in [docs/design-consolidation.md](docs/design-consolidation.md). It supersedes the choice of performance test above.
+
+**Quality.** The four built-in suites are merged into one **standard suite** (`standard-v1`, 495 tasks). Its areas are reasoning & knowledge (rigorous-v15, 323), tool calling & structured output (tool-conformance-v1, 96), safety & language (safety-language-v1, 46) and open-ended requests (assistant-open-v1, 30, recorded and unscored). The area of each task comes from its `metadata.cohort`.
+- No question changed, so every fingerprint is unchanged. The reasoning area still hashes to `7909c6325d1abd7b`, and the union hashes to `f1749d172c3aa657`.
+- The headline stays category-balanced over all 43 scored categories. A `summary.areas` breakdown reports each area next to it; weighting areas equally would give 46 safety tasks a third of the score.
+- Execution dispatches per task: the bounded text protocol or `native-tools-v1`. The suite's protocol identity is new, so standard runs never pair with runs of the former suites.
+- The former suites stay loadable for history but are no longer offered or accepted. "Run again" runs the standard suite. Canaries and decision-profile gates on them are migrated to `standard` at start-up; a migrated canary loses its baseline.
+- Use-case suites are unchanged.
+
+**Performance.** `standard-performance-v1` runs latency (fixed workload, concurrency 1–8), context (the sweep engine with explicit lengths, one worker, the configured effort, 4,096 output tokens, up to the declared `max_model_len` − 4,608, else 131,072) and capacity (open-loop, mixed workload) into one schema-6 report with `kind: "staged"`.
+- Each stage keeps its engine and schema inside `stages`, so its existing view renders it, and historical single-kind reports appear as the matching stage.
+- The report is checkpointed after every stage and within the context and capacity stages.
+- A stage with no successful request stops the test. A stage that raises does not stop the next one, and the first stage error becomes the run's message.
+- The capacity estimate is computed once per run from all stages. The scorecard takes latency, context and capacity evidence from one staged run.
+
+**Settings.** The form asks for a model and Quality / Performance / both. Concurrency, the context override and the capacity workload sit in a collapsed **Advanced** section. Legacy `performance` kinds and modes map to the staged test with compatible settings; runs already queued with an old kind still run their old test.
+
+No evaluator, evaluator version, question or measurement engine changed. `selftest_consolidation.py` covers:
+- the union, its areas and hashes;
+- the area summary;
+- context-limit and ladder rules;
+- the new sweep options;
+- the staged runner against fake endpoints: all three stages, the declared limit and the override, a crashing stage, an endpoint outage, and quality followed by stages with areas;
+- stage-aligned views, the HTML report, capacity, hydration and stopping;
+- scorecard evidence;
+- the start-up migration.

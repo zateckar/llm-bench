@@ -1,69 +1,28 @@
-{% from "measurement_macros.html" import metrics, chart_panel %}
-
+{# `performance` is html_reports.staged_view: the stages of the standard performance test. #}
 <style>{% include "performance_styles.css" %}</style>
 <section class="measurement-view performance-page" aria-label="Performance results">
     <header class="perf-page-heading">
-        <div><p class="perf-eyebrow">MEASURED PERFORMANCE</p><h2>Speed, load &amp; reliability</h2>
-        <p class="perf-intro">Explore first-token latency, whole-answer time and output speed across context, load and reasoning settings.</p></div>
+        <div><p class="perf-eyebrow">MEASURED PERFORMANCE</p><h2>Latency, context &amp; capacity</h2>
+        <p class="perf-intro">The standard performance test runs three stages in order: latency at increasing concurrency, latency as the input grows to the usable context, and sustainable arrival rate under SLOs.</p></div>
         {% if performance_json_url %}<a class="btn-ghost perf-download" href="{{ performance_json_url }}" download>Download JSON <span aria-hidden="true">↓</span></a>{% endif %}
     </header>
 
     {% if performance.notes %}<div class="perf-notices" role="note">{% for note in performance.notes %}<p>{{ note }}</p>{% endfor %}</div>{% endif %}
 
-    {% include "performance_load.html" %}
+    {% if performance.measured %}
+    <nav class="perf-stage-nav" aria-label="Performance stages">{% for stage in performance.stages %}<a href="#perf-stage-{{ stage.key }}" class="perf-stage-chip{% if not stage.view %} perf-stage-chip-empty{% endif %}"><span>{{ loop.index }}</span>{{ stage.label }}<small>{% if stage.view %}{{ stage.runs|length }}/{{ performance.labels|length }} measured{% else %}not measured{% endif %}</small></a>{% endfor %}</nav>
 
-    {% include "performance_comparison.html" %}
+    {% for stage in performance.stages %}
+    <section class="perf-stage" id="perf-stage-{{ stage.key }}" aria-label="{{ stage.label }} stage">
+        <div class="perf-stage-heading"><p class="perf-eyebrow">STAGE {{ loop.index }} OF {{ performance.stages|length }}</p><h3>{{ stage.label }}</h3><p class="perf-caption">{{ stage.description }}</p>
+            {% if stage.view and stage.missing %}<p class="perf-caption">Not measured in {{ stage.missing|join(', ') }}.</p>{% endif %}</div>
+        {% if stage.view %}{% with performance = stage.view %}{% include "performance_stage.html" %}{% endwith %}
+        {% else %}<div class="perf-empty"><h3>Not measured</h3><p>{% if performance.labels|length > 1 %}None of these runs measured this stage.{% else %}This run did not measure this stage.{% endif %}</p></div>{% endif %}
+    </section>
+    {% endfor %}
 
     {% with capacity_views = performance.capacity_views %}{% include "capacity_report.html" %}{% endwith %}
-
-    {% include "performance_telemetry.html" %}
-
-    {% include "performance_sweep.html" %}
-    {% if performance.cache_rows %}
-    <section class="perf-section" aria-label="KV prefix cache comparison">
-        <div class="perf-section-heading"><div><h3>KV prefix cache comparison</h3><p class="perf-caption">Cold unique prefixes and warm shared prefixes at the same context length and load. Warm requests change their suffix after an untimed priming request.</p></div></div>
-        <div class="perf-table-wrap"><table class="perf-table"><caption>Prefill, reuse &amp; decode <span>Per-request rate proxies and TTFT are medians; output throughput uses the whole measurement wall time.</span></caption>
-            <thead><tr><th>Run / effort</th><th>Context</th><th>Concurrency</th><th>Prefix</th><th>Cache hit</th><th>Cache reporting</th><th>First delivery</th><th>Uncached prefill</th><th>Effective input</th><th>Decode</th><th>Aggregate output</th><th>Requests / errors</th></tr></thead>
-            <tbody>{% for row in performance.cache_rows %}<tr><td>{{ row.run }} · {{ row.effort }}</td><td>{{ row.context }}</td><td>{{ row.concurrency }}</td><td>{{ row.mode }} · {{ row.status }}</td><td>{{ row.hit }}</td><td>{{ row.coverage }}</td><td>{{ row.ttft }}</td><td>{{ row.prefill }}</td><td>{{ row.effective }}</td><td>{{ row.decode }}</td><td>{{ row.output }}</td><td>{{ row.requests }} / {{ row.errors }}</td></tr>{% endfor %}</tbody>
-        </table></div>
-        <p class="perf-footnote">Cache hit means provider-reported cached prompt tokens divided by reported input tokens. Missing telemetry is n/a. Uncached prefill uses new prompt tokens / TTFT; effective input includes reused tokens. TTFT includes queue, network and first-token generation. Decode uses reported output minus one / first-to-last delivery span, excluding bursts and estimated counts. These are client timing proxies. KV prefix reuse saves repeated prefill computation; compare measured decode and throughput separately.</p>
-    </section>
-    {% elif performance.load_rows or performance.sweep_views %}<p class="perf-footnote">This report has no paired KV prefix cache measurements. Run the current performance protocol to compare cold and warm long contexts.</p>{% endif %}
-    {% if not performance.sweep_views and not offline %}<div class="perf-sweep-intro"><div><h3>Context &amp; reasoning sweep</h3><p class="perf-caption">Measure 256 to 1,048,576 input tokens in 65,536-token steps with a 32,768-token anchor, concurrency 1 to 256 in steps of 16, and every accepted reasoning effort.</p></div><a href="/admin/run?mode=sweep" class="btn-ghost">New context sweep →</a></div>{% endif %}
-
-    {% if performance.load_rows %}
-    <section class="perf-section" aria-label="Fixed-workload load test">
-        <div class="perf-section-heading"><div><h3>Fixed-workload load test</h3><p class="perf-caption">The same reference workload at each load level. Peaks are the highest observed within the tested range.</p></div><span class="perf-tag">Controlled workload</span></div>
-        {% for view in performance.load_views %}
-        <div class="perf-load-summary">
-            {% if performance.labels|length > 1 %}<h4 class="perf-run-label">{{ view.label }}</h4>{% endif %}
-            {{ metrics(view.metrics) }}
-            <div class="perf-protocol"><span>{{ view.protocol.input }} reference input tokens</span><span>{{ view.protocol.output }} output token limit</span><span>Concurrency {{ view.levels or 'n/a' }}</span><span>{{ view.protocol.revision }}</span></div>
-        </div>
-        {% endfor %}
-
-        <div class="perf-chart-grid">{% for chart in performance.charts if chart.primary %}{{ chart_panel(chart, performance.labels|length > 1) }}{% endfor %}</div>
-
-        <div class="perf-table-wrap"><table class="perf-table"><caption>Results by concurrency <span>Response and first-delivery times are p95 for successful requests.</span></caption>
-            <thead><tr>{% if performance.labels|length > 1 %}<th scope="col">Run</th>{% endif %}<th scope="col">Concurrent requests</th><th scope="col">Output</th><th scope="col">Request rate</th><th scope="col">Response · p95</th><th scope="col">First delivery · p95</th><th scope="col">Requests / errors</th></tr></thead>
-            <tbody>{% for row in performance.load_rows %}<tr {% if row.peak %}class="perf-peak"{% endif %}>{% if performance.labels|length > 1 %}<td class="perf-run-cell">{{ row.run }}</td>{% endif %}<th scope="row">{{ row.concurrency }}{% if row.peak %} <span class="perf-peak-tag">Peak output</span>{% endif %}</th><td>{{ row.output }}</td><td>{{ row.request_rate }}</td><td>{{ row.latency }}</td><td>{{ row.ttft }}</td><td>{{ row.requests }} / {{ row.errors }}</td></tr>{% endfor %}</tbody>
-        </table></div>
-        <p class="perf-footnote">Throughput includes elapsed time spent on failed requests. First delivery (TTFT) measures the first received content or reasoning; buffering can make it close to completion time.</p>
-
-        <details class="perf-details"><summary>Load-test diagnostics <span>Request rate, failures, streaming &amp; full measurements</span></summary>
-            <div class="perf-chart-grid">{% for chart in performance.charts if not chart.primary %}{{ chart_panel(chart, performance.labels|length > 1) }}{% endfor %}</div>
-            <div class="perf-table-wrap"><table class="perf-table"><caption>Reported suite summary</caption><thead><tr><th scope="col">Metric</th>{% for label in performance.labels %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead><tbody>{% for row in performance.suite_rows %}<tr><th scope="row">{{ row.label }}</th>{% for value in row['values'] %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
-            <div class="perf-table-wrap"><table class="perf-table perf-raw"><caption>All per-load metrics <span>Raw duration values use milliseconds.</span></caption><thead><tr><th scope="col">Run</th>{% for label in ['Concurrency', 'Requests', 'Errors', 'Wall time', 'Output', 'Request rate', 'Latency p50', 'Latency p95', 'TTFT p50', 'TTFT p95', 'Failed latency p95', 'Estimated tokens (requests)', 'Burst delivery (requests)', 'Latency p99', 'TTFT p99', 'Error rate', 'Mean output tokens', 'Output token time proxy p50', 'Chunk gap p95'] %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead><tbody>{% for row in performance.load_rows %}<tr><th scope="row">{{ row.run }}</th>{% for value in row['values'] %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
-            <p class="perf-footnote">Output token time is a client delivery proxy: first-to-last output span divided by reported completion tokens minus one. Buffered bursts, estimated counts and outputs shorter than two tokens are excluded. Chunk gaps are SSE delivery intervals. Provider counts can include reasoning.</p>
-        </details>
-        {% if performance.distributions %}<details class="perf-details"><summary>Load-test request distributions <span>Completion time, first delivery &amp; output length</span></summary><div class="perf-chart-grid">{% for chart in performance.distributions %}{{ chart_panel(chart) }}{% endfor %}</div></details>{% endif %}
-        <details class="perf-details"><summary>How to read these measurements <span>Protocol &amp; interpretation</span></summary><div class="perf-method">
-            <p>This is a bounded, closed-loop concurrency test with warmed connections. It measures delivered output and client-observed timing, rather than model-side prefill or decoding speed. It does not establish arrival-rate capacity.</p>
-            {% for view in performance.load_views %}<p><strong>{{ view.label }}</strong> · {{ view.protocol.attempts }} attempt(s) per timed request · {{ view.protocol.input }} reference input tokens · {{ view.protocol.output }} output token limit · {{ view.protocol.revision }}.</p>{% endfor %}
-            <p>p50 is the median; p95 is the time within which 95% of measured successful requests finished. Tail percentiles come from small samples. Compare common load levels, matching protocols and output lengths, and repeat runs to assess variability.</p>
-        </div></details>
-    </section>
-    {% elif not performance.sweep_views and not performance.open_loop %}<div class="perf-empty"><h3>No fixed-workload measurements</h3><p>Run a benchmark with performance enabled to measure throughput at different load levels.</p></div>{% endif %}
-
-
+    {% else %}
+    <div class="perf-empty"><h3>No performance measurements</h3><p>Run a benchmark that measures performance to see latency, context and capacity results.</p></div>
+    {% endif %}
 </section>

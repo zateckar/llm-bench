@@ -183,7 +183,7 @@ class DatabaseCase(unittest.TestCase):
             db.close()
 
     def canary(self, **fields):
-        values = {"name": "Prod canary", "model_id": 1, "suite": "tool-conformance", "interval_hours": 6,
+        values = {"name": "Prod canary", "model_id": 1, "suite": "standard", "interval_hours": 6,
                   "max_concurrency": 4, "webhook_url": "https://hooks.example/T1", **fields}
         return monitoring.create_canary(1, **values)
 
@@ -270,8 +270,8 @@ class CanaryTests(DatabaseCase):
         run = self.sql("SELECT * FROM test_runs WHERE id = ?", (created[0],))[0]
         self.assertEqual((run["status"], run["canary_id"], run["workers"]), ("pending", canary_id, 4))
         self.assertEqual(json.loads(run["run_options_json"]), {"mode": "quality", "max_concurrency": 4,
-                                                               "suite": "tool-conformance"})
-        self.assertEqual(json.loads(run["quality_config_json"])["name"], "tool-conformance")
+                                                               "suite": "standard"})
+        self.assertEqual(json.loads(run["quality_config_json"])["name"], "standard")
         self.assertEqual(json.loads(run["decoding_config_json"]), {"temperature": 0.0, "reasoning_effort": None})
         next_at = self.sql("SELECT next_run_at FROM canaries")[0]["next_run_at"]
         self.assertEqual(next_at, (now + timedelta(hours=6)).isoformat())
@@ -362,12 +362,12 @@ class CanaryTests(DatabaseCase):
         self.assertTrue(all(r["canary_status"] for r in self.sql("SELECT canary_status FROM test_runs")))
         self.assertEqual(self.sql("SELECT baseline_run_id FROM canaries")[0]["baseline_run_id"], runs[0])
 
-        update = {"name": "Renamed", "model_id": 1, "suite": "tool-conformance", "interval_hours": 12,
+        update = {"name": "Renamed", "model_id": 1, "suite": "standard", "interval_hours": 12,
                   "max_concurrency": 4, "webhook_url": ""}
         monitoring.update_canary(canary_id, **update)
         canary = self.sql("SELECT * FROM canaries")[0]
         self.assertEqual((canary["name"], canary["baseline_run_id"], canary["webhook_url"]), ("Renamed", runs[0], None))
-        monitoring.update_canary(canary_id, **{**update, "suite": "rigorous"})
+        monitoring.update_canary(canary_id, **{**update, "max_concurrency": 2})
         self.assertIsNone(self.sql("SELECT baseline_run_id FROM canaries")[0]["baseline_run_id"])
         monitoring.delete_canary(canary_id)
         self.assertEqual(self.sql("SELECT COUNT(*) AS n FROM test_runs WHERE canary_id IS NOT NULL")[0]["n"], 0)
@@ -413,7 +413,7 @@ class PageTests(DatabaseCase):
 
     def test_monitoring_pages(self):
         created = self.client.post("/monitoring/canaries", data={"name": "Prod canary", "model_id": 1,
-                                                                 "suite": "tool-conformance", "interval_hours": 6,
+                                                                 "suite": "standard", "interval_hours": 6,
                                                                  "max_concurrency": 4, "webhook_url": ""},
                                    follow_redirects=False)
         self.assertEqual((created.status_code, created.headers["location"]), (303, "/monitoring/canaries/1"))

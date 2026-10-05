@@ -46,7 +46,7 @@ def _editor_options(collected):
     from app.benchmarking.load_workload import PRESET_LABELS, PRESETS
     from app.benchmarking.suites import SUITE_NAMES
 
-    suites = {key: scorecard.suite_label(key) for key in SUITE_NAMES if key not in scorecard.UNSCORED_SUITES}
+    suites = {key: scorecard.suite_label(key) for key in SUITE_NAMES}
     for row in usecase_suites.latest_versions():
         choice = usecase_suites.choice(row)
         suites[choice["name"]] = choice["label"]

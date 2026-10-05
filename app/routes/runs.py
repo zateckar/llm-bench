@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 
 from app.auth import get_current_user, require_admin
+from app.benchmarking.suites import HISTORICAL_SUITE
 from app.database import execute_transaction, fetch_all, fetch_one
 from app.templates_config import templates
 from app.services.capacity import CapacityAssumptions, estimate_capacity
@@ -54,9 +55,8 @@ def _parse_perf(raw: str | None) -> dict | None:
         data = json.loads(raw or "null")
     except (TypeError, ValueError):
         return None
-    return data if isinstance(data, dict) and (data.get("schema_version") == 3 or
-            data.get("schema_version") == 4 and data.get("kind") == "context_sweep" or
-            data.get("schema_version") == 5 and data.get("kind") == "open_loop") else None
+    from app.benchmarking.staged_performance import is_performance_report
+    return data if is_performance_report(data) else None
 
 
 @router.get("/runs/{run_id}/performance.json")
@@ -171,9 +171,9 @@ async def repeat_group(request: Request, group_id: int, vs: Annotated[list[int],
     candidates = await other_groups(group_id)
     for candidate in candidates:
         try:
-            candidate["suite"] = json.loads(candidate.pop("run_options_json") or "{}").get("suite", "rigorous")
+            candidate["suite"] = json.loads(candidate.pop("run_options_json") or "{}").get("suite", HISTORICAL_SUITE)
         except (TypeError, ValueError, AttributeError):
-            candidate["suite"] = "rigorous"
+            candidate["suite"] = HISTORICAL_SUITE
     return templates.TemplateResponse(
         request,
         "repeat_group.html",
@@ -270,7 +270,7 @@ async def run_detail(request: Request, run_id: int):
             summary = quality_data["summary"]["categories"].get(category["category"])
             if summary:
                 category["avg_score"] = summary["score"]
-    from app.services.html_reports import performance_view, quality_timing_view
+    from app.services.html_reports import quality_timing_view, staged_view
     from app.services.language_views import language_report
 
     languages = language_report(quality_data, results)
@@ -278,7 +278,7 @@ async def run_detail(request: Request, run_id: int):
 
     measures = describe(run.get("run_options_json"))
     label = f"#{run_id} · {run['model_name']}"
-    performance = performance_view([{"label": label, "perf": perf_data or {}}])
+    performance = staged_view([{"label": label, "perf": perf_data or {}}])
     quality_timings = [quality_timing_view({"label": label, "results": results})] if results else []
     from starlette.concurrency import run_in_threadpool
 
@@ -347,6 +347,9 @@ async def stop_run(request: Request, run_id: int):
                              WHEN json_extract(perf_json,'$.schema_version')=5
                                   AND json_extract(perf_json,'$.kind')='open_loop'
                              THEN json_set(perf_json,'$.cancelled',json('true'))
+                             WHEN json_extract(perf_json,'$.schema_version')=6
+                                  AND json_extract(perf_json,'$.kind')='staged'
+                             THEN json_set(perf_json,'$.cancelled',json('true'),'$.finished',json('false'))
                              ELSE perf_json END ELSE perf_json END
                         WHERE id=? AND status='failed' AND error_message='Stopped by administrator.'""",
                     (run_id,),

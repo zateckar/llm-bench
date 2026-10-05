@@ -4,6 +4,8 @@
 import base64
 import unittest
 
+from fastapi import HTTPException
+
 from app.benchmarking import language_id, safety_suite
 from app.benchmarking.models import RequestMetrics, TokenUsage
 from app.benchmarking.quality_execution import execute_question, score_response
@@ -178,11 +180,15 @@ class EvaluatorTests(unittest.TestCase):
 
         self.assertNotIn("language_adherence", EVALUATOR_VERSIONS)
         self.assertIn("language_adherence", ALLOWED_EVALUATORS)
-        self.assertIn("safety-language", SUITE_NAMES)
+        # The suite is now the standard suite's safety area; the retired name stays loadable.
+        self.assertNotIn("safety-language", SUITE_NAMES)
         suite = get_suite("safety-language")
         self.assertEqual((suite.label, suite.revision()), ("Safety & language adherence", safety_suite.REVISION))
         self.assertEqual(suite.execution(4096)["native"]["suite_revision"], safety_suite.REVISION)
-        self.assertEqual(make_run_options(mode="quality", suite="safety-language")["suite"], "safety-language")
+        with self.assertRaises(HTTPException):
+            make_run_options(mode="quality", suite="safety-language")
+        from app.benchmarking.standard_suite import area_of
+        self.assertEqual({area_of(q.metadata) for q in QUESTIONS}, {"safety"})
         report = Report()
         validate_question(report, type(self.q)(**{**self.q.__dict__, "expected": {"language": "fr"}}))
         self.assertTrue(report.errors)

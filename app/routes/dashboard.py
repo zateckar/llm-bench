@@ -63,7 +63,8 @@ async def dashboard(request: Request):
 
     # Select independently of the recent-run page: newer active runs or
     # completed performance-only runs must not hide existing quality scores.
-    # Only rigorous-suite runs qualify; the category descriptions describe it.
+    # Only standard-suite runs and historical rigorous runs (its reasoning
+    # area) qualify; the category descriptions describe them.
     last_run = await fetch_one(
         """SELECT tr.id, tr.quality_json, m.name AS model_name
            FROM test_runs tr
@@ -71,7 +72,7 @@ async def dashboard(request: Request):
            WHERE tr.status = 'completed'
              AND COALESCE(json_extract(CASE WHEN json_valid(tr.run_options_json)
                                             THEN tr.run_options_json END, '$.suite'),
-                          'rigorous') = 'rigorous'
+                          'rigorous') IN ('standard', 'rigorous')
              AND EXISTS (SELECT 1 FROM test_results r
                          WHERE r.run_id = tr.id
                            AND COALESCE(r.quality_scored, r.request_ok) = 1)

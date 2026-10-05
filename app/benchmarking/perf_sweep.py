@@ -35,6 +35,10 @@ class SweepConfig:
     max_concurrency: int = MAX_CONCURRENCY
     sweep_rounds: int = 1
     sweep_output_tokens: int = 8192
+    # Explicit context ladder; empty means the 64k grid up to context_max.
+    context_lengths: tuple = ()
+    # Reasoning efforts to probe and measure, in order; empty means every effort.
+    effort_list: tuple = ()
 
     def __post_init__(self):
         for name, value, low, high in (
@@ -45,9 +49,19 @@ class SweepConfig:
         ):
             if type(value) is not int or not low <= value <= high:
                 raise ValueError(f"{name} must be an integer between {low} and {high}")
+        if any(type(value) is not int or not 256 <= value <= MAX_CONTEXT for value in self.context_lengths):
+            raise ValueError(f"Context lengths must be integers between 256 and {MAX_CONTEXT}")
+        if any(effort not in EFFORTS for effort in self.effort_list):
+            raise ValueError("Unknown reasoning effort")
+
+    @property
+    def efforts(self):
+        return self.effort_list or EFFORTS
 
     @property
     def contexts(self):
+        if self.context_lengths:
+            return tuple(sorted(set(self.context_lengths)))
         lengths = set(grid(256, CONTEXT_STEP, self.context_max))
         if self.context_max >= 32_768:
             lengths.add(32_768)
@@ -303,7 +317,7 @@ def run_sweep(
             "revision": REVISION,
             "contexts": list(config.contexts),
             "concurrencies": list(config.concurrencies),
-            "candidate_efforts": list(EFFORTS),
+            "candidate_efforts": list(config.efforts),
             "context_step": CONTEXT_STEP,
             "concurrency_step": CONCURRENCY_STEP,
             "failure_streak": FAILURE_STREAK,
@@ -337,7 +351,7 @@ def run_sweep(
             "cell_order": "Reasoning effort, increasing context, increasing concurrency; warmed first worker and reused connections.",
         },
     )
-    total = len(EFFORTS) * len(config.contexts) * len(config.concurrencies)
+    total = len(config.efforts) * len(config.contexts) * len(config.concurrencies)
     baseline = PromptBank(256)
 
     def save_report():
@@ -380,7 +394,7 @@ def run_sweep(
             )
 
     save_report()
-    for effort in EFFORTS:
+    for effort in config.efforts:
         if cancelled() or report.stop_error:
             break
         config_for_effort = replace(

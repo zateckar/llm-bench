@@ -35,10 +35,9 @@
         <div class="flex items-center gap-2 mb-3">
             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
                   :class="phase !== 'quality' ? 'bg-violet-900/50 text-violet-300' : 'bg-blue-900/50 text-blue-300'"
-                  x-text="phase === 'sweep' ? 'Context & reasoning sweep' : phase === 'load' ? 'Open-loop load test' : phase === 'perf' ? 'Performance suite' : 'Quality suite'"></span>
-            <span x-show="phase !== 'quality'" class="text-xs text-zinc-500">
-                Latency, throughput and concurrency measurement
-            </span>
+                  x-text="phase === 'sweep' ? 'Performance · context' : phase === 'load' ? 'Performance · capacity' : phase === 'perf' ? 'Performance · latency' : 'Quality'"></span>
+            <span x-show="phase !== 'quality'" class="text-xs text-zinc-500"
+                  x-text="phase === 'sweep' ? 'Latency as the input grows' : phase === 'load' ? 'Sustainable arrival rate under SLOs' : 'Latency and throughput by concurrency'"></span>
         </div>
 
         <div class="progress-bar h-3">
@@ -53,8 +52,7 @@
         </div>
     </div>
 
-    <a x-show="phase === 'sweep' && !done" href="/runs/{{ run.id }}" class="btn-ghost">View saved sweep cells →</a>
-    <a x-show="phase === 'load' && !done" href="/runs/{{ run.id }}" class="btn-ghost">View finished load steps →</a>
+    <a x-show="phase !== 'quality' && !done" href="/runs/{{ run.id }}" class="btn-ghost">View measurements saved so far →</a>
 
     <div x-show="done" class="card p-4">
         <div class="text-center">

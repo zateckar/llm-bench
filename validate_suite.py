@@ -95,6 +95,18 @@ def main() -> int:
     if not args.quiet:
         print(f"Validated {len(safety_questions)} safety and language questions ({safety_suite.REVISION}).")
 
+    # The standard suite is the union of the areas above; check what spans them.
+    from app.benchmarking import standard_suite
+
+    standard = standard_suite.load_questions()
+    for problem in standard_suite.validate_suite(standard):
+        report.error("standard", problem)
+    if not args.quiet:
+        areas = Counter(standard_suite.AREA_LABELS.get(standard_suite.area_of(q.metadata), "No area")
+                        for q in standard)
+        print(f"Validated the standard suite ({standard_suite.REVISION}): {len(standard)} tasks · "
+              + " · ".join(f"{label} {count}" for label, count in areas.items()) + ".")
+
     by_category = Counter(q.category for q in questions)
     by_evaluator = Counter(q.evaluator for q in questions)
     by_difficulty = Counter(q.difficulty for q in questions)

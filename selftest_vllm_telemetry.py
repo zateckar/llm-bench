@@ -8,7 +8,7 @@ import requests
 
 from app.benchmarking.vllm_telemetry import Settings, VllmTelemetry, metrics_model, metrics_scope, queries
 from app.services.telemetry_views import telemetry_view
-from app.services.html_reports import performance_view
+from app.services.html_reports import staged_view
 from app.templates_config import templates
 
 SCOPE = {"hardware": "B300", "host": "smbea02n01", "job": "vllm", "model_name": "test/model"}
@@ -173,7 +173,7 @@ class ReportTests(unittest.TestCase):
         view = telemetry_view(run)
         self.assertEqual(view["rows"][0]["samples"], 3)
         self.assertIn("Queueing observed", view["rows"][0]["signals"])
-        context = performance_view([run], offline=True)
+        context = staged_view([run], offline=True)
         html = templates.get_template("performance_report.html").render(performance=context, offline=True)
         self.assertIn("B300 vLLM timeline", html)
         self.assertIn("Server and benchmark output", html)

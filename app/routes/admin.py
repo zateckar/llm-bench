@@ -43,9 +43,9 @@ async def admin_run_page(request: Request):
         return user
     models = await fetch_all("SELECT * FROM models ORDER BY name")
     specs = None
-    if request.query_params.get("mode") == "sweep":
-        specs = [{"model_id": None, **run_submission.make_run_options(mode="performance", performance="sweep",
-                                                                      max_concurrency=256)}]
+    # Links may ask for a performance-only run; the former sweep and load links do too.
+    if request.query_params.get("mode") in ("performance", "sweep", "load"):
+        specs = [{"model_id": None, **run_submission.make_run_options(mode="performance")}]
     return templates.TemplateResponse(
         request, "admin/run_test.html", run_submission.form_context(models, specs=specs)
     )

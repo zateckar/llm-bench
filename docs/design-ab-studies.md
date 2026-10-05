@@ -2,6 +2,8 @@
 
 Status: accepted (recommended decisions), 2026-10-05. Item 3 of the evaluation roadmap.
 
+Update: the assistant-open suite is now the open-ended area of the standard suite, so every standard quality run records answers for studies ([design-consolidation.md](design-consolidation.md)).
+
 ## Problem
 
 Every existing quality signal is deterministic: exact answers, schemas, simulations and tool calls. That is right for capability measurement, but most company use is open-ended. People ask for emails, summaries, explanations, advice and rewrites, and no answer key separates a good reply from a mediocre one. Two questions follow:

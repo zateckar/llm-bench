@@ -1,5 +1,7 @@
 # Quality, performance or both in one run
 
+Superseded in part by [design-consolidation.md](design-consolidation.md): the performance part is no longer chosen. It is always the staged standard performance test, and `performance: fixed|sweep|load` is accepted only as a legacy option that maps to it.
+
 ## Problem
 
 A run had five mutually exclusive modes: `both` (quality + the fixed performance workload), `quality`, `performance`, `sweep` and `load`. The fixed workload was the only performance test that could follow a quality suite. To measure a model's quality and its capacity under an open-loop load, or its context sweep, the user had to submit two runs. Those two runs were not linked, and could be separated by other queued runs.

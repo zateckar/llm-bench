@@ -393,9 +393,9 @@ class SubmissionAndReportTests(unittest.TestCase):
         posted = self.submit({"model_id": 1, "mode": "load", "max_concurrency": 128, "load": load})
         self.assertEqual(posted.status_code, 302)
         options = json.loads(self.sql("SELECT run_options_json FROM test_runs")[0]["run_options_json"])
-        # The legacy mode "load" is stored canonically as a performance run.
-        self.assertEqual((options["mode"], options["performance"], options["max_concurrency"]),
-                         ("performance", "load", 128))
+        # The legacy mode "load" maps to the standard test; its concurrency was the in-flight cap.
+        self.assertEqual((options["mode"], options["performance"], options["in_flight_cap"], options["max_concurrency"]),
+                         ("performance", "standard", 128, 8))
         self.assertEqual(options["load"]["workload"]["classes"][0]["name"], "chat")
         self.assertEqual(options["load"]["arrival"], "gamma")
         spec = spec_from_run({"model_id": 1, "run_options_json": json.dumps(options)})
@@ -405,14 +405,15 @@ class SubmissionAndReportTests(unittest.TestCase):
             ({"model_id": 1, "mode": "load", "max_concurrency": 2000}, "in-flight cap"),
             ({"model_id": 1, "mode": "load", "max_concurrency": 8, "load": {**load, "rates": [2, 1]}}, "strictly increasing"),
             ({"model_id": 1, "mode": "load", "max_concurrency": 8, "load": {"preset": "custom", "workload": "{", "rates": [1]}}, "workload"),
-            ({"model_id": 1, "mode": "performance", "max_concurrency": 8, "load": load}, "require open-loop"),
+            ({"model_id": 1, "mode": "quality", "max_concurrency": 8, "load": load}, "require a performance run"),
+            ({"model_id": 1, "mode": "performance", "in_flight_cap": 0}, "in-flight cap"),
         ):
             response = self.submit(bad)
             self.assertEqual(response.status_code, 422, bad)
             self.assertIn(needle, response.text)
         with self.assertRaises(HTTPException):
             make_run_options(mode="load", max_concurrency=8, load={"preset": "chat", "rates": []})
-        self.assertIn("Open-loop load · SLO capacity", self.client.get("/admin/run").text)
+        self.assertIn("Capacity stage workload", self.client.get("/admin/run").text)
 
     def run_load(self, run_id, rates=(2, 60), ttft=400):
         load = {"preset": "custom", "workload": workload(ttft=ttft), "rates": list(rates), "step_seconds": 2}

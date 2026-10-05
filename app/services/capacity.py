@@ -11,6 +11,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.benchmarking.staged_performance import is_staged, stages_of
+
 REVISION = "serving-capacity-v3"
 
 
@@ -54,6 +56,9 @@ def statistic(point, key, name):
 
 def evidence(perf):
     """Never combine runs, reasoning levels or cold/warm cells."""
+    if is_staged(perf):
+        # Each stage keeps its own source label, effort and cache mode.
+        return [record for report in stages_of(perf).values() for record in evidence(report)]
     protocol = perf.get("protocol") or {}
     if not protocol.get("revision"):
         return []
@@ -192,6 +197,16 @@ def load_limit(selected, candidates, profile):
 
 def monitoring(perf):
     from app.benchmarking.vllm_telemetry import alignment_shift
+    if is_staged(perf):
+        # Every stage collects its own telemetry; report warnings from all of them.
+        stages = [monitoring(report) for report in stages_of(perf).values() if isinstance(report.get("telemetry"), dict)]
+        if not stages:
+            return monitoring({})
+        result = dict(stages[0])
+        result["warnings"] = list(dict.fromkeys(w for item in stages for w in item["warnings"]))
+        result["baseline_output"] = next((item["baseline_output"] for item in stages
+                                          if item["baseline_output"] is not None), None)
+        return result
     data = perf.get("telemetry")
     if not isinstance(data, dict):
         return {"status": "No saved vLLM monitoring for this run", "warnings": [], "baseline_output": None}
@@ -226,6 +241,8 @@ def monitoring(perf):
 
 def arrival_capacity(perf, assumptions):
     """Measured open-loop evidence: the highest seeded arrival rate meeting every class SLO."""
+    if is_staged(perf):
+        perf = stages_of(perf).get("capacity") or {}
     if perf.get("schema_version") != 5 or perf.get("kind") != "open_loop":
         return None
     summary = perf.get("summary") or {}

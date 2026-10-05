@@ -40,11 +40,17 @@ EVALUATOR_DESCRIPTIONS = {
     "code_exec": "Code is extracted and executed in a sandboxed subprocess against boundary and combination fixtures, including protected input-state checks. The submitted program is not rewritten. Values are compared structurally, so int/float and tuple/list differences are not counted as wrong.",
     "format_check": "Formatting and instruction constraints (JSON structure, word/line/sentence/paragraph counts, regexes, table shape, allowed vocabulary). Every check must pass.",
     "json_match": "The JSON in the response is deep-compared against an expected document, with exact or subset key matching.",
+    "native_tool_use": "Native tool calls through the API's tools and tool_choice: the calls, their arguments and the final answer are checked against a scripted conversation.",
+    "native_simulation": "Native tool calls against a local simulation. Every final-state and authorization requirement must pass.",
+    "native_structured_output": "The response_format answer must parse and match the expected JSON document.",
+    "regex_all": "Every required pattern must match and no forbidden pattern may match the answer.",
+    "language_adherence": "The answer must be written in the requested language.",
+    "open_ended": "No answer key. Answers are recorded and compared in blind A/B studies.",
 }
 
 
 def load_tests_from_yaml() -> tuple[dict, str | None]:
-    """Load the suite through the real loader, grouped by category.
+    """Load the standard suite through the real loaders, grouped by category.
 
     Going through ``test_loader`` rather than raw YAML means the browser shows the
     *effective* evaluator and expected value - items written with the ``criteria:``
@@ -56,7 +62,7 @@ def load_tests_from_yaml() -> tuple[dict, str | None]:
         return categories, f"Tests directory not found: {TESTS_DIR}"
 
     try:
-        from app.benchmarking.quality_suite import load_questions
+        from app.benchmarking.standard_suite import load_questions
 
         questions = load_questions()
     except Exception as e:  # noqa: BLE001 - reported in the page instead of a 500
@@ -64,13 +70,15 @@ def load_tests_from_yaml() -> tuple[dict, str | None]:
         return categories, str(e)
 
     for q in questions:
+        # Native tool tasks also carry an interaction (their tool script); they keep their evaluator.
+        simulated = bool(q.interaction) and q.metadata.get("protocol") != "native-tools-v1"
         try:
             expected = yaml.safe_dump(
                 {
                     "success": "All final-state and authorization gates must pass.",
                     "environment": q.interaction,
                 }
-                if q.interaction
+                if simulated
                 else q.expected,
                 sort_keys=False,
                 allow_unicode=True,
@@ -84,8 +92,8 @@ def load_tests_from_yaml() -> tuple[dict, str | None]:
                 "prompt": q.prompt,
                 "system_prompt": q.system_prompt,
                 "evaluator": ("behavioral_reconstruction"
-                              if q.interaction and q.interaction.get("kind") == "behavioral-reconstruction"
-                              else "interactive_state" if q.interaction else q.evaluator),
+                              if simulated and q.interaction.get("kind") == "behavioral-reconstruction"
+                              else "interactive_state" if simulated else q.evaluator),
                 "expected": expected,
                 "difficulty": q.difficulty,
                 "weight": q.effective_weight,

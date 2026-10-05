@@ -2,6 +2,8 @@
 
 Status: draft for review · 2026-10-05
 
+Update: the tool-conformance suite is now the tool-calling area of the standard suite and is no longer offered on its own ([design-consolidation.md](design-consolidation.md)).
+
 This document designs two additions:
 
 - **A. Tool-conformance suite.** Tests native OpenAI `tools` / `tool_choice` / `tool_calls` and `response_format` structured output against each deployment.

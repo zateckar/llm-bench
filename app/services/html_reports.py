@@ -432,7 +432,50 @@ def load_performance_view(run):
     }
 
 
-def performance_view(runs, *, offline=False):
+def staged_view(runs, *, offline=False):
+    """The performance page: one engine view per stage, aligned across runs.
+
+    Staged reports and historical single-kind reports both split into stages
+    (docs/design-consolidation.md), so a stage compares like with like. The
+    capacity estimate uses each run's whole report, once per run."""
+    from app.benchmarking import staged_performance as staged
+    from app.services.capacity import estimate_capacity
+
+    split = [(r, staged.stages_of(r.get("perf") or {})) for r in runs]
+    notes = []
+    for r, stages_ in split:
+        perf = r.get("perf") or {}
+        if perf and not stages_:
+            notes.append(f"{r['label']}: no performance report for the current protocol.")
+        if not staged.is_staged(perf):
+            continue
+        if perf.get("cancelled"):
+            running = staged.STAGE_LABELS.get(perf.get("running_stage"), "a")
+            notes.append(f"{r['label']}: stopped during the {running.lower()} stage; later stages were not measured.")
+        for key in staged.STAGE_KEYS:
+            if (perf.get("stage_errors") or {}).get(key):
+                notes.append(f"{r['label']}: {perf['stage_errors'][key]}")
+        notes.extend(f"{r['label']}: {note}" for note in perf.get("notes") or [])
+    stages = []
+    for key, label, _, _, description in staged.STAGES:
+        members = [{**r, "perf": stages_[key]} for r, stages_ in split if key in stages_]
+        stages.append({
+            "key": key, "label": label, "description": description,
+            "view": performance_view(members, offline=offline, capacity=False) if members else None,
+            "runs": [r["label"] for r in members],
+            "missing": [r["label"] for r, stages_ in split if key not in stages_],
+        })
+    return {
+        "stages": stages,
+        "measured": any(stage["view"] for stage in stages),
+        "capacity_views": [estimate_capacity(r) for r, stages_ in split if stages_],
+        "notes": notes,
+        "labels": [r["label"] for r in runs],
+    }
+
+
+def performance_view(runs, *, offline=False, capacity=True):
+    """Views of one engine's reports (fixed workload, context sweep or open-loop load)."""
     from app.services.telemetry_views import telemetry_view
     from app.services.capacity import estimate_capacity
     from app.services.performance_comparison import performance_comparison
@@ -593,7 +636,7 @@ def performance_view(runs, *, offline=False):
         "comparison": performance_comparison(runs),
         "open_loop": open_loop_views(runs),
         "cache_rows": cache_rows,
-        "capacity_views": [estimate_capacity(r) for r in runs if r.get("perf")],
+        "capacity_views": [estimate_capacity(r) for r in runs if r.get("perf")] if capacity else [],
         "telemetry_views": [view for r in runs if (view := telemetry_view(r))],
         "sweep_views": sweep_views,
         "suite_rows": suite_rows,
@@ -731,7 +774,7 @@ def render_report(runs):
         runs=runs,
         comparison=len(runs) > 1,
         has_quality_results=any(run.get("results") or run.get("quality") for run in runs),
-        performance=performance_view(runs, offline=True),
+        performance=staged_view(runs, offline=True),
         quality_timings=[quality_timing_view(r) for r in runs if r.get("results")],
         offline=True,
         generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),

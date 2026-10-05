@@ -526,13 +526,13 @@ class ReportTests(unittest.TestCase):
             self.assertIn("Criterion achievement", quality_text)
             self.assertIn("Quality-task timing diagnostics", quality_text)
         if performance:
-            self.assertIn("Fixed-workload load test", performance_text)
+            self.assertIn("Latency by concurrency", performance_text)
             self.assertIn("130.0 tok/s", performance_text)
         else:
-            self.assertIn("No fixed-workload measurements", performance_text)
+            self.assertIn("No performance measurements", performance_text)
         self.assertNotIn("tok/s", quality_text)
         self.assertNotIn("Peak aggregate output", quality_text)
-        self.assertNotIn("Fixed-workload load test", quality_text)
+        self.assertNotIn("Latency by concurrency", quality_text)
         self.assertNotIn("Quality-task", performance_text)
         self.assertNotIn("Slowest categories", performance_text)
         self.assertNotIn("Advanced Coding", performance_text)
@@ -694,8 +694,10 @@ class ReportTests(unittest.TestCase):
     def test_legacy_zero_missing_partial_and_invalid_json(self):
         run = asyncio.run(reports.load_run(3))
         text = reports.render_report([run])
-        self.assertIn("no performance report for the current protocol", text)
+        self.assertIn("No performance measurements", text)
         self.assertIn("n/a", text)
+        run_legacy = {**run, "perf": {"schema_version": 2, "concurrency": []}}
+        self.assertIn("no performance report for the current protocol", reports.render_report([run_legacy]))
         run.update(status="running", quality={}, perf=reports.object_json("{broken"))
         self.assertIn("partial snapshot", reports.render_report([run]))
         self.assertEqual(reports.object_json("[1,2]"), {})
@@ -796,7 +798,7 @@ class ReportTests(unittest.TestCase):
         failed["perf"]["concurrency"][0].pop("errors")
         self.assertEqual(reports.performance_view([failed])["load_views"][0]["metrics"][3]["value"], "n/a")
         self.assertEqual(self.client.get("/runs/3").status_code, 200)
-        self.assertIn("No fixed-workload measurements", self.client.get("/runs/3").text)
+        self.assertIn("No performance measurements", self.client.get("/runs/3").text)
 
     def test_quality_tail_and_error_categories_remain_visible(self):
         rows = [

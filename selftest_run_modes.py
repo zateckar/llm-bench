@@ -51,41 +51,60 @@ class ModeTests(unittest.TestCase):
         self.assertEqual(run_modes.label({"mode": "both", "performance": "load"}, "Rigorous"),
                          "Quality · Rigorous + Open-loop load")
         self.assertEqual(run_modes.label({"mode": "sweep"}), "Context & reasoning sweep")
+        self.assertEqual(run_modes.label({"mode": "both", "performance": "standard"}, "Standard quality suite"),
+                         "Quality · Standard quality suite + Performance · latency, context, capacity")
+        self.assertEqual(run_modes.normalise("performance", "standard"), (False, "standard"))
+        # Runs of retired suites keep their labels.
         self.assertEqual(run_modes.describe('{"mode": "quality", "suite": "safety-language"}'),
                          "Quality · Safety & language adherence")
+        self.assertEqual(run_modes.describe('{"mode": "quality"}'), "Quality · Rigorous capability suite")
         self.assertIsNone(run_modes.describe(None))
         self.assertIsNone(run_modes.describe("not json"))
 
     def test_options(self):
         make = run_submission.make_run_options
-        # Historical snapshots stay identical: the fixed workload and the default suite are implicit.
-        self.assertEqual(make(), {"mode": "both", "max_concurrency": 8})
-        self.assertEqual(make(mode="both", performance="fixed"), {"mode": "both", "max_concurrency": 8})
-        self.assertEqual(make(mode="quality", max_concurrency=3), {"mode": "quality", "max_concurrency": 3})
-        sweep = make(mode="performance", performance="sweep", max_concurrency=256)
-        self.assertEqual(make(mode="sweep", max_concurrency=256), sweep)
-        self.assertEqual((sweep["mode"], sweep["performance"], sweep["context_max"]), ("performance", "sweep", 1048576))
-        both = make(mode="both", performance="sweep", max_concurrency=64, context_max=65536, suite="safety-language")
-        self.assertEqual(both, {"mode": "both", "max_concurrency": 64, "performance": "sweep", "context_max": 65536,
-                                "sweep_rounds": 1, "sweep_output_tokens": 8192, "suite": "safety-language"})
-        load = make(mode="both", performance="load", max_concurrency=300)
-        self.assertEqual((load["mode"], load["performance"], load["load"]["preset"]), ("both", "load", "mixed"))
-        self.assertEqual(make(mode="load", max_concurrency=300), {**load, "mode": "performance"})
+        default_load = load_workload.parse_settings(load_workload.default_settings()).model_dump()
+        # New runs store the suite and the standard performance test with its stage settings.
+        self.assertEqual(make(), {"mode": "both", "max_concurrency": 8, "suite": "standard",
+                                  "performance": "standard", "in_flight_cap": 256, "load": default_load})
+        self.assertEqual(make(mode="quality", max_concurrency=3), {"mode": "quality", "max_concurrency": 3,
+                                                                   "suite": "standard"})
+        self.assertEqual(make(mode="performance", context_max=65536, in_flight_cap=64),
+                         {"mode": "performance", "max_concurrency": 8, "performance": "standard",
+                          "in_flight_cap": 64, "context_max": 65536, "load": default_load})
+        # Former tests map to the standard test, keeping compatible settings.
+        self.assertEqual(make(mode="both", performance="fixed"), make())
+        self.assertEqual(make(mode="sweep", max_concurrency=256), make(mode="performance"))
+        sweep = make(mode="both", performance="sweep", max_concurrency=16, context_max=65536)
+        self.assertEqual((sweep["performance"], sweep["max_concurrency"], sweep["context_max"]), ("standard", 16, 65536))
+        load = make(mode="load", max_concurrency=300, load={"preset": "chat", "rates": [1, 2]})
+        self.assertEqual((load["mode"], load["performance"], load["in_flight_cap"], load["max_concurrency"],
+                          load["load"]["preset"], load["load"]["rates"]),
+                         ("performance", "standard", 300, 8, "chat", [1.0, 2.0]))
         for kwargs in ({"mode": "quality", "performance": "sweep"}, {"mode": "sweep", "performance": "load"},
                        {"mode": "both", "performance": "bogus"},
-                       {"mode": "performance", "performance": "load", "suite": "tool-conformance"},
+                       {"mode": "performance", "suite": "usecase:hr@1"},
+                       {"mode": "quality", "suite": "tool-conformance"},
                        {"mode": "both", "max_concurrency": 33},
-                       {"mode": "both", "performance": "sweep", "max_concurrency": 257},
+                       {"mode": "both", "in_flight_cap": 2000},
+                       {"mode": "both", "context_max": 100},
                        {"mode": "both", "performance": "load", "max_concurrency": 2000}):
             with self.subTest(kwargs), self.assertRaises(HTTPException):
                 make(**kwargs)
 
     def test_rerun_specs_are_canonical(self):
-        legacy = {"mode": "load", "max_concurrency": 128,
-                  "load": run_submission.make_run_options(mode="load", max_concurrency=128)["load"]}
+        legacy_load = load_workload.parse_settings({"preset": "chat", "rates": [1, 2]}).model_dump()
+        legacy = {"mode": "load", "max_concurrency": 128, "load": legacy_load}
         spec = run_submission.spec_from_run({"model_id": 1, "run_options_json": json.dumps(legacy)})
-        self.assertEqual((spec["mode"], spec["performance"], spec["load"]), ("performance", "load", legacy["load"]))
-        combined = run_submission.make_run_options(mode="both", performance="sweep", max_concurrency=32)
+        self.assertEqual((spec["mode"], spec["performance"], spec["in_flight_cap"], spec["load"]),
+                         ("performance", "standard", 128, legacy_load))
+        # A run of a retired suite reruns the standard suite.
+        old = {"mode": "both", "performance": "sweep", "max_concurrency": 32, "context_max": 65536,
+               "sweep_rounds": 1, "sweep_output_tokens": 8192, "suite": "tool-conformance"}
+        spec = run_submission.spec_from_run({"model_id": 1, "run_options_json": json.dumps(old)})
+        self.assertEqual((spec["suite"], spec["performance"], spec["context_max"], spec["max_concurrency"]),
+                         ("standard", "standard", 65536, 32))
+        combined = run_submission.make_run_options(mode="both", context_max=32768)
         self.assertEqual(run_submission.spec_from_run({"model_id": 1, "run_options_json": json.dumps(combined)}),
                          {"model_id": 1, **combined})
 
@@ -138,24 +157,32 @@ class SubmissionTests(DatabaseCase):
 
     def test_combined_specs(self):
         (_, config, options, repeats), = self.validate(
-            [{"model_id": 1, "mode": "both", "performance": "sweep", "max_concurrency": 32, "context_max": 65536,
-              "suite": "safety-language", "repeats": 2}])
-        self.assertEqual((options["performance"], options["context_max"], options["suite"], repeats),
-                         ("sweep", 65536, "safety-language", 2))
-        self.assertEqual(config["name"], "safety-language")
+            [{"model_id": 1, "mode": "both", "max_concurrency": 32, "context_max": 65536, "in_flight_cap": 64,
+              "load": {"preset": "chat", "rates": [1, 2]}, "repeats": 2}])
+        self.assertEqual((options["performance"], options["context_max"], options["in_flight_cap"], options["suite"],
+                          options["load"]["rates"], repeats), ("standard", 65536, 64, "standard", [1.0, 2.0], 2))
+        self.assertEqual((config["name"], config["revision"]), ("standard", "standard-v1"))
+        # Saved plans and API callers may still name a former performance test.
         (_, _, options, _), = self.validate([{"model_id": 1, "mode": "both", "performance": "load",
                                               "max_concurrency": 64, "load": {"preset": "chat", "rates": [1, 2]}}])
-        self.assertEqual((options["mode"], options["load"]["rates"]), ("both", [1.0, 2.0]))
-        for bad in ({"mode": "both", "performance": "load", "context_max": 65536},
-                    {"mode": "both", "load": {"preset": "chat", "rates": [1]}},
+        self.assertEqual((options["mode"], options["performance"], options["in_flight_cap"]), ("both", "standard", 64))
+        for bad in ({"mode": "quality", "context_max": 65536},
+                    {"mode": "quality", "load": {"preset": "chat", "rates": [1]}},
+                    {"mode": "quality", "in_flight_cap": 8},
                     {"mode": "quality", "performance": "sweep"},
-                    {"mode": "performance", "performance": "fixed", "suite": "safety-language"},
+                    {"mode": "quality", "suite": "safety-language"},
+                    {"mode": "performance", "suite": "standard", "unknown": 1},
                     {"mode": "both", "performance": ["sweep"]}):
             with self.subTest(bad), self.assertRaises(HTTPException):
                 self.validate([{"model_id": 1, **bad}])
 
 
 class RunnerTests(DatabaseCase):
+    """Runs queued before the consolidation still execute their former test (decision 14).
+
+    Their stored options are written out here as they were stored then; the
+    staged standard test is covered in selftest_consolidation.py."""
+
     def test_quality_then_sweep(self):
         seen = []
 
@@ -165,8 +192,8 @@ class RunnerTests(DatabaseCase):
             runner._store_sweep_checkpoint(run_id, {**SWEEP, "finished": False})
             return json.dumps(SWEEP), "", 1234.0
 
-        options = run_submission.make_run_options(mode="both", performance="sweep", max_concurrency=16,
-                                                  context_max=65536)
+        options = {"mode": "both", "performance": "sweep", "max_concurrency": 16, "context_max": 65536,
+                   "sweep_rounds": 1, "sweep_output_tokens": 8192}
         with patch.object(runner, "_measure_context_sweep", side_effect=measure):
             run = self.start(options)
         self.assertEqual(seen, [(3, 65536)])
@@ -178,23 +205,25 @@ class RunnerTests(DatabaseCase):
 
     def test_quality_then_open_loop(self):
         load = {"preset": "custom", "workload": workload(ttft=400), "rates": [2], "step_seconds": 1}
-        options = run_submission.make_run_options(mode="both", performance="load", max_concurrency=32, load=load)
+        options = {"mode": "both", "performance": "load", "max_concurrency": 32,
+                   "load": load_workload.parse_settings(load).model_dump()}
         run = self.start(options)
         self.assertEqual((run["status"], run["scored_questions"]), ("completed", 3), run["error_message"])
         perf = json.loads(run["perf_json"])
         self.assertEqual((perf["schema_version"], perf["kind"]), (5, "open_loop"))
         self.assertGreater(perf["steps"][0]["completed"], 0)
         self.assertEqual(json.loads(run["quality_json"])["summary"]["scored"], 3)
-        # The run counts as quality and capacity evidence on the scorecard.
+        # The run counts as capacity evidence; its retired rigorous suite is no scorecard column.
         evidence = scorecard.model_evidence(scorecard.collect(), 1)
-        self.assertIn("rigorous", evidence["quality"])
+        self.assertEqual(evidence["quality"], {})
         self.assertTrue(evidence["capacity"])
 
     def test_performance_is_skipped_when_quality_fails(self):
         for q in self.questions:
             q.prompt = "error"
         with patch.object(runner, "_measure_open_loop") as measure:
-            run = self.start(run_submission.make_run_options(mode="both", performance="load", max_concurrency=8))
+            run = self.start({"mode": "both", "performance": "load", "max_concurrency": 8,
+                              "load": load_workload.default_settings()})
         measure.assert_not_called()
         self.assertEqual(run["status"], "failed")
         self.assertIn("No questions could be scored", run["error_message"])
@@ -205,7 +234,8 @@ class RunnerTests(DatabaseCase):
             runner._store_sweep_checkpoint(run_id, {**SWEEP, "finished": False})
             raise RuntimeError("endpoint went away")
 
-        options = run_submission.make_run_options(mode="both", performance="sweep", max_concurrency=16)
+        options = {"mode": "both", "performance": "sweep", "max_concurrency": 16, "context_max": 1048576,
+                   "sweep_rounds": 1, "sweep_output_tokens": 8192}
         with patch.object(runner, "_measure_context_sweep", side_effect=measure), \
                 self.assertLogs(runner.logger, "ERROR"):
             run = self.start(options)
@@ -217,10 +247,10 @@ class RunnerTests(DatabaseCase):
 
     def test_performance_only_and_legacy_modes_dispatch_as_before(self):
         for options, target in (({"mode": "sweep", "max_concurrency": 16}, "_run_context_sweep"),
-                                (run_submission.make_run_options(mode="performance", performance="sweep",
-                                                                 max_concurrency=16), "_run_context_sweep"),
-                                (run_submission.make_run_options(mode="performance", performance="load",
-                                                                 max_concurrency=16), "_run_open_loop")):
+                                ({"mode": "performance", "performance": "sweep", "max_concurrency": 16,
+                                  "context_max": 65536}, "_run_context_sweep"),
+                                ({"mode": "performance", "performance": "load", "max_concurrency": 16,
+                                  "load": load_workload.default_settings()}, "_run_open_loop")):
             with self.subTest(options), patch.object(runner, target) as dispatched, \
                     patch.object(runner, "run_quality") as quality:
                 self.sql("DELETE FROM test_runs")
@@ -262,12 +292,15 @@ class PageTests(DatabaseCase):
             self.assertNotIn("Measures:", client.get("/runs/4").text)
             self.sql("UPDATE test_runs SET status='running' WHERE id=2")
             self.assertIn("Context &amp; reasoning sweep", client.get("/admin/run/2/progress").text)
-            form = client.get("/admin/run?mode=sweep").text
-            self.assertIn('"performance": "sweep"', form.replace("&#34;", '"'))
-            for text in ("> Quality</label>", "> Performance</label>", 'x-model="run.performance"',
-                         '<option value="fixed">', '<option value="sweep">', '<option value="load">',
-                         "Quality runs first", "The fixed workload chooses"):
+            # Former sweep links open a performance-only run of the standard test.
+            form = client.get("/admin/run?mode=sweep").text.replace("&#34;", '"')
+            self.assertIn('"mode": "performance"', form)
+            self.assertIn('"performance": "standard"', form)
+            for text in ("> Quality</label>", "> Performance</label>", "Advanced settings", "Quality runs first",
+                         "In-flight cap · capacity stage", "Override the context limit"):
                 self.assertIn(text, form)
+            for text in ('x-model="run.performance"', '<option value="sweep">', '<option value="load">'):
+                self.assertNotIn(text, form)
 
 
 if __name__ == "__main__":

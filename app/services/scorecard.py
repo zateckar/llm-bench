@@ -16,6 +16,7 @@ import threading
 
 from app.benchmarking import decision_gates
 from app.benchmarking.decision_gates import GateError
+from app.benchmarking.suites import DEFAULT_SUITE, HISTORICAL_SUITE, RETIRED_SUITES
 from app.services import run_modes
 
 REVISION = "scorecard-v1"
@@ -24,7 +25,6 @@ NAME_LIMIT = 120
 DESCRIPTION_LIMIT = 2000
 NOTE_LIMIT = 4000
 DECISIONS = {"approved": "Approved", "conditional": "Approved with conditions", "rejected": "Rejected"}
-UNSCORED_SUITES = {"assistant-open"}
 
 
 class ScorecardError(ValueError):
@@ -163,27 +163,32 @@ def _sweep(db, run_id):
     return {"kind": "sweep", "tokens": tokens}
 
 
-def _perf_extract(db, run_id):
+def _perf_extracts(db, run_id):
+    """Latency, context and capacity evidence of one run; a staged run can provide all three."""
+    from app.benchmarking.staged_performance import stages_of
+
     row = _one(db, "SELECT perf_json FROM test_runs WHERE id = ?", (run_id,))
     perf = _loads(row and row["perf_json"], {})
     if not isinstance(perf, dict):
-        return None
-    if perf.get("schema_version") == 3:
-        return _closed_loop(perf)
-    if perf.get("schema_version") == 5 and perf.get("kind") == "open_loop":
-        return _open_loop(perf)
-    if perf.get("schema_version") == 4 and perf.get("kind") == "context_sweep":
-        return _sweep(db, run_id)
-    return None
+        return []
+    stages = stages_of(perf)
+    out = []
+    if "latency" in stages:
+        out.append(_closed_loop(stages["latency"]))
+    if "context" in stages:
+        out.append(_sweep(db, run_id))
+    if "capacity" in stages:
+        out.append(_open_loop(stages["capacity"]))
+    return out
 
 
 # --- Evidence -----------------------------------------------------------------------
 
 def suite_label(key):
     from app.benchmarking import usecase_suites
-    from app.benchmarking.suites import SUITE_NAMES, get_suite
+    from app.benchmarking.suites import get_suite, is_builtin
 
-    if key in SUITE_NAMES:
+    if is_builtin(key):
         return get_suite(key).label
     if usecase_suites.is_key(key):
         slug, version = usecase_suites.split_key(key)
@@ -198,7 +203,7 @@ def suite_exists(key):
     from app.benchmarking.suites import SUITE_NAMES
 
     if key in SUITE_NAMES:
-        return key not in UNSCORED_SUITES
+        return True
     if usecase_suites.is_key(key):
         return usecase_suites.load_version(*usecase_suites.split_key(key)) is not None
     return False
@@ -349,8 +354,9 @@ def collect(now=None):
                 options = _loads(run["run_options_json"], {}) or {}
                 measures_quality, measures_performance = run_modes.parts(options)
                 if run["scored_questions"] and measures_quality:
-                    suite = options.get("suite") or "rigorous"
-                    if suite not in UNSCORED_SUITES and suite not in evidence["quality"] \
+                    suite = options.get("suite") or HISTORICAL_SUITE
+                    # Runs of retired built-in suites are history, not a scorecard column.
+                    if suite not in RETIRED_SUITES and suite not in evidence["quality"] \
                             and run["repeat_group_id"] not in seen_groups:
                         item = None
                         if run["repeat_group_id"] is not None:
@@ -371,23 +377,22 @@ def collect(now=None):
                             evidence["quality"][suite] = item
                             suites.add(suite)
                 if run["has_perf"] and measures_performance:
-                    extract = _perf.get((run["id"], run["completed_at"]), lambda run=run: _perf_extract(db, run["id"]))
-                    if not extract:
-                        continue
-                    kind = extract["kind"]
-                    if kind == "closed_loop" and evidence["latency"] is None and extract["levels"]:
-                        evidence["latency"] = _stamp(dict(extract), [run], model["id"], context, now)
-                    elif kind == "sweep" and evidence["context"] is None and extract["tokens"]:
-                        evidence["context"] = {**_stamp(dict(extract), [run], model["id"], context, now),
-                                               "source": "measured"}
-                    elif kind == "open_loop" and extract["workload"] not in evidence["capacity"]:
-                        evidence["capacity"][extract["workload"]] = _stamp(dict(extract), [run], model["id"],
-                                                                           context, now)
-                        workloads[extract["workload"]] = extract["label"]
+                    extracts = _perf.get((run["id"], run["completed_at"]), lambda run=run: _perf_extracts(db, run["id"]))
+                    for extract in extracts:
+                        kind = extract["kind"]
+                        if kind == "closed_loop" and evidence["latency"] is None and extract["levels"]:
+                            evidence["latency"] = _stamp(dict(extract), [run], model["id"], context, now)
+                        elif kind == "sweep" and evidence["context"] is None and extract["tokens"]:
+                            evidence["context"] = {**_stamp(dict(extract), [run], model["id"], context, now),
+                                                   "source": "measured"}
+                        elif kind == "open_loop" and extract["workload"] not in evidence["capacity"]:
+                            evidence["capacity"][extract["workload"]] = _stamp(dict(extract), [run], model["id"],
+                                                                               context, now)
+                            workloads[extract["workload"]] = extract["label"]
             out.append(evidence)
     finally:
         db.close()
-    order = {"rigorous": 0, "tool-conformance": 1}
+    order = {DEFAULT_SUITE: 0}
     return {
         "revision": REVISION, "generated_at": now.isoformat(), "models": out,
         "suites": [{"key": key, "label": suite_label(key)}
