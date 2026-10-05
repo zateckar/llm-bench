@@ -61,6 +61,9 @@ CREATE TABLE IF NOT EXISTS test_runs (
     decoding_config_json TEXT,            -- model settings captured when the run is submitted
     metrics_config_json TEXT,             -- B300 telemetry selectors, without credentials
     plan_id INTEGER,                      -- set when the run belongs to a run_plans group
+    repeat_group_id INTEGER,              -- first run of a repeat group; NULL for single runs
+    repeat_index INTEGER,                 -- 0-based position in the group; also its model seed
+    repeat_count INTEGER,                 -- planned runs in the group
     FOREIGN KEY (model_id) REFERENCES models(id),
     FOREIGN KEY (created_by) REFERENCES users(id),
     FOREIGN KEY (plan_id) REFERENCES run_plans(id)

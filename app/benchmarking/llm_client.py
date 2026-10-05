@@ -20,10 +20,14 @@ from dataclasses import dataclass, field
 import requests
 import urllib3
 
-from app.benchmarking.models import RequestMetrics, TokenUsage
+from app.benchmarking.models import ChatMessage, RequestMetrics, TokenUsage, ToolCall
 
 logger = logging.getLogger(__name__)
 CLIENT_PROTOCOL_VERSION = "chat-client-v6"
+# Native tool-call assembly and wire-defect rules used by complete_chat().
+# Recorded only in reports that send tools or response_format, so text-only
+# protocols stay comparable with historical runs.
+TOOL_CLIENT_REVISION = "tool-client-v1"
 
 # Rough characters-per-token used only for prompt-size estimates in the perf
 # suite when the server does not report prompt_tokens.
@@ -178,21 +182,65 @@ class ChatClient:
         retries: int | None = None,
     ) -> tuple[str, TokenUsage, RequestMetrics]:
         """Continue a bounded conversation; callers own and retain its history."""
+        message, usage, metrics = self._request(messages, max_tokens, stream, retries)
+        if not metrics.ok:
+            return f"[API ERROR: {metrics.error}]", usage, metrics
+        return message.text, usage, metrics
+
+    def complete_chat(
+        self,
+        messages: list[dict],
+        *,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
+        parallel_tool_calls: bool | None = None,
+        response_format: dict | None = None,
+        max_tokens: int | None = None,
+        stream: bool | None = None,
+        retries: int | None = None,
+    ) -> tuple[ChatMessage, TokenUsage, RequestMetrics]:
+        """Native Chat Completions call returning the whole assistant message.
+
+        Tool and structured-output fields are sent verbatim and never negotiated
+        away: a rejection is returned as a failed request with ``http_status``
+        so callers can score it as a deployment capability result."""
+        extra = {
+            key: value
+            for key, value in (
+                ("tools", tools),
+                ("tool_choice", tool_choice),
+                ("parallel_tool_calls", parallel_tool_calls),
+                ("response_format", response_format),
+            )
+            if value is not None
+        }
+        return self._request(messages, max_tokens, stream, retries, extra)
+
+    def _request(
+        self,
+        messages: list[dict],
+        max_tokens: int | None,
+        stream: bool | None,
+        retries: int | None,
+        extra: dict | None = None,
+    ) -> tuple[ChatMessage, TokenUsage, RequestMetrics]:
         cfg = self.config
         attempts_allowed = max(1, cfg.max_retries if retries is None else retries)
 
         last_error = "unknown error"
+        last_status = None
         request_started = time.perf_counter()
         diagnostics = []
 
-        def failed(attempts: int) -> tuple[str, TokenUsage, RequestMetrics]:
-            result = self._error(
+        def failed(attempts: int) -> tuple[ChatMessage, TokenUsage, RequestMetrics]:
+            _, usage, metrics = self._error(
                 last_error,
                 attempts,
                 latency_ms=(time.perf_counter() - request_started) * 1000.0,
             )
-            result[2].attempt_diagnostics = diagnostics
-            return result
+            metrics.attempt_diagnostics = diagnostics
+            metrics.http_status = last_status
+            return ChatMessage(), usage, metrics
 
         for attempt in range(attempts_allowed):
             started = time.perf_counter()
@@ -207,14 +255,15 @@ class ChatClient:
             want_stream = (cfg.stream if stream is None else stream) and self._streaming_supported
             try:
                 if want_stream:
-                    text, usage, ttft = self._stream_once(messages, max_tokens)
+                    message, usage, ttft = self._stream_once(messages, max_tokens, extra)
                 else:
-                    text, usage, ttft = self._blocking_once(messages, max_tokens)
+                    message, usage, ttft = self._blocking_once(messages, max_tokens, extra)
             except _RetryableStatus as e:
                 # Keep the response body in the error string: downstream
                 # detection (e.g. context-window overflows) pattern-matches
                 # text that only exists there.
                 last_error = str(e)
+                last_status = e.status
                 if (
                     e.status in (400, 422)
                     and want_stream
@@ -248,6 +297,7 @@ class ChatClient:
                 return failed(attempt + 1)
             except Exception as e:  # noqa: BLE001 - transport errors of any kind
                 last_error = f"{type(e).__name__}: {e}"
+                last_status = None
                 diagnostics.append({
                     "attempt": attempt + 1, "error": last_error,
                     "elapsed_ms": (time.perf_counter() - started) * 1000,
@@ -285,7 +335,7 @@ class ChatClient:
                 chunk_gaps_ms=self._chunk_gaps_ms,
                 attempt_diagnostics=diagnostics,
             )
-            return text, usage, metrics
+            return message, usage, metrics
 
         return failed(attempts_allowed)
 
@@ -299,7 +349,9 @@ class ChatClient:
         headers.update(self.config.extra_headers)
         return headers
 
-    def _payload(self, messages: list[dict], max_tokens: int | None, stream: bool) -> dict:
+    def _payload(
+        self, messages: list[dict], max_tokens: int | None, stream: bool, extra: dict | None = None
+    ) -> dict:
         cfg = self.config
         payload: dict = {
             "model": cfg.model,
@@ -311,6 +363,8 @@ class ChatClient:
             payload["seed"] = cfg.seed
         if cfg.reasoning_effort is not None:
             payload["reasoning_effort"] = cfg.reasoning_effort
+        if extra:
+            payload.update(extra)
         if stream:
             payload["stream"] = True
             if self._stream_usage_supported:
@@ -318,11 +372,11 @@ class ChatClient:
         return payload
 
     def _blocking_once(
-        self, messages: list[dict], max_tokens: int | None
-    ) -> tuple[str, TokenUsage, float | None]:
+        self, messages: list[dict], max_tokens: int | None, extra: dict | None = None
+    ) -> tuple[ChatMessage, TokenUsage, float | None]:
         resp = self.session.post(
             self.config.endpoint,
-            json=self._payload(messages, max_tokens, stream=False),
+            json=self._payload(messages, max_tokens, stream=False, extra=extra),
             headers=self._headers(),
             timeout=self.config.timeout,
         )
@@ -334,28 +388,45 @@ class ChatClient:
             self._last_finish_reason = choices[0].get("finish_reason")
             text = _extract_message_text(choices)
             message = choices[0]["message"]
-            delivered = _content_text(message.get("content")) + _content_text(
-                message.get("reasoning") or message.get("reasoning_content")
-            )
+            content = _content_text(message.get("content"))
+            reasoning = _content_text(message.get("reasoning") or message.get("reasoning_content"))
+            defects: list[dict] = []
+            calls: dict[int, ToolCall] = {}
+            raw_calls = message.get("tool_calls")
+            if raw_calls is not None and not isinstance(raw_calls, list):
+                _defect(defects, "tool_calls_invalid", "tool_calls is not a list")
+                raw_calls = []
+            for position, item in enumerate(raw_calls or []):
+                if isinstance(item, dict) and "index" not in item:
+                    item = {**item, "index": position}
+                _merge_tool_delta(calls, item, defects)
+            if message.get("function_call") is not None:
+                _defect(defects, "legacy_function_call", "deprecated function_call field")
+            tool_calls = _finished_tool_calls(calls, defects)
+            delivered = content + reasoning + "".join(c.arguments for c in tool_calls)
             usage_raw = data.get("usage") or {}
         finally:
             resp.close()
         usage = _parse_usage(usage_raw)
         if usage.prompt_tokens_estimated:
-            usage.prompt_tokens = _estimate_tokens("".join(m.get("content", "") for m in messages))
+            usage.prompt_tokens = _estimate_tokens(_message_chars(messages))
             usage.prompt_tokens_estimated = True
         if usage.completion_tokens_estimated:
             usage.completion_tokens = _estimate_tokens(delivered)
             usage.completion_tokens_estimated = True
-        return text, usage, None
+        result = ChatMessage(
+            text=text, content=content, reasoning=reasoning, tool_calls=tool_calls,
+            finish_reason=self._last_finish_reason, wire_defects=defects,
+        )
+        return result, usage, None
 
     def _stream_once(
-        self, messages: list[dict], max_tokens: int | None
-    ) -> tuple[str, TokenUsage, float | None]:
+        self, messages: list[dict], max_tokens: int | None, extra: dict | None = None
+    ) -> tuple[ChatMessage, TokenUsage, float | None]:
         started = time.perf_counter()
         resp = self.session.post(
             self.config.endpoint,
-            json=self._payload(messages, max_tokens, stream=True),
+            json=self._payload(messages, max_tokens, stream=True, extra=extra),
             headers=self._headers(),
             timeout=self.config.timeout,
             stream=True,
@@ -369,6 +440,8 @@ class ChatClient:
 
         chunks: list[str] = []
         reasoning_chunks: list[str] = []
+        calls: dict[int, ToolCall] = {}
+        defects: list[dict] = []
         # Content and reasoning interleaved in arrival order: a loop can happen
         # in either stream, and on reasoning endpoints it usually happens in
         # the one that never reaches `chunks`.
@@ -413,7 +486,13 @@ class ChatClient:
                         or _content_text(delta.get("reasoning") or delta.get("reasoning_content"))
                         or trailing.get("finish_reason") not in (None, self._last_finish_reason)):
                         raise _ProtocolError("Completion choice after terminal finish reason")
-                    choices = []
+                    if delta.get("tool_calls"):
+                        # Tool-call framing is graded evidence, not a transport
+                        # failure: keep the fragment and record the defect.
+                        _defect(defects, "tool_delta_after_finish",
+                                "tool-call fragment after the finish reason")
+                    else:
+                        choices = []
                 saw_choice |= bool(choices)
 
                 usage_raw = event.get("usage")
@@ -443,13 +522,19 @@ class ChatClient:
                         raise _ProtocolError("Completion delta must be an object")
                     piece = _content_text(delta.get("content"))
                     reasoning = _content_text(delta.get("reasoning") or delta.get("reasoning_content"))
-                    if piece or reasoning:
+                    tool_items = delta.get("tool_calls")
+                    if tool_items is not None and not isinstance(tool_items, list):
+                        _defect(defects, "tool_calls_invalid", "tool_calls delta is not a list")
+                        tool_items = None
+                    if piece or reasoning or tool_items:
                         if ttft is None:
                             ttft = (time.perf_counter() - started) * 1000.0
                         if piece:
                             chunks.append(piece)
                         if reasoning:
                             reasoning_chunks.append(reasoning)
+                        for item in tool_items or ():
+                            _merge_tool_delta(calls, item, defects)
                         delta_count += 1
                     else:
                         continue
@@ -493,6 +578,7 @@ class ChatClient:
                 "ttft_ms": ttft, "stream_chunks": delta_count,
                 "content_chars": sum(map(len, chunks)),
                 "reasoning_chars": sum(map(len, reasoning_chunks)),
+                "tool_calls": len(calls),
                 "last_delivery_ms": (last_arrival - started) * 1000
                     if last_arrival is not None else None,
                 "finish_reason": self._last_finish_reason,
@@ -503,23 +589,32 @@ class ChatClient:
             raise _ProtocolError("Completion stream contained no completion choice")
         if not terminated and not looped:
             raise _ProtocolError("Completion stream ended without a finish reason or [DONE]")
-        text = "".join(chunks).strip()
+        content = "".join(chunks)
+        all_reasoning = "".join(reasoning_chunks)
+        text = content.strip()
         if not text:
-            reasoning = "".join(reasoning_chunks).strip()
+            reasoning = all_reasoning.strip()
             text = f"<think>{reasoning}</think>" if reasoning else ""
+        tool_calls = _finished_tool_calls(calls, defects)
         if usage.completion_tokens_estimated:
             # SSE events can contain many tokens. Estimate from all delivered
             # text instead of treating one event as one token.
-            usage.completion_tokens = _estimate_tokens("".join(chunks + reasoning_chunks))
+            usage.completion_tokens = _estimate_tokens(
+                "".join(chunks + reasoning_chunks) + "".join(c.arguments for c in tool_calls)
+            )
             usage.completion_tokens_estimated = True
         if usage.prompt_tokens_estimated:
             usage.prompt_tokens_estimated = True
-            usage.prompt_tokens = _estimate_tokens("".join(m.get("content", "") for m in messages))
+            usage.prompt_tokens = _estimate_tokens(_message_chars(messages))
         self._stream_chunks = delta_count
         self._stream_span_ms = (
             (last_arrival - first_arrival) * 1000 if first_arrival is not None else None
         )
-        return text, usage, ttft
+        message = ChatMessage(
+            text=text, content=content, reasoning=all_reasoning, tool_calls=tool_calls,
+            finish_reason=self._last_finish_reason, wire_defects=defects,
+        )
+        return message, usage, ttft
 
     def _sleep_backoff(self, attempt: int, reason: str) -> None:
         wait = self.config.retry_delay * (2**attempt)
@@ -718,6 +813,107 @@ def _parse_usage(usage_raw: dict) -> TokenUsage:
         prompt_tokens_estimated=prompt is None,
         completion_tokens_estimated=completion is None,
     )
+
+
+MAX_WIRE_DEFECTS = 64
+
+
+def _defect(defects: list[dict], code: str, detail: str, index: int | None = None) -> None:
+    if len(defects) < MAX_WIRE_DEFECTS:
+        entry = {"code": code, "detail": detail}
+        if index is not None:
+            entry["index"] = index
+        defects.append(entry)
+
+
+def _merge_tool_delta(calls: dict[int, ToolCall], item, defects: list[dict]) -> None:
+    """Fold one ``tool_calls`` element (stream delta or complete call) into calls.
+
+    Streaming servers send ``index``, ``id``, ``type`` and ``function.name`` on
+    the first fragment of a call and append ``function.arguments`` fragments
+    afterwards. Malformed framing is recorded as a wire defect, never raised."""
+    if not isinstance(item, dict):
+        _defect(defects, "tool_delta_invalid", "tool-call element is not an object")
+        return
+    index = item.get("index")
+    if type(index) is not int or index < 0:
+        tool_id = item.get("id")
+        last = calls[max(calls)] if calls else None
+        new_call = last is None or (isinstance(tool_id, str) and tool_id and tool_id != last.id)
+        index = (max(calls) + 1 if calls else 0) if new_call else last.index
+        _defect(defects, "tool_index_invalid", "tool-call fragment without a valid index", index)
+    call = calls.get(index)
+    if call is None:
+        call = calls[index] = ToolCall(index=index)
+    tool_id = item.get("id")
+    if tool_id is not None:
+        if not isinstance(tool_id, str) or not tool_id:
+            _defect(defects, "tool_id_invalid", "call id is not a nonempty string", index)
+        elif call.id is None:
+            call.id = tool_id
+        elif tool_id != call.id:
+            _defect(defects, "tool_id_changed", "call id changed within one call", index)
+    kind = item.get("type")
+    if kind is not None:
+        if kind != "function":
+            _defect(defects, "tool_type_invalid", f"unexpected call type {str(kind)[:40]!r}", index)
+        call.type = call.type or (kind if isinstance(kind, str) else None)
+    function = item.get("function")
+    if function is None:
+        return
+    if not isinstance(function, dict):
+        _defect(defects, "tool_function_invalid", "function is not an object", index)
+        return
+    name = function.get("name")
+    if name is not None:
+        if not isinstance(name, str):
+            _defect(defects, "tool_name_invalid", "function name is not a string", index)
+        elif not call.name:
+            call.name = name or call.name
+        elif name and name != call.name:
+            _defect(defects, "tool_name_changed", "function name changed within one call", index)
+    arguments = function.get("arguments")
+    if arguments is None:
+        return
+    if isinstance(arguments, str):
+        call.arguments += arguments
+    elif isinstance(arguments, dict):
+        _defect(defects, "tool_arguments_not_string", "arguments sent as an object", index)
+        call.arguments += json.dumps(arguments, ensure_ascii=False)
+    else:
+        _defect(defects, "tool_arguments_invalid", "arguments are not a string", index)
+
+
+def _finished_tool_calls(calls: dict[int, ToolCall], defects: list[dict]) -> list[ToolCall]:
+    ordered = [calls[index] for index in sorted(calls)]
+    seen: set[str] = set()
+    for call in ordered:
+        if not call.id:
+            _defect(defects, "tool_id_missing", "call has no id", call.index)
+        elif call.id in seen:
+            _defect(defects, "tool_id_duplicate", "call id repeats an earlier call", call.index)
+        else:
+            seen.add(call.id)
+        if not call.name:
+            _defect(defects, "tool_name_missing", "call has no function name", call.index)
+    return ordered
+
+
+def _message_chars(messages: list[dict]) -> str:
+    """Request text for prompt estimates, tolerating null content and tool calls."""
+    parts = []
+    for message in messages:
+        content = message.get("content", "")
+        if isinstance(content, str):
+            parts.append(content)
+        elif isinstance(content, list):
+            parts.extend(p.get("text", "") for p in content
+                         if isinstance(p, dict) and isinstance(p.get("text"), str))
+        for call in message.get("tool_calls") or ():
+            function = call.get("function") if isinstance(call, dict) else None
+            if isinstance(function, dict) and isinstance(function.get("arguments"), str):
+                parts.append(function["arguments"])
+    return "".join(parts)
 
 
 def _extract_message_text(choices: list[dict]) -> str:

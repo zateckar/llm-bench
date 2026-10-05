@@ -27,6 +27,8 @@
             r.context_max ??= 1048576;
             r.sweep_rounds ??= 1;
             r.sweep_output_tokens ??= 8192;
+            r.suite ??= 'rigorous';
+            r.repeats ??= 1;
             r.model_id ??= '';
             r._key = this.nextKey++;
             return r;
@@ -67,15 +69,23 @@
                    (contexts.size * concurrencies.size).toLocaleString() + ' cells and ' + requests.toLocaleString() +
                    ' timed cold/warm requests plus ' + contexts.size.toLocaleString() + ' cache primes per accepted effort. Up to 8 effort settings are probed, including provider default; at most 2,448 paired cells (4,896 cold/warm measurements) across all efforts. Worker warmups and failure-control probes are additional untimed requests.';
         },
-        payload() { return JSON.stringify(this.runs.map(({_key, context_max, sweep_rounds, sweep_output_tokens, ...rest}) =>
-            rest.mode === 'sweep' ? {...rest, context_max, sweep_rounds, sweep_output_tokens} : rest)); }
+        suites: {{ suites | tojson | forceescape }},
+        suiteFor(run) { return this.suites.find(s => s.name === run.suite) || this.suites[0]; },
+        usesQuality(run) { return run.mode === 'both' || run.mode === 'quality'; },
+        totalRuns() { return this.runs.reduce((n, r) => n + Math.max(1, Number(r.repeats) || 1), 0); },
+        payload() { return JSON.stringify(this.runs.map(({_key, context_max, sweep_rounds, sweep_output_tokens, suite, repeats, ...rest}) => {
+            const spec = rest.mode === 'sweep' ? {...rest, context_max, sweep_rounds, sweep_output_tokens} : {...rest};
+            if (this.usesQuality(rest) && suite && suite !== 'rigorous') spec.suite = suite;
+            if (Number(repeats) > 1) spec.repeats = Number(repeats);
+            return spec;
+        })); }
      }">
     <div>
         <h1 class="text-xl font-bold text-white">{{ heading }}</h1>
         <p class="text-zinc-400 mt-1">Select a model and start now, or choose a start time. Add runs to compare several models. Runs execute one at a time, in the order listed.</p>
     </div>
 
-    <p x-show="runs.some(r => r.mode !== 'sweep')" class="text-sm text-zinc-400">One fixed suite of {{ question_count }} questions with strict evaluations and partial-credit diagnostics. Includes interactive tasks and 8k / 32k context accuracy checks.</p>
+    <p x-show="runs.some(r => r.mode !== 'sweep')" class="text-sm text-zinc-400">The rigorous suite has {{ question_count }} questions with strict evaluations and partial-credit diagnostics, including interactive tasks and 8k / 32k context accuracy checks. The conformance suite tests native tool calls and structured output through this deployment's parsers.</p>
     {% if suite_error %}<p class="text-red-400">{{ suite_error }}</p>{% endif %}
 
     {% if not models %}
@@ -124,6 +134,8 @@
                         </select>
                     </div>
                     <div><label class="block text-xs text-zinc-400">Mode</label><select x-model="run.mode" @change="setMode(run)" class="bg-zinc-800 rounded px-3 py-2 w-full"><option value="both">Quality + performance</option><option value="quality">Quality</option><option value="performance">Performance · fixed context</option><option value="sweep">Performance · context &amp; reasoning sweep</option></select></div>
+                    <div x-show="usesQuality(run)"><label class="block text-xs text-zinc-400">Quality suite</label><select x-model="run.suite" class="bg-zinc-800 rounded px-3 py-2 w-full">{% for suite in suites %}<option value="{{ suite.name }}">{{ suite.label }}{% if suite.questions %} · {{ suite.questions }} tasks{% endif %}</option>{% endfor %}</select><p class="text-xs text-zinc-500 mt-1" x-text="suiteFor(run).description"></p></div>
+                    <div><label class="block text-xs text-zinc-400">Repeats</label><input type="number" min="1" max="{{ max_repeats }}" x-model.number="run.repeats" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1" x-show="run.repeats > 1">Runs this configuration <span x-text="run.repeats"></span> times with model seeds 0–<span x-text="run.repeats - 1"></span> to measure run-to-run variability. Quality mode is usually enough for repeats.</p></div>
                     <div><label class="block text-xs text-zinc-400">Maximum concurrency</label><input type="number" min="1" :max="run.mode === 'sweep' ? 256 : {{ max_concurrency }}" x-model.number="run.max_concurrency" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p x-show="run.mode === 'sweep'" class="text-xs text-zinc-500 mt-1">1, then 16, 32, … up to this limit.</p></div>
                     <div x-show="run.mode === 'sweep'"><label class="block text-xs text-zinc-400">Maximum input context · reference tokens</label><input type="number" min="256" max="1048576" x-model.number="run.context_max" :disabled="run.mode !== 'sweep'" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1">256 and 32,768, then 65,536-token steps to 1,048,576.</p></div>
                     <div x-show="run.mode === 'sweep'"><label class="block text-xs text-zinc-400">Rounds per cell</label><input type="number" min="1" max="8" x-model.number="run.sweep_rounds" :disabled="run.mode !== 'sweep'" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1">Each round sends one cold and one warm-prefix request per concurrent worker.</p></div>
@@ -136,6 +148,13 @@
 
         <button type="button" @click="addRun()" :disabled="runs.length >= 50" class="btn-ghost w-full text-sm">+ Add another run</button>
 
+        <p x-show="totalRuns() > 50" class="text-sm text-amber-400 text-center">
+            Repeats expand this submission to <span x-text="totalRuns()"></span> runs; the limit is 50.
+        </p>
+        <p x-show="totalRuns() > runs.length && totalRuns() <= 50" class="text-xs text-zinc-400 text-center">
+            Repeats expand this submission to <span x-text="totalRuns()"></span> queued runs.
+        </p>
+
         <p x-show="missingModelIndexes().length" class="text-sm text-amber-400 text-center">
             Run <span x-text="missingModelIndexes().join(', ')"></span>
             <span x-text="missingModelIndexes().length > 1 ? 'need' : 'needs'"></span> a model selected before submitting.
@@ -143,7 +162,7 @@
 
         <input type="hidden" name="runs_json" :value="payload()">
 
-        <button type="submit" class="btn-primary w-full" :disabled="missingModelIndexes().length > 0">{{ submit_label }}</button>
+        <button type="submit" class="btn-primary w-full" :disabled="missingModelIndexes().length > 0 || totalRuns() > 50">{{ submit_label }}</button>
         <p class="text-xs text-zinc-500 text-center">
             Runs join one queue and execute one at a time. Leave the start time empty to run as soon as the queue is free.
         </p>

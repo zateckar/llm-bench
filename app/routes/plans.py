@@ -80,7 +80,7 @@ async def plan_edit_page(request: Request, plan_id: int):
     if not plan:
         return RedirectResponse(url="/admin/plans", status_code=302)
     runs = await fetch_all(
-        "SELECT model_id, run_options_json FROM test_runs WHERE plan_id = ? ORDER BY id",
+        "SELECT model_id, run_options_json, repeat_group_id, repeat_count FROM test_runs WHERE plan_id = ? ORDER BY id",
         (plan_id,),
     )
     models = await fetch_all("SELECT * FROM models ORDER BY name")
@@ -89,7 +89,7 @@ async def plan_edit_page(request: Request, plan_id: int):
         "admin/run_test.html",
         run_submission.form_context(
             models,
-            specs=[run_submission.spec_from_run(run) for run in runs],
+            specs=run_submission.specs_from_runs(runs),
             name=plan.get("name") or "",
             scheduled=plan.get("scheduled_at"),
             action=f"/admin/plans/{plan_id}/edit",
@@ -129,13 +129,13 @@ async def plan_clone(request: Request, plan_id: int):
     if not plan:
         return RedirectResponse(url="/admin/plans", status_code=302)
     runs = await fetch_all(
-        "SELECT model_id, run_options_json FROM test_runs WHERE plan_id = ? ORDER BY id",
+        "SELECT model_id, run_options_json, repeat_group_id, repeat_count FROM test_runs WHERE plan_id = ? ORDER BY id",
         (plan_id,),
     )
     if not runs:
         return RedirectResponse(url="/admin/plans", status_code=302)
     prepared = await run_submission.validated_specs(
-        json.dumps([run_submission.spec_from_run(run) for run in runs])
+        json.dumps(run_submission.specs_from_runs(runs))
     )
     await run_submission.submit_runs(
         f"{plan['name']} (copy)" if plan["name"] else None,

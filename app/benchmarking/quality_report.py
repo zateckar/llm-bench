@@ -8,6 +8,13 @@ import statistics
 from app.benchmarking.models import EVALUATION_SCHEMA_VERSION, percentile
 from app.benchmarking.evaluators import EVALUATOR_VERSIONS
 from app.benchmarking.llm_client import client_protocol
+from app.benchmarking.paired_stats import (
+    family_differences,
+    hierarchical_bootstrap,
+    mcnemar_exact,
+    sign_flip_test,
+    verdict,
+)
 from app.benchmarking.quality_protocol import protocol as execution_protocol
 from app.benchmarking.quality_suite import (
     REVISION,
@@ -163,6 +170,8 @@ def summarize(rows):
         )
     interactions = [r for r in rows if r["metadata"].get("protocol") == "json-actions-v1"]
     recovery_rows = [r for r in rows if r["diagnostics"].get("recovery")]
+    native = [r for r in rows if r["metadata"].get("protocol") == "native-tools-v1"]
+    extra = {"native": native_summary(native)} if native else {}
     return {
         "count": len(rows),
         "total": len(rows),
@@ -207,72 +216,213 @@ def summarize(rows):
             ),
             "violations": sum(len(r["diagnostics"].get("violations", [])) for r in interactions),
         },
+        **extra,
     }
 
 
-def make_report(results, client_config, selected_hash=None, max_concurrency=8):
+def _failed_criteria(row):
+    return [c for c in (row.get("evaluation") or {}).get("criteria") or [] if c.get("status") == "fail"]
+
+
+def native_summary(rows):
+    """Deployment-level tool-calling diagnostics, separate from task quality.
+
+    Counts are per task: a defect code is counted once per task that showed it,
+    so one chatty task cannot dominate the picture."""
+    usable = [r for r in rows if r["scored"]]
+    defects, contract, leaks = Counter(), Counter(), Counter()
+    for r in usable:
+        defects.update({d.get("code") for d in r["diagnostics"].get("wire_defects") or [] if isinstance(d, dict)})
+        for c in _failed_criteria(r):
+            if c.get("dimension") == "contract":
+                contract[c["id"]] += 1
+            if c.get("id") == "no-markup-leak":
+                leaks.update((c.get("evidence") or {}).get("patterns") or [])
+    rejected = [r for r in rows if r["outcome"] == "feature_rejected"]
+    transports = {}
+    for transport in ("stream", "blocking"):
+        items = [r for r in usable if r["metadata"].get("transport") == transport]
+        if items:
+            transports[transport] = {
+                "tasks": len(items),
+                "passes": sum(r["passed"] for r in items),
+                "contract_failures": sum(any(c.get("dimension") == "contract" for c in _failed_criteria(r))
+                                         for r in items),
+            }
+    simulations = [r for r in usable if r["metadata"].get("kind") == "simulation"]
+    return {
+        "tasks": len(rows),
+        "scored": len(usable),
+        "passes": sum(r["passed"] for r in usable),
+        "feature_rejected": len(rejected),
+        "rejected_families": sorted({r["family"] for r in rejected}),
+        "rejection_status": dict(Counter(str(r["metrics"].get("http_status")) for r in rejected)),
+        "contract_failures": dict(contract.most_common()),
+        "wire_defects": dict(defects.most_common()),
+        "markup_leaks": dict(leaks.most_common()),
+        "transports": transports,
+        "simulations": {
+            "tasks": len(simulations),
+            "successes": sum(r["passed"] for r in simulations),
+            "calls": sum(r["diagnostics"].get("calls", 0) for r in simulations),
+            "unnecessary_calls": sum(r["diagnostics"].get("unnecessary_calls", 0) for r in simulations),
+            "violations": sum(len(r["diagnostics"].get("violations", [])) for r in simulations),
+        },
+    }
+
+
+def make_report(results, client_config, selected_hash=None, max_concurrency=8, suite=None):
     rows = [result_record(r) for r in results]
+    client = client_protocol(replace(client_config, detect_repetition=False,
+                                     retry_transport_errors=False,
+                                     max_retries=min(3, client_config.max_retries)))
+    if suite is None or suite.name == "rigorous":
+        # The historical rigorous report shape is unchanged so saved runs stay
+        # comparable; other suites record their name, protocol and client extras.
+        suite_block = provenance()
+        revision = REVISION
+        execution = execution_protocol(client_config.max_tokens)
+    else:
+        suite_block = {**suite.provenance(), "name": suite.name}
+        revision = suite.revision()
+        execution = suite.execution(client_config.max_tokens)
+        client = {**client, **suite.client_extra()}
     return {
         "schema_version": 3,
         "scoring_revision": SCORING_REVISION,
         "evaluation_schema_version": EVALUATION_SCHEMA_VERSION,
         "suite_hash": selected_hash or suite_hash([r.question for r in results]),
         "model": client_config.model,
-        "suite": provenance(),
+        "suite": suite_block,
         "protocol": {
-            "revision": REVISION,
+            "revision": revision,
             "evaluation_schema_version": EVALUATION_SCHEMA_VERSION,
             "evaluator_versions": dict(EVALUATOR_VERSIONS),
             "temperature": client_config.temperature,
             "reasoning_effort": client_config.reasoning_effort,
-            "execution": execution_protocol(client_config.max_tokens),
+            "execution": execution,
             "model_seed": client_config.seed,
             "max_output_tokens": min(MAX_OUTPUT_TOKENS, client_config.max_tokens),
             "quality_workers": min(QUALITY_WORKERS, max_concurrency),
-            "client": client_protocol(replace(client_config, detect_repetition=False,
-                                              retry_transport_errors=False,
-                                              max_retries=min(3, client_config.max_retries))),
+            "client": client,
         },
         "summary": summarize(rows),
         "results": rows,
     }
 
 
-def paired_comparison(left, right):
-    if left.get("schema_version") not in {3} or right.get("schema_version") not in {3}:
+def comparable_protocol(protocol):
+    """Protocol identity used for comparisons.
+
+    The model seed is a sampling detail: repeated runs deliberately vary it, so
+    it is recorded and reported but does not by itself prevent pairing."""
+    if not isinstance(protocol, dict):
+        return protocol
+    identity = {key: value for key, value in protocol.items() if key != "model_seed"}
+    if isinstance(identity.get("client"), dict):
+        identity["client"] = {
+            key: value for key, value in identity["client"].items() if key != "model_seed"
+        }
+    return identity
+
+
+def _capability_rows(report):
+    return [r for r in report["results"] if r["scope"] == "capability"]
+
+
+def compare_groups(lefts, rights):
+    """Paired comparison of two run groups (single runs are groups of one).
+
+    Tasks pair by fingerprint. Each task contributes the right-minus-left
+    difference of its mean achievement over scored repeats; families and
+    categories keep the headline weighting. The interval resamples families
+    and repeats; the p-value is a family-level sign-flip randomization test."""
+    reports = [*lefts, *rights]
+    if not lefts or not rights:
+        return {"compatible": False, "reason": "Both sides need at least one run"}
+    if any(r.get("schema_version") not in {3} for r in reports):
         return {"compatible": False, "reason": "Missing or unsupported quality report version"}
-    if left.get("protocol") != right.get("protocol"):
+    if len({(r.get("suite") or {}).get("name") or "rigorous" for r in reports}) > 1:
+        return {"compatible": False, "reason": "Different quality suites are never paired"}
+    identity = comparable_protocol(reports[0].get("protocol"))
+    if any(comparable_protocol(r.get("protocol")) != identity for r in reports):
         return {
             "compatible": False,
             "reason": "Different decoding budgets/settings or quality protocol revisions",
         }
-    lrows = {r["fingerprint"]: r for r in left["results"] if r["scope"] == "capability"}
-    rrows = {r["fingerprint"]: r for r in right["results"] if r["scope"] == "capability"}
+
+    def side(group):
+        rows, values, passes = {}, defaultdict(list), defaultdict(list)
+        for report in group:
+            for row in _capability_rows(report):
+                rows.setdefault(row["fingerprint"], row)
+                if row["scored"]:
+                    values[row["fingerprint"]].append(achievement_score(row))
+                    passes[row["fingerprint"]].append(bool(row["passed"]))
+        return rows, values, passes
+
+    lrows, lvalues, lpasses = side(lefts)
+    rrows, rvalues, rpasses = side(rights)
     matched = sorted(lrows.keys() & rrows.keys())
-    pairs = [
-        {**lrows[key], "score": achievement_score(rrows[key]) - achievement_score(lrows[key])}
-        for key in matched
-        if lrows[key]["scored"] and rrows[key]["scored"]
-    ]
-    if not pairs:
+    paired = [key for key in matched if lvalues[key] and rvalues[key]]
+    if not paired:
         return {
             "compatible": False,
             "reason": "No identical capability questions answered by both runs",
         }
-    groups = clusters(pairs)
+    tasks = defaultdict(lambda: defaultdict(list))
+    for key in paired:
+        row = lrows[key]
+        tasks[row["category"]][row["family"]].append((lvalues[key], rvalues[key]))
+    groups = family_differences(tasks)
+    difference = balanced(groups)
+    interval = hierarchical_bootstrap(tasks)
+    p_value = sign_flip_test(groups)
+    single = len(lefts) == 1 and len(rights) == 1
+    discordance = None
+    if single:
+        patterns = Counter((lpasses[key][0], rpasses[key][0]) for key in paired)
+        discordance = {
+            "both_pass": patterns[True, True],
+            "both_fail": patterns[False, False],
+            "left_only_pass": patterns[True, False],
+            "right_only_pass": patterns[False, True],
+        }
+        discordance["mcnemar_p"] = mcnemar_exact(
+            discordance["left_only_pass"], discordance["right_only_pass"]
+        )
+    seeds = sorted({(r.get("protocol") or {}).get("model_seed") for r in reports}, key=str)
     return {
         "compatible": True,
         "direction": "right minus left",
         "score_basis": SCORING_REVISION,
+        "left_runs": len(lefts),
+        "right_runs": len(rights),
         "matched": len(matched),
-        "paired": len(pairs),
-        "excluded_pairs": len(matched) - len(pairs),
+        "paired": len(paired),
+        "excluded_pairs": len(matched) - len(paired),
         "left_unmatched": len(lrows) - len(matched),
         "right_unmatched": len(rrows) - len(matched),
-        "balanced_difference": balanced(groups),
-        "ci95": bootstrap(groups),
-        "same_suite": left.get("suite_hash") == right.get("suite_hash"),
-        "criterion_detail_available": all(r.get("evaluation") is not None for r in pairs),
+        "balanced_difference": difference,
+        "ci95": interval,
+        "interval_method": "Hierarchical bootstrap: families within categories, then repeats within tasks."
+        if not single
+        else "Family bootstrap within fixed categories.",
+        "p_value": p_value,
+        "test": "Two-sided family-level sign-flip randomization test (10,000 permutations, fixed seed).",
+        "verdict": verdict(difference, interval, p_value),
+        "full_pass_discordance": discordance,
+        "same_suite": len({r.get("suite_hash") for r in reports}) == 1,
+        "same_seed": len(seeds) == 1,
+        "model_seeds": seeds,
+        "criterion_detail_available": all(
+            lrows[key].get("evaluation") is not None and rrows[key].get("evaluation") is not None
+            for key in paired
+        ),
     }
+
+
+def paired_comparison(left, right):
+    return compare_groups([left], [right])
 
 

@@ -160,6 +160,9 @@ class Question:
     # Optional criterion contract for new questions. Legacy questions keep the
     # evaluator-defined fallback until they opt into named requirements.
     rubric: list[dict[str, Any]] | None = None
+    # Extra Chat Completions fields shown to the model (tools, tool_choice,
+    # parallel_tool_calls, response_format). Omitted from fingerprints when None.
+    request: dict[str, Any] | None = None
 
     @property
     def effective_weight(self) -> float:
@@ -216,6 +219,8 @@ class RequestMetrics:
     chunk_gaps_ms: list[float] = field(default_factory=list)
     attempt_diagnostics: list[dict] = field(default_factory=list)
     cached_tokens_reported: bool = False
+    # HTTP status of a rejected request; None for successes and transport errors.
+    http_status: int | None = None
 
     @property
     def output_token_time_ms(self) -> float | None:
@@ -239,6 +244,33 @@ class RequestMetrics:
 
 
 @dataclass
+class ToolCall:
+    """One native tool call exactly as delivered; arguments stay a raw string."""
+
+    index: int
+    id: str | None = None
+    name: str | None = None
+    arguments: str = ""
+    type: str | None = None
+
+
+@dataclass
+class ChatMessage:
+    """A complete assistant message, including native tool calls.
+
+    ``text`` is the legacy answer string used by text evaluators: content, or a
+    ``<think>`` wrapper when only reasoning arrived. Wire defects describe
+    malformed tool-call framing; they are evidence for grading, never raised."""
+
+    text: str = ""
+    content: str = ""
+    reasoning: str = ""
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    finish_reason: str | None = None
+    wire_defects: list[dict] = field(default_factory=list)
+
+
+@dataclass
 class Result:
     question: Question
     response: str
@@ -253,7 +285,9 @@ class Result:
 
     @property
     def is_scored(self) -> bool:
-        return self.metrics.ok and self.outcome not in {
+        # A request field rejected by the deployment (for example tool_choice
+        # without a tool parser) is a measured capability failure, not an outage.
+        return (self.metrics.ok or self.outcome == "feature_rejected") and self.outcome not in {
             "endpoint_error",
             "unsupported_context",
             "evaluator_error",

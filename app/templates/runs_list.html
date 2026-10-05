@@ -54,6 +54,10 @@
                         <a href="/admin/plans" class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs text-violet-300 bg-violet-900/40"
                            title="Part of submission #{{ run.plan_id }}">S{{ run.plan_id }}</a>
                         {% endif %}
+                        {% if run.repeat_group_id %}
+                        <a href="/runs/groups/{{ run.repeat_group_id }}" class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs text-sky-300 bg-sky-900/40"
+                           title="Repeat {{ run.repeat_index + 1 }} of {{ run.repeat_count }} (model seed {{ run.repeat_index }}); open the group summary">R{{ run.repeat_index + 1 }}/{{ run.repeat_count }}</a>
+                        {% endif %}
                     </td>
                     <td>
                         {% if run.status == 'completed' and run.scored_questions == 0 %}
@@ -72,7 +76,7 @@
                         {% endif %}
                         {% else %}-{% endif %}
                     </td>
-                    <td class="text-xs font-mono text-zinc-500 whitespace-nowrap" title="{{ run.test_suite_hash or 'N/A' }}">{{ (run.test_suite_hash or '-')[:8] }}</td>
+                    <td class="text-xs font-mono text-zinc-500 whitespace-nowrap" title="{{ run.test_suite_hash or 'N/A' }}">{{ (run.test_suite_hash or '-')[:8] }}{% if run.suite_name %}<span class="ml-1 px-1 rounded bg-zinc-800 text-zinc-300" title="Quality suite">{{ run.suite_name }}</span>{% endif %}</td>
                     <td class="text-sm text-zinc-500">{{ run.created_at[:16].replace('T', ' ') if run.created_at else '-' }}</td>
                     <td class="text-right whitespace-nowrap">
                         <div class="flex items-center justify-end gap-1">

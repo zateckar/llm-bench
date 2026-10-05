@@ -28,11 +28,13 @@ def rng_for(seed, variant, family):
 
 def fingerprint(q):
     # The fixed output cap is recorded in the comparison protocol. The question
-    # fingerprint covers its prompt, answer key, rubric and environment.
+    # fingerprint covers its prompt, answer key, rubric, request fields and
+    # environment. Absent optional fields are omitted so that adding a field
+    # never changes the identity of existing questions.
     fields = {
         k: v
         for k, v in asdict(q).items()
-        if k != "max_tokens" and not (k == "rubric" and v is None)
+        if k != "max_tokens" and not (k in {"rubric", "request"} and v is None)
     }
     return hashlib.sha256(
         json.dumps(fields, sort_keys=True, ensure_ascii=True).encode()

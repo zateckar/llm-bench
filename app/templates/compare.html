@@ -120,8 +120,12 @@
 <table class="w-full text-sm"><thead><tr><th>Run</th><th>Balanced achievement</th><th>95% interval</th><th>Full task success</th><th>Evaluated</th></tr></thead><tbody>
 {% for run in selected_runs %}{% if run.quality.get('schema_version') == 3 %}{% set s = run.quality.summary %}<tr><td>#{{ run.id }} {{ run.model_name }}</td><td>{{ '%.1f%%'|format(s.category_balanced*100) if s.category_balanced is not none else 'n/a' }}</td><td>{% if s.category_balanced_ci95 %}{{ '%.1f'|format(s.category_balanced_ci95[0]*100) }}–{{ '%.1f'|format(s.category_balanced_ci95[1]*100) }}%{% else %}n/a{% endif %}</td><td>{{ '%.1f%%'|format(s.category_balanced_full_pass*100) if s.category_balanced_full_pass is not none else 'n/a' }}</td><td>{{ s.scored }}/{{ s.total }}</td></tr>{% endif %}{% endfor %}
 </tbody></table>
-{% for row in quality_comparisons %}{% set c = row.comparison %}<p class="text-sm text-zinc-300">#{{ row.right }} minus #{{ row.left }}: {% if c.compatible %}{{ '%+.1f'|format(c.balanced_difference*100) }} percentage points{% if c.ci95 %} (95% paired interval {{ '%+.1f'|format(c.ci95[0]*100) }} to {{ '%+.1f'|format(c.ci95[1]*100) }}){% endif %} · {{ c.paired }} identical tasks, {{ c.excluded_pairs }} excluded pairs.{% else %}{{ c.reason }}{% endif %}</p>{% endfor %}
-<p class="text-xs text-zinc-500">Intervals resample families within categories; they do not measure run-to-run variability. Earlier suite scores are not comparable to the current scoring protocol.</p></section>
+{% from "quality_macros.html" import comparison_sentence %}
+{% for row in quality_comparisons %}<p class="text-sm text-zinc-300">#{{ row.right }} minus #{{ row.left }}: {{ comparison_sentence(row.comparison) }}</p>{% endfor %}
+{% set grouped = selected_runs|selectattr('repeat_group_id')|map(attribute='repeat_group_id')|unique|list %}
+{% if grouped %}<p class="text-sm text-sky-300">Some selected runs belong to repeat groups. Comparing whole groups also accounts for run-to-run variability:
+{% for gid in grouped %}<a class="underline" href="/runs/groups/{{ gid }}{% if grouped|length > 1 %}?{% for other in grouped if other != gid %}vs={{ other }}{% if not loop.last %}&amp;{% endif %}{% endfor %}{% endif %}">group #{{ gid }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+<p class="text-xs text-zinc-500">Single-run intervals resample families within categories and do not measure run-to-run variability; repeat groups also resample runs. p-values come from a family-level sign-flip randomization test. Earlier suite scores are not comparable to the current scoring protocol.</p></section>
 
     <!-- Radar Chart Overlay -->
     <div class="card p-4">

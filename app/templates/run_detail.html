@@ -33,7 +33,7 @@
         </a>
         <div>
             <h1 class="text-xl font-bold text-white">Run #{{ run.id }}</h1>
-            <p class="text-zinc-400 mt-1">{{ run.model_name }} ({{ run.model_id }})</p>
+            <p class="text-zinc-400 mt-1">{{ run.model_name }} ({{ run.model_id }}){% if run.repeat_group_id %} · <a class="text-sky-300" href="/runs/groups/{{ run.repeat_group_id }}">repeat {{ run.repeat_index + 1 }} of {{ run.repeat_count }} — group summary</a>{% endif %}</p>
         </div>
         <div class="ml-auto flex items-center gap-3">
             <a href="/runs/{{ run.id }}/report.html" class="btn-primary" download>Download HTML</a>
@@ -230,10 +230,11 @@
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-2">
                                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs
-                                        {% if not r.request_ok %}bg-amber-900/50 text-amber-400
+                                        {% if not r.request_ok and r.quality_outcome != 'feature_rejected' %}bg-amber-900/50 text-amber-400
                                         {% elif r.passed %}bg-emerald-900/50 text-emerald-400
-                                        {% else %}bg-red-900/50 text-red-400{% endif %}">
-                                        {% if not r.request_ok %}!{% elif r.passed %}&#10003;{% else %}&#10007;{% endif %}
+                                        {% else %}bg-red-900/50 text-red-400{% endif %}"
+                                        {% if r.quality_outcome == 'feature_rejected' %}title="The deployment rejected a request feature; scored as a failure"{% endif %}>
+                                        {% if not r.request_ok and r.quality_outcome != 'feature_rejected' %}!{% elif r.passed %}&#10003;{% else %}&#10007;{% endif %}
                                     </span>
                                     <span class="font-mono text-xs text-zinc-500">{{ r.test_id }}</span>
                                     <span class="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide bg-zinc-800 text-zinc-400">{{ r.difficulty or 'medium' }}</span>
@@ -265,7 +266,7 @@
                                         <div class="bg-zinc-950 rounded p-3 text-xs text-zinc-300 max-h-40 overflow-auto scrollbar-thin whitespace-pre-wrap">{{ r.prompt }}</div>
                                     </div>
                                     <div>
-                                        <p class="text-xs font-medium text-zinc-500 mb-1">{{ 'Interactive transcript (each assistant turn is graded separately)' if r.interactive_turns else 'Response' }}</p>
+                                        <p class="text-xs font-medium text-zinc-500 mb-1">{{ ('Native tool-call transcript (graded as a whole)' if r.interactive_turns[0].native else 'Interactive transcript (each assistant turn is graded separately)') if r.interactive_turns else 'Response' }}</p>
                                         <div class="bg-zinc-950 rounded p-3 text-xs text-zinc-300 max-h-64 overflow-auto scrollbar-thin whitespace-pre-wrap">{% if r.interactive_turns %}{% for turn in r.interactive_turns %}<p class="font-semibold">Turn {{ turn.number }} · {{ turn.role }}</p><pre class="whitespace-pre-wrap">{{ turn.content }}</pre>{% endfor %}{% else %}{{ r.response }}{% endif %}</div>
                                     </div>
                                 </div>

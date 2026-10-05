@@ -670,6 +670,19 @@ def main() -> int:
     for q in questions:
         validate_question(report, q)
 
+    # The tool-conformance suite is graded natively, so it gets its own oracle
+    # checks; its structured-output answer keys share json_match's rules.
+    from app.benchmarking import tool_suite
+
+    native = tool_suite.load_questions()
+    for problem in tool_suite.validate_suite(native):
+        report.error("tool-conformance", problem)
+    for q in native:
+        if q.evaluator == "native_structured_output":
+            check_json_match(report, f"{q.id} [{q.evaluator}]", q.expected["json"])
+    if not args.quiet:
+        print(f"Validated {len(native)} tool-conformance questions ({tool_suite.REVISION}).")
+
     by_category = Counter(q.category for q in questions)
     by_evaluator = Counter(q.evaluator for q in questions)
     by_difficulty = Counter(q.difficulty for q in questions)

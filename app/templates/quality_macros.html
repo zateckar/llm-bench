@@ -1,0 +1,28 @@
+{% macro pct_points(value) %}{{ '%+.1f'|format(value*100) }}{% endmacro %}
+
+{% macro p_text(value) %}{% if value is none %}n/a{% elif value < 0.001 %}&lt; 0.001{% else %}{{ '%.3f'|format(value) }}{% endif %}{% endmacro %}
+
+{#- One plain-language line for a paired comparison (single runs or repeat groups). -#}
+{% macro comparison_sentence(c) -%}
+{%- if c.compatible -%}
+{{ pct_points(c.balanced_difference) }} percentage points{% if c.ci95 %} (95% paired interval {{ pct_points(c.ci95[0]) }} to {{ pct_points(c.ci95[1]) }}){% endif %},
+{% set p = c.p_adjusted if c.p_adjusted is defined and c.p_adjusted is not none else c.p_value %}p = {{ p_text(p) }}{% if c.adjustment %} ({{ c.adjustment }}-adjusted){% endif %}:
+{% if c.verdict == 'right_higher' %}<strong>right is higher</strong>{% elif c.verdict == 'left_higher' %}<strong>left is higher</strong>{% else %}no detectable difference with this evidence{% endif %}.
+{{ c.paired }} identical tasks{% if c.left_runs is defined and (c.left_runs > 1 or c.right_runs > 1) %} across {{ c.left_runs }} vs {{ c.right_runs }} runs{% endif %}, {{ c.excluded_pairs }} excluded pairs{% if not c.same_seed %}; model seeds differ{% endif %}.
+{%- if c.full_pass_discordance %} Full passes: {{ c.full_pass_discordance.left_only_pass }} left-only, {{ c.full_pass_discordance.right_only_pass }} right-only (exact McNemar p = {{ p_text(c.full_pass_discordance.mcnemar_p) }}).{% endif %}
+{%- else -%}{{ c.reason }}{%- endif -%}
+{%- endmacro %}
+
+{#- Deployment-level tool-calling diagnostics (tool-conformance suite only). -#}
+{% macro native_diagnostics(n) -%}
+{%- if n and n.tasks -%}
+<div class="native-diagnostics space-y-1 text-sm">
+<p><strong>Tool-calling wire diagnostics</strong> — {{ n.passes }}/{{ n.scored }} tasks fully passed.{% if n.feature_rejected %} {{ n.feature_rejected }} requests were rejected by the deployment (HTTP {% for status, count in n.rejection_status.items() %}{{ status }} ×{{ count }}{% if not loop.last %}, {% endif %}{% endfor %}) in families {{ n.rejected_families|join(', ') }}; these count as failures, not outages.{% endif %}</p>
+{% if n.contract_failures %}<p>Tasks failing each wire check: {% for name, count in n.contract_failures.items() %}<code>{{ name }}</code> {{ count }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% else %}<p>No wire-conformance failures.</p>{% endif %}
+{% if n.wire_defects %}<p>Stream/framing defects (tasks affected): {% for code, count in n.wire_defects.items() %}<code>{{ code }}</code> {{ count }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+{% if n.markup_leaks %}<p>Raw tool-call markup leaked into content (parser mismatch): {% for name, count in n.markup_leaks.items() %}{{ name }} {{ count }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+{% if n.transports %}<p>{% for name, t in n.transports.items() %}{{ name|capitalize }}: {{ t.passes }}/{{ t.tasks }} passed, {{ t.contract_failures }} with wire failures{% if not loop.last %} · {% endif %}{% endfor %}. Identical tasks are sent both ways; a gap points at the streaming tool parser.</p>{% endif %}
+{% set s = n.simulations %}{% if s.tasks %}<p>Native simulations: {{ s.successes }}/{{ s.tasks }} succeeded · {{ s.calls }} calls · {{ s.unnecessary_calls }} excess calls · {{ s.violations }} authorization violations.</p>{% endif %}
+</div>
+{%- endif -%}
+{%- endmacro %}

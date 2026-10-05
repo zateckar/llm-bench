@@ -31,10 +31,9 @@
         <tr><td>Degenerate-repetition rate</td>{% for run in runs %}<td>{{ fmt(run.quality.get('summary', {}).get('repetition_rate'), '%') }}</td>{% endfor %}</tr>
     </tbody></table></div>
     <p class="small muted subsection">Balanced capability gives equal weight to categories and question families. Variants are clustered for confidence intervals, which measure sampled-item uncertainty, not run-to-run variability. Creative-writing compliance measures constraints, not artistic quality. Scores average criterion achievement; full passes are a separate statistic. Missing measurements are n/a.</p>
+    {% from "quality_macros.html" import comparison_sentence %}
     {% for row in quality_comparisons %}{% set c = row.comparison %}<p class="notice"><strong>#{{ row.right }} minus #{{ row.left }}:</strong>
-        {% if c.compatible %}{{ '%+.1f'|format(c.balanced_difference*100) }} percentage points{% if c.ci95 %} (95% paired interval {{ '%+.1f'|format(c.ci95[0]*100) }} to {{ '%+.1f'|format(c.ci95[1]*100) }}){% endif %}.
-        {{ c.paired }} identical capability questions scored by both; {{ c.excluded_pairs }} pairs excluded; {{ c.left_unmatched }}/{{ c.right_unmatched }} unmatched.
-        {% else %}{{ c.reason }}{% endif %}</p>{% endfor %}
+        {{ comparison_sentence(c) }}{% if c.compatible %} {{ c.left_unmatched }}/{{ c.right_unmatched }} unmatched.{% endif %}</p>{% endfor %}
     </div>
     {% if category_names %}<div class="panel subsection"><h3>Category scores</h3><div class="table-wrap"><table><thead><tr><th>Category</th>{% for run in runs %}<th>{{ run.label }}</th>{% endfor %}</tr></thead><tbody>
     {% for category in category_names %}<tr><td>{{ category }}</td>{% for run in runs %}{% set c = run.categories.get(category, {}) %}<td style="--run-color:{{ colors[loop.index0 % colors|length] }}">{{ fmt(c.get('avg_score'), '%') }}{% if c %}<span class="small muted"> · {{ c.passed }}/{{ c.scored }}</span>{% endif %}
@@ -47,6 +46,7 @@
         {% if s.get('outcomes', {}).get('truncation', 0) %}<p class="notice">Output-limit failures remain scored failures. Compare identical output budgets; this score also measures ability to finish within that budget.</p>{% endif %}
         {% if s.get('outcomes', {}).get('repetition', 0) %}<p class="notice">{{ s.outcomes.repetition }} generations were abandoned mid-loop and remain scored failures. Unlike output-limit failures these are not budget-related; a larger budget produces more of the same text.</p>{% endif %}
         {% set a = s.get('interactive', {}) %}{% if a.get('tasks') %}<p class="small subsection">Interactive tasks: {{ a.successes }}/{{ a.tasks }} succeeded · {{ a.calls }} calls · {{ a.unnecessary_calls }} excess calls · {{ a.violations }} authorization violations.</p>{% endif %}
+        {% if s.get('native') %}{% from "quality_macros.html" import native_diagnostics %}<div class="subsection">{{ native_diagnostics(s.native) }}</div>{% endif %}
         {% if s.get('context_quality') %}<div class="table-wrap"><table><thead><tr><th>Long-context reference tokens</th><th>Scored / total</th><th>Accuracy</th><th>Unsupported</th><th>Mean server prompt tokens</th></tr></thead><tbody>{% for row in s.context_quality %}<tr><td>{{ fmt(row.reference_tokens, 'int') }}</td><td>{{ row.scored }} / {{ row.count }}</td><td>{{ fmt(row.accuracy, '%') }}</td><td>{{ row.unsupported }}</td><td>{{ fmt(row.server_prompt_tokens_mean, 'int') }}</td></tr>{% endfor %}</tbody></table></div><p class="small muted">Reference lengths use cl100k_base; provider token counts can differ.</p>{% endif %}
     </div>{% endif %}{% endfor %}
     {% include "quality_timing_report.html" %}
@@ -69,7 +69,7 @@
         {% if result.evaluation %}<details><summary>Criterion diagnostics ({{ result.evaluation.criterion_count }})</summary><p class="small muted">Achievement {{ fmt(result.evaluation.criterion_achievement, '%') }} · Contract {{ fmt(result.evaluation.contract_score, '%') }}</p><ul>{% for criterion in result.evaluation.criteria %}<li><code>{{ criterion.id }}</code> · {{ criterion.status }}{% if criterion.reason_code %} · {{ criterion.reason_code }}{% endif %}</li>{% endfor %}</ul></details>{% endif %}
         <p><strong>Prompt</strong></p><pre>{{ result.prompt or '' }}</pre>
         {% if result.quality_requests|length > 1 %}<details><summary>Final-answer recovery · {{ result.quality_requests|length }} requests</summary>{% for call in result.quality_requests %}<p>Request {{ call.request }} · {{ call.tokens.completion_tokens }} output tokens · {{ fmt(call.metrics.latency_ms, 'ms') }} · {{ call.metrics.finish_reason or 'error' }}</p>{% if call.metrics.error %}<p>{{ call.metrics.error }}</p>{% endif %}<pre>{{ call.response }}</pre>{% endfor %}</details>{% endif %}
-        {% if result.interactive_turns %}<p><strong>Interactive transcript</strong> — each assistant turn is graded separately.</p>{% for turn in result.interactive_turns %}<p>Turn {{ turn.number }} · {{ turn.role }}</p><pre>{{ turn.content }}</pre>{% endfor %}{% else %}<p><strong>Response</strong></p><pre>{{ result.response or '' }}</pre>{% endif %}
+        {% if result.interactive_turns %}{% if result.interactive_turns[0].native %}<p><strong>Native tool-call transcript</strong> — graded as a whole.</p>{% else %}<p><strong>Interactive transcript</strong> — each assistant turn is graded separately.</p>{% endif %}{% for turn in result.interactive_turns %}<p>Turn {{ turn.number }} · {{ turn.role }}</p><pre>{{ turn.content }}</pre>{% endfor %}{% else %}<p><strong>Response</strong></p><pre>{{ result.response or '' }}</pre>{% endif %}
     </div></details>{% else %}<p class="muted subsection">No question results recorded.</p>{% endfor %}</details></div>{% endfor %}</section>{% endif %}
     <footer class="report-footer"><span>LLM BENCH · {{ generated_at }}</span><span>Embedded graphics & styles · No external assets · Browser print supported</span></footer>
 </main></body></html>

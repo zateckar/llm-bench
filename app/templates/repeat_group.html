@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "quality_macros.html" import comparison_sentence %}
+{% block title %}Repeat group #{{ group.id }} - LLM Bench{% endblock %}
+
+{% macro pct(value) %}{{ '%.1f%%'|format(value*100) if value is not none else 'n/a' }}{% endmacro %}
+{% macro interval(ci) %}{% if ci %}{{ '%.1f'|format(ci[0]*100) }}–{{ '%.1f'|format(ci[1]*100) }}%{% else %}n/a{% endif %}{% endmacro %}
+
+{% block content %}
+<div class="space-y-4">
+    <div>
+        <h1 class="text-xl font-bold text-white">Repeat group #{{ group.id }} · {{ group.model_name }}</h1>
+        <p class="text-zinc-400 mt-1">{{ group.provider_model_id }} · suite {{ group.suite }} · {{ summary.usable_runs }}/{{ group.planned }} runs usable. Repeat <em>i</em> samples with model seed <em>i</em>; everything else is identical.</p>
+    </div>
+
+    <section class="card p-4 space-y-2">
+        <h2 class="text-lg font-semibold text-white">Runs</h2>
+        <table class="w-full text-sm"><thead><tr><th class="text-left">Repeat</th><th class="text-left">Run</th><th class="text-left">Status</th></tr></thead><tbody>
+        {% for run in group.runs %}<tr><td>{{ (run.repeat_index or 0) + 1 }}</td><td><a class="text-blue-400" href="/runs/{{ run.id }}">#{{ run.id }}</a></td><td>{{ run.status }}</td></tr>{% endfor %}
+        </tbody></table>
+        {% for row in summary.excluded_runs %}<p class="text-sm text-amber-400">Run #{{ row.run_id }} excluded: {{ row.reason|replace('_', ' ') }}.</p>{% endfor %}
+    </section>
+
+    {% if summary.available %}
+    <section class="card p-4 space-y-3">
+        <h2 class="text-lg font-semibold text-white">Run-to-run variability</h2>
+        <div class="grid md:grid-cols-4 gap-4">
+            <div><p class="text-sm text-zinc-400">Mean achievement</p><strong>{{ pct(summary.score_spread.mean) }}</strong><p class="text-xs text-zinc-400">95% interval over runs {{ interval(summary.score_spread.ci95) }}</p></div>
+            <div><p class="text-sm text-zinc-400">Run spread (min–max)</p><strong>{{ pct(summary.score_spread.min) }} – {{ pct(summary.score_spread.max) }}</strong><p class="text-xs text-zinc-400">SD {{ '%.1f pp'|format(summary.score_spread.sd*100) if summary.score_spread.sd is not none else 'n/a' }}</p></div>
+            <div><p class="text-sm text-zinc-400">Mean full task success</p><strong>{{ pct(summary.full_pass_spread.mean) }}</strong><p class="text-xs text-zinc-400">95% interval {{ interval(summary.full_pass_spread.ci95) }}</p></div>
+            <div><p class="text-sm text-zinc-400">Same outcome every run</p><strong>{{ pct(summary.identical_outcome_fraction) }}</strong><p class="text-xs text-zinc-400">Pass/fail consistent {{ pct(summary.consistent_pass_fraction) }} of {{ summary.tasks_scored_in_every_run }} tasks</p></div>
+        </div>
+        <table class="w-full text-sm"><thead><tr><th class="text-left">Run</th><th class="text-left">Model seed</th><th class="text-left">Achievement</th><th class="text-left">Full task success</th><th class="text-left">Evaluated</th></tr></thead><tbody>
+        {% for run in summary.runs %}<tr><td><a class="text-blue-400" href="/runs/{{ run.run_id }}">#{{ run.run_id }}</a></td><td>{{ run.model_seed }}</td><td>{{ pct(run.score) }}</td><td>{{ pct(run.full_pass) }}</td><td>{{ run.scored }}/{{ run.total }}</td></tr>{% endfor %}
+        </tbody></table>
+        <p class="text-sm text-zinc-300">Pooled achievement (task means over runs) {{ pct(summary.pooled_score) }}, family-bootstrap interval {{ interval(summary.pooled_ci95) }}.</p>
+        {% if summary.pass_k %}
+        <table class="w-full text-sm"><thead><tr><th class="text-left">k</th><th class="text-left">pass^k (passes all k runs)</th><th class="text-left">pass@k (passes at least one)</th></tr></thead><tbody>
+        {% for row in summary.pass_k %}<tr><td>{{ row.k }}</td><td>{{ pct(row.pass_hat_k) }}</td><td>{{ pct(row.pass_at_k) }}</td></tr>{% endfor %}
+        </tbody></table>
+        <p class="text-xs text-zinc-500">pass^k estimates how often a user who asks k times gets a correct answer every time — the reliability that matters for agents and applications. A wide gap between pass^k and pass@k means the model can do the task but not dependably.</p>
+        {% endif %}
+        <p class="text-xs text-zinc-500">{{ summary.method }}</p>
+    </section>
+
+    {% if summary.categories %}
+    <section class="card p-4 space-y-2">
+        <h2 class="text-lg font-semibold text-white">Categories across runs</h2>
+        <table class="w-full text-sm"><thead><tr><th class="text-left">Category</th><th class="text-left">Mean</th><th class="text-left">Min–max</th><th class="text-left">95% interval</th></tr></thead><tbody>
+        {% for name, s in summary.categories.items() %}<tr><td>{{ name }}</td><td>{{ pct(s.mean) }}</td><td>{{ pct(s.min) }} – {{ pct(s.max) }}</td><td>{{ interval(s.ci95) }}</td></tr>{% endfor %}
+        </tbody></table>
+    </section>
+    {% endif %}
+
+    <section class="card p-4 space-y-2">
+        <h2 class="text-lg font-semibold text-white">Unstable tasks ({{ summary.flaky_tasks|length }} of {{ summary.tasks }})</h2>
+        {% if summary.flaky_tasks %}
+        <table class="w-full text-sm"><thead><tr><th class="text-left">Task</th><th class="text-left">Category</th><th class="text-left">Passes</th><th class="text-left">Achievement range</th><th class="text-left">Outcome per run</th></tr></thead><tbody>
+        {% for t in summary.flaky_tasks %}<tr><td class="font-mono text-xs">{{ t.id }}</td><td>{{ t.category }}</td><td>{{ t.passes }}/{{ t.scored }}</td><td>{{ pct(t.score_min) }} – {{ pct(t.score_max) }}</td><td class="text-xs">{% for outcome in t.outcomes %}{{ (outcome or 'missing')|replace('_', ' ') }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>{% endfor %}
+        </tbody></table>
+        {% else %}<p class="text-sm text-zinc-400">Every task had the same outcome in every run.</p>{% endif %}
+    </section>
+    {% else %}
+    <div class="card p-4"><p class="text-sm text-zinc-400">No completed run in this group has a current quality report yet.</p></div>
+    {% endif %}
+
+    <section class="card p-4 space-y-3">
+        <h2 class="text-lg font-semibold text-white">Compare with other repeat groups</h2>
+        {% for row in comparisons %}<p class="text-sm text-zinc-300"><a class="text-blue-400" href="/runs/groups/{{ row.right }}">Group #{{ row.right }} ({{ row.right_model }})</a> minus this group: {{ comparison_sentence(row.comparison) }}</p>{% endfor %}
+        {% if candidates %}
+        <form method="GET" action="/runs/groups/{{ group.id }}" class="space-y-2">
+            <div class="max-h-48 overflow-y-auto rounded-md border border-zinc-700 divide-y divide-zinc-800">
+            {% for c in candidates %}<label class="flex items-center gap-3 px-3 py-1.5 text-sm"><input type="checkbox" name="vs" value="{{ c.id }}" {% if c.id in selected_ids %}checked{% endif %}>
+                Group #{{ c.id }} · {{ c.model_name }} · {{ c.completed }}/{{ c.runs }} completed · {{ c.suite }}{% if c.suite != group.suite %} <span class="text-amber-400">(different suite — not comparable)</span>{% endif %}</label>{% endfor %}
+            </div>
+            <button class="btn-primary text-sm">Compare</button>
+        </form>
+        {% else %}<p class="text-sm text-zinc-400">No other repeat groups yet.</p>{% endif %}
+        <p class="text-xs text-zinc-500">Tasks pair by fingerprint; each contributes its mean achievement over a group's runs. The interval resamples families and runs; p-values come from a family-level sign-flip test and are Holm-adjusted when several groups are compared.</p>
+    </section>
+</div>
+{% endblock %}

@@ -284,6 +284,10 @@ def score_response(q, response, tokens, metrics, cached=False):
 
 
 def execute_question(q, client, cancelled=lambda: False):
+    if q.metadata.get("protocol") == "native-tools-v1":
+        from app.benchmarking.tool_protocol import run_native
+
+        return run_native(q, client, cancelled)
     if q.interaction:
         from app.benchmarking.interactive_tasks import run_interaction
 

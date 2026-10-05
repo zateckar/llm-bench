@@ -17,6 +17,7 @@ from app.benchmarking.perf import DEFAULT_MAX_CONCURRENCY, PerfConfig, run_perf_
 from app.benchmarking.quality_execution import run_quality
 from app.benchmarking.quality_report import make_report as make_quality_report, result_record, summarize
 from app.benchmarking.quality_suite import MAX_OUTPUT_TOKENS, QUALITY_WORKERS, load_questions, provenance, suite_hash
+from app.benchmarking.suites import get_suite
 from app.storage import DETECT_TYPES, pack_text
 
 logger = logging.getLogger(__name__)
@@ -311,6 +312,13 @@ def _sanitize_result_errors(result: Result) -> None:
             scrub(criterion.evidence)
 
 
+def suite_provenance(suite_def) -> dict:
+    """Provenance stored with a run; the rigorous shape stays historical."""
+    if suite_def.name == "rigorous":
+        return provenance()
+    return {**suite_def.provenance(), "name": suite_def.name}
+
+
 def _build_client_config(model: dict) -> ClientConfig:
     return ClientConfig(
         base_url=model["base_url"],
@@ -319,7 +327,8 @@ def _build_client_config(model: dict) -> ClientConfig:
         max_tokens=MAX_OUTPUT_TOKENS,
         temperature=model.get("temperature", 0),
         reasoning_effort=model.get("reasoning_effort"),
-        seed=0,
+        # Repeat i of a group uses seed i; single runs and repeat 0 use seed 0.
+        seed=model.get("seed", 0),
         timeout=REQUEST_TIMEOUT,
         stream_deadline=1800.0,
         stream=True,
@@ -341,11 +350,12 @@ def _run_benchmark(run_id, model, mode, max_concurrency, on_finish: Callable[[in
                 logger.exception("Queue callback failed for run %d", run_id)
 
 
-def _run_benchmark_impl(run_id, model, mode, max_concurrency, **sweep_options):
+def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, **sweep_options):
     from app.services.url_guard import validate_endpoint
 
     if mode not in {"both", "quality", "performance", "sweep"}:
         raise ValueError("Mode must be both, quality, performance, or sweep")
+    suite_def = get_suite(suite)
     perf_config = PerfConfig(max_concurrency) if mode != "sweep" else None
     if mode == "sweep":
         from app.benchmarking.perf_sweep import SweepConfig
@@ -367,7 +377,12 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, **sweep_options):
     if mode == "sweep":
         _run_context_sweep(run_id, config, sweep_config, model.get("_metrics_scope"))
         return
-    questions = load_questions() if mode != "performance" else []
+    if mode == "performance":
+        questions = []
+    elif suite_def.name == "rigorous":
+        questions = load_questions()
+    else:
+        questions = suite_def.load()
     db = _connect()
     try:
         db.execute(
@@ -375,7 +390,7 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, **sweep_options):
             (
                 suite_hash(questions) if questions else None,
                 len(questions),
-                json.dumps(provenance()),
+                json.dumps(suite_provenance(suite_def)),
                 run_id,
             ),
         )
@@ -403,7 +418,9 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, **sweep_options):
             )
 
         _update_progress(
-            run_id, "", 0, len(questions), f"Loaded {len(questions)} rigorous questions", "quality"
+            run_id, "", 0, len(questions),
+            f"Loaded {len(questions)} {'rigorous' if suite_def.name == 'rigorous' else suite_def.name} questions",
+            "quality",
         )
         results, elapsed, message = run_quality(
             questions,
@@ -448,7 +465,8 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, **sweep_options):
             elapsed = measurement_elapsed if perf_json else (time.perf_counter() - started) * 1000
     if _run_is_active(run_id):
         _summarise_and_finish(
-            run_id, results, len(questions), workers, elapsed, perf_json, message, config
+            run_id, results, len(questions), workers, elapsed, perf_json, message, config,
+            suite=suite_def,
         )
 
 
@@ -537,7 +555,8 @@ def _run_context_sweep(run_id, client_config, sweep_config, metrics_scope=None):
 
 
 def _summarise_and_finish(
-    run_id, results, total, workers, duration_ms, perf_json, error_message, client_config=None
+    run_id, results, total, workers, duration_ms, perf_json, error_message, client_config=None,
+    suite=None,
 ):
     done = [r for r in results if r is not None]
     scored = [r for r in done if r.is_scored]
@@ -557,7 +576,7 @@ def _summarise_and_finish(
                 client_config = ClientConfig(
                     "", "", model, max_tokens=MAX_OUTPUT_TOKENS, temperature=0, seed=0
                 )
-            report = make_quality_report(done, client_config, max_concurrency=workers)
+            report = make_quality_report(done, client_config, max_concurrency=workers, suite=suite)
             avg = report["summary"]["category_balanced"] or 0.0
             db = _connect()
             try:

@@ -14,6 +14,7 @@ from markupsafe import Markup, escape
 
 from app.database import fetch_all, fetch_one
 from app.templates_config import templates
+from app.benchmarking.paired_stats import holm, verdict
 from app.benchmarking.quality_report import paired_comparison, rescore_report, achievement_score
 
 COLORS = ("#3b82f6", "#14b8a6", "#e99b16", "#e879ad", "#9b87f5", "#ef744d")
@@ -27,10 +28,50 @@ def object_json(raw):
         return {}
 
 
+def _pretty(value):
+    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, indent=2)
+
+
+def native_turns(transcript):
+    """Assistant text, native tool calls and simulated tool results per turn."""
+    turns = []
+    for t in transcript:
+        if not isinstance(t, dict):
+            continue
+        number_ = t.get("turn")
+        if "error" in t:
+            status = t.get("http_status")
+            turns.append({"role": f"request rejected (HTTP {status})" if status else "request failed",
+                          "number": number_, "content": str(t["error"]), "native": True})
+            continue
+        if t.get("content"):
+            turns.append({"role": f"assistant · finish {t.get('finish_reason') or 'n/a'}",
+                          "number": number_, "content": t["content"], "native": True})
+        for call in t.get("tool_calls") or []:
+            if isinstance(call, dict):
+                turns.append({"role": f"tool call {call.get('name') or '(no name)'} · id {call.get('id') or 'missing'}",
+                              "number": number_, "content": str(call.get("arguments", "")), "native": True})
+        for reply in t.get("tool_results") or []:
+            if isinstance(reply, dict):
+                turns.append({"role": f"tool result {reply.get('name') or ''}".strip(),
+                              "number": number_, "content": _pretty(reply.get("reply")), "native": True})
+        if t.get("wire_defects"):
+            turns.append({"role": "wire defects", "number": number_,
+                          "content": _pretty(t["wire_defects"]), "native": True})
+        if not t.get("content") and not t.get("tool_calls"):
+            turns.append({"role": f"assistant · finish {t.get('finish_reason') or 'n/a'}",
+                          "number": number_, "content": "(no content)", "native": True})
+    return turns
+
+
 def interactive_turns(result):
     """Display stored actions separately from the enclosing transcript JSON."""
     meta = object_json(result.get("quality_metadata_json"))
-    if meta.get("metadata", {}).get("protocol") != "json-actions-v1":
+    protocol = meta.get("metadata", {}).get("protocol")
+    if protocol == "native-tools-v1":
+        transcript = meta.get("diagnostics", {}).get("transcript", [])
+        return native_turns(transcript) if isinstance(transcript, list) else []
+    if protocol != "json-actions-v1":
         return []
     transcript = meta.get("diagnostics", {}).get("transcript", [])
     if not isinstance(transcript, list):
@@ -163,6 +204,16 @@ async def load_run(run_id):
     return run
 
 
+def _adjust_for_multiplicity(comparisons):
+    """Holm-adjust the baseline-versus-each p-values shown together."""
+    compatible = [c for c in comparisons if c.get("compatible")]
+    adjusted = holm([c.get("p_value") for c in compatible])
+    for comparison, value in zip(compatible, adjusted):
+        comparison["p_adjusted"] = value
+        comparison["verdict"] = verdict(comparison["balanced_difference"], comparison["ci95"], value)
+        comparison["adjustment"] = "Holm" if len(compatible) > 1 else None
+
+
 def comparison_context(runs):
     comparisons = []
     if len(runs) > 1:
@@ -175,6 +226,7 @@ def comparison_context(runs):
                         "comparison": paired_comparison(runs[0]["quality"], run["quality"]),
                     }
                 )
+    _adjust_for_multiplicity([row["comparison"] for row in comparisons])
     categories = sorted({name for run in runs for name in run["categories"]})
     indexed = {
         run["id"]: {(r["category"], r["test_id"]): r for r in run["results"]} for run in runs

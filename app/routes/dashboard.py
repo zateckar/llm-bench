@@ -61,23 +61,37 @@ async def dashboard(request: Request):
     )["cnt"]
     total_models = (await fetch_one("SELECT COUNT(*) as cnt FROM models"))["cnt"]
 
+    # Select independently of the recent-run page: newer active runs or
+    # completed performance-only runs must not hide existing quality scores.
+    # Only rigorous-suite runs qualify; the category descriptions describe it.
+    last_run = await fetch_one(
+        """SELECT tr.id, tr.quality_json, m.name AS model_name
+           FROM test_runs tr
+           JOIN models m ON tr.model_id = m.id
+           WHERE tr.status = 'completed'
+             AND COALESCE(json_extract(CASE WHEN json_valid(tr.run_options_json)
+                                            THEN tr.run_options_json END, '$.suite'),
+                          'rigorous') = 'rigorous'
+             AND EXISTS (SELECT 1 FROM test_results r
+                         WHERE r.run_id = tr.id
+                           AND COALESCE(r.quality_scored, r.request_ok) = 1)
+           ORDER BY tr.id DESC LIMIT 1"""
+    )
     last_run_categories = []
-    if recent_runs and recent_runs[0]["status"] == "completed":
-        last_run_id = recent_runs[0]["id"]
+    if last_run:
         last_run_categories = await fetch_all(
             """SELECT category,
                       COUNT(*) as total,
                       SUM(COALESCE(quality_scored, request_ok)) as scored,
                       SUM(passed) as passed,
-                      AVG(CASE WHEN request_ok = 1 THEN score END) as avg_score
+                      AVG(CASE WHEN COALESCE(quality_scored, request_ok) = 1 THEN score END) as avg_score
                FROM test_results WHERE run_id = ?
                GROUP BY category ORDER BY category""",
-            (last_run_id,),
+            (last_run["id"],),
         )
 
-    if recent_runs:
         try:
-            quality = json.loads(recent_runs[0].get("quality_json") or "{}")
+            quality = json.loads(last_run.get("quality_json") or "{}")
         except (TypeError, ValueError):
             quality = {}
         if quality and quality.get("schema_version") == 3:
@@ -95,6 +109,7 @@ async def dashboard(request: Request):
             "total_runs": total_runs,
             "completed_runs": completed_runs,
             "total_models": total_models,
+            "last_run": last_run,
             "last_run_categories": last_run_categories,
             "category_descriptions": CATEGORY_DESCRIPTIONS,
         },

@@ -117,6 +117,9 @@ async def runs_list(request: Request):
         """SELECT tr.id,tr.status,tr.total_questions,tr.scored_questions,tr.passed_questions,
                   tr.avg_score,tr.error_count,tr.workers,tr.latency_p50_ms,tr.latency_p95_ms,
                   tr.output_tokens_per_sec,tr.test_suite_hash,tr.created_at,tr.plan_id,
+                  tr.repeat_group_id,tr.repeat_index,tr.repeat_count,
+                  json_extract(CASE WHEN json_valid(tr.run_options_json)
+                                    THEN tr.run_options_json END, '$.suite') AS suite_name,
                   (tr.perf_json IS NOT NULL) AS perf_json,
                   m.name as model_name, m.model_id AS provider_model_id,
                   (SELECT COUNT(*) FROM test_results
@@ -132,6 +135,41 @@ async def runs_list(request: Request):
         request,
         "runs_list.html",
         {"runs": runs},
+    )
+
+
+@router.get("/runs/groups/{group_id}")
+async def repeat_group(request: Request, group_id: int, vs: Annotated[list[int], Query()] = []):
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    from app.services.repeat_groups import MAX_COMPARED_GROUPS, compare_to, load_group, other_groups
+
+    group = await load_group(group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Repeat group not found")
+    selected = []
+    for other_id in dict.fromkeys(vs):
+        if other_id != group_id and len(selected) < MAX_COMPARED_GROUPS:
+            other = await load_group(other_id)
+            if other is not None:
+                selected.append(other)
+    candidates = await other_groups(group_id)
+    for candidate in candidates:
+        try:
+            candidate["suite"] = json.loads(candidate.pop("run_options_json") or "{}").get("suite", "rigorous")
+        except (TypeError, ValueError, AttributeError):
+            candidate["suite"] = "rigorous"
+    return templates.TemplateResponse(
+        request,
+        "repeat_group.html",
+        {
+            "group": group,
+            "summary": group["summary"],
+            "comparisons": compare_to(group, selected) if selected else [],
+            "selected_ids": [g["id"] for g in selected],
+            "candidates": candidates,
+        },
     )
 
 
@@ -185,7 +223,6 @@ async def run_detail(request: Request, run_id: int):
         r["score"] = achievement_score({**r, "evaluation": r["evaluation"]})
         r["attempt_diagnostics"] = metadata.get("metrics", {}).get("attempt_diagnostics", [])
         r["quality_requests"] = metadata.get("diagnostics", {}).get("quality_requests", [])
-        r["quality_requests"] = metadata.get("diagnostics", {}).get("quality_requests", [])
         cat = r["category"]
         if cat not in results_by_category:
             results_by_category[cat] = []
@@ -199,7 +236,10 @@ async def run_detail(request: Request, run_id: int):
            ORDER BY category, question_index""",
         (run_id,),
     )
-    transport_errors = [r for r in results if not r["request_ok"]]
+    # A rejected request feature (e.g. tool_choice without a tool parser) is a
+    # scored conformance failure, not an infrastructure error.
+    transport_errors = [r for r in results
+                        if not r["request_ok"] and r.get("quality_outcome") != "feature_rejected"]
 
     perf_data = _parse_perf(run.get("perf_json"))
     from app.services.sweep_reports import hydrate_sweep

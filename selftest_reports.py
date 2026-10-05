@@ -251,7 +251,8 @@ class ReportTests(unittest.TestCase):
             self.assertIn("Return the answer as JSON.", response.text)
             self.assertNotIn("DO_NOT_EXPORT_API_KEY", response.text)
             self.assertNotIn("private.invalid", response.text)
-        self.assertIn("identical capability questions scored by both", response.text)
+        self.assertIn("identical tasks", response.text)
+        self.assertRegex(response.text, r"p = (&lt; 0\.001|[01]\.\d{3})")
 
     def test_performance_json_auth_missing_and_secret_exclusion(self):
         response = self.client.get("/runs/1/performance.json")
@@ -304,6 +305,97 @@ class ReportTests(unittest.TestCase):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
             self.assertIn("Criterion achievement", response.text)
+
+    def test_native_tool_results_render_wire_diagnostics(self):
+        from app.benchmarking.quality_execution import execute_question
+        from app.benchmarking.quality_report import result_record
+        from app.benchmarking.suites import get_suite
+        from selftest_tool_conformance import BY_ID, PlanClient, oracle_plan, reply
+
+        stream = BY_ID["T1-typed-arguments-s19-v01-stream"]
+        blocking = BY_ID["T1-typed-arguments-s19-v01-blocking"]
+        named = BY_ID["T2-tool-choice-named-s19-v01"]
+        none = BY_ID["T2-tool-choice-none-s19-v01"]
+        results = [
+            execute_question(stream, PlanClient(oracle_plan(stream))),
+            execute_question(blocking, PlanClient(oracle_plan(blocking))),
+            execute_question(named, PlanClient([], rejected="HTTP 400: tool_choice requires --tool-call-parser")),
+            execute_question(none, PlanClient([reply('[TOOL_CALLS] <script>bad()</script>')])),
+        ]
+        quality = make_report(results, ClientConfig("https://fake.invalid", "unused", "fake"),
+                              suite=get_suite("tool-conformance"))
+        native = quality["summary"]["native"]
+        self.assertEqual(native["feature_rejected"], 1)
+        self.assertEqual(native["rejection_status"], {"400": 1})
+        self.assertEqual(native["markup_leaks"], {"mistral": 1})
+        self.assertEqual(native["transports"]["blocking"], {"tasks": 1, "passes": 1, "contract_failures": 0})
+        ordinary = Result(Question("q", "Code", "p", "exact_match", "x"), "x", 1, outcome="pass")
+        rigorous = make_report([ordinary], ClientConfig("https://fake.invalid", "unused", "fake"))
+        self.assertNotIn("native", rigorous["summary"])
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute("UPDATE test_runs SET quality_json=? WHERE id=1", (json.dumps(quality),))
+            db.execute("DELETE FROM test_results WHERE run_id=1")
+            for index, result in enumerate(results):
+                record = result_record(result)
+                db.execute(
+                    """INSERT INTO test_results(run_id,test_id,category,question_index,score,passed,quality_scored,
+                              request_ok,detail,prompt,response,evaluator,quality_metadata_json,quality_outcome)
+                              VALUES(1,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (result.question.id, result.question.category, index, result.achievement_score,
+                     int(result.passed), int(result.is_scored), int(result.metrics.ok), result.detail,
+                     result.question.prompt, result.response, result.question.evaluator,
+                     json.dumps(record), record["outcome"]),
+                )
+            db.commit()
+        for url in ("/runs/1", "/runs/1/report.html"):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("Tool-calling wire diagnostics", response.text)
+            self.assertIn("Native tool-call transcript", response.text)
+            self.assertIn("tool call create_calendar_event", response.text)
+            self.assertIn("request rejected (HTTP 400)", response.text)
+            self.assertIn("&lt;script&gt;bad()&lt;/script&gt;", response.text)
+            self.assertNotIn("<script>bad()</script>", response.text)
+            self.assertNotIn("Infrastructure Errors", response.text)
+
+    def test_repeat_group_page_badges_and_group_comparison(self):
+        def report(seed, strength):
+            results = []
+            for c in range(4):
+                for f in range(3):
+                    q = Question(f"G{c}-{f}", f"Category {c}", "Return JSON.", "json_match",
+                                 {"value": {"answer": 42}}, metadata={"family": f"fam-{c}-{f}"})
+                    passed = (c * 3 + f + seed) % 10 < strength
+                    results.append(Result(q, "{}", int(passed), outcome="pass" if passed else "task_failure"))
+            return make_report(results, ClientConfig("https://fake.invalid", "unused", "fake", seed=seed))
+
+        with closing(sqlite3.connect(self.path)) as db:
+            for group, model, strength in ((10, 1, 4), (20, 2, 8)):
+                for index in range(3):
+                    db.execute(
+                        """INSERT INTO test_runs(id,model_id,status,quality_json,repeat_group_id,repeat_index,
+                                  repeat_count,run_options_json) VALUES(?,?,?,?,?,?,3,?)""",
+                        (group + index, model, "completed" if index < 2 or group == 20 else "failed",
+                         json.dumps(report(index, strength)), group, index,
+                         json.dumps({"mode": "quality", "max_concurrency": 4})),
+                    )
+            db.commit()
+        page = self.client.get("/runs/groups/10?vs=20&vs=10&vs=999")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Run-to-run variability", page.text)
+        self.assertIn("2/3 runs usable", page.text)
+        self.assertIn("Run #12 excluded: not completed", page.text)
+        self.assertIn("pass^k", page.text)
+        self.assertIn("Unstable tasks", page.text)
+        self.assertIn("Group #20 (Atlas 70B)", page.text)
+        self.assertIn("across 2 vs 3 runs", page.text)
+        self.assertIn("right is higher", page.text)
+        self.assertEqual(page.context["selected_ids"], [20])
+        self.assertEqual(self.client.get("/runs/groups/999").status_code, 404)
+        listing = self.client.get("/runs")
+        self.assertIn('href="/runs/groups/10"', listing.text)
+        self.assertIn("R2/3", listing.text)
+        self.assertIn("group summary", self.client.get("/runs/11").text)
 
     def test_stale_binary_summary_is_recomputed_from_saved_criteria(self):
         with closing(sqlite3.connect(self.path)) as db:
@@ -522,6 +614,82 @@ class ReportTests(unittest.TestCase):
             self.assertNotIn("tok/s", response.text)
             self.assertNotIn("Quality output rate", response.text)
             self.assertNotIn("p50 / p95", response.text)
+
+    def test_dashboard_keeps_scores_when_newest_run_is_not_completed(self):
+        for status in ("running", "pending", "failed"):
+            with self.subTest(status=status):
+                with closing(sqlite3.connect(self.path)) as db:
+                    db.execute("UPDATE test_runs SET status=? WHERE id=3", (status,))
+                    db.commit()
+                response = self.client.get("/dashboard")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context["last_run"]["id"], 2)
+                self.assertEqual(response.context["recent_runs"][0]["status"], status)
+                self.assertIn('id="radarChart"', response.text)
+
+    def test_dashboard_finds_quality_run_beyond_recent_runs(self):
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute("UPDATE test_results SET quality_scored=0 WHERE run_id=3")
+            # More than a page of newer active, failed, and performance-only runs.
+            db.executemany(
+                "INSERT INTO test_runs(id,model_id,status,total_questions) VALUES(?,1,?,0)",
+                [(rid, ("running", "pending", "failed", "completed")[rid % 4])
+                 for rid in range(4, 16)],
+            )
+            quality = json.loads(db.execute(
+                "SELECT quality_json FROM test_runs WHERE id=2"
+            ).fetchone()[0])
+            db.commit()
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="radarChart"', response.text)
+        self.assertEqual(response.context["last_run"]["id"], 2)
+        self.assertEqual(len(response.context["recent_runs"]), 10)
+        self.assertTrue(all(run["id"] > 2 for run in response.context["recent_runs"]))
+        for category in response.context["last_run_categories"]:
+            self.assertEqual(category["avg_score"],
+                             quality["summary"]["categories"][category["category"]]["score"])
+        self.assertIn('href="/runs/2"', response.text)
+        self.assertIn("Run #2", response.text)
+        self.assertNotIn("No completed runs", response.text)
+
+    def test_dashboard_last_run_uses_the_rigorous_suite_only(self):
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute("UPDATE test_runs SET run_options_json=? WHERE id=3",
+                       (json.dumps({"mode": "quality", "max_concurrency": 4, "suite": "tool-conformance"}),))
+            db.execute("UPDATE test_runs SET run_options_json='not json' WHERE id=2")
+            db.commit()
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["last_run"]["id"], 2)
+
+    def test_dashboard_legacy_scores_include_zero_and_exclude_unscored_answers(self):
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute("UPDATE test_results SET score=0,quality_scored=NULL WHERE run_id=3")
+            db.execute("UPDATE test_results SET category='Legacy' WHERE run_id=3")
+            db.execute("UPDATE test_results SET score=1,quality_scored=0 WHERE run_id=3 AND test_id='Q0'")
+            db.commit()
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["last_run"]["id"], 3)
+        category, = response.context["last_run_categories"]
+        self.assertEqual(category["avg_score"], 0)
+        self.assertEqual(category["scored"], 5)
+        self.assertIn('id="radarChart"', response.text)
+
+    def test_dashboard_empty_state_requires_completed_quality_scores(self):
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute("UPDATE test_runs SET status='failed' WHERE id=1")
+            db.execute("DELETE FROM test_results WHERE run_id=2")
+            db.execute("UPDATE test_runs SET total_questions=0,quality_json=NULL WHERE id=2")
+            db.execute("UPDATE test_results SET quality_scored=0 WHERE run_id=3")
+            db.commit()
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["last_run"])
+        self.assertEqual(response.context["last_run_categories"], [])
+        self.assertNotIn('id="radarChart"', response.text)
+        self.assertIn("No completed runs with quality scores yet", response.text)
 
     def test_legacy_zero_missing_partial_and_invalid_json(self):
         run = asyncio.run(reports.load_run(3))

@@ -129,6 +129,7 @@ class SubmissionTests(unittest.TestCase):
         self.stack.enter_context(patch.object(run_queue, "_active_run_id", None))
         self.dispatch = self.stack.enter_context(patch.object(run_queue, "dispatch_next"))
         self.started = []
+        self.seeds = []
         self.stack.enter_context(
             patch.object(run_queue, "_spawn_benchmark", side_effect=self.spawn)
         )
@@ -169,6 +170,7 @@ class SubmissionTests(unittest.TestCase):
 
     def spawn(self, run_id, model, options):
         self.started.append((run_id, model["id"], dict(options)))
+        self.seeds.append(model.get("seed", 0))
         self.sql("UPDATE test_runs SET status = 'running' WHERE id = ?", (run_id,))
 
     def post(self, specs=None, *, scheduled="", url="/admin/run"):
@@ -396,6 +398,79 @@ class SubmissionTests(unittest.TestCase):
         self.assertIsNone(
             self.sql("SELECT scheduled_at FROM run_plans WHERE id = 1")[0]["scheduled_at"]
         )
+
+    def test_repeat_groups_and_suites_round_trip(self):
+        specs = [
+            {"model_id": 1, "mode": "quality", "max_concurrency": 3,
+             "suite": "tool-conformance", "repeats": 3},
+            {"model_id": 2, "mode": "quality", "max_concurrency": 3},
+        ]
+        self.assertEqual(self.post(specs, scheduled="2099-10-03T05:00").status_code, 302)
+        rows = self.sql("SELECT * FROM test_runs ORDER BY id")
+        self.assertEqual(len(rows), 4)
+        group = rows[:3]
+        self.assertEqual({r["repeat_group_id"] for r in group}, {rows[0]["id"]})
+        self.assertEqual([r["repeat_index"] for r in group], [0, 1, 2])
+        self.assertEqual({r["repeat_count"] for r in group}, {3})
+        # Repeat i samples with seed i; seed 0 stays implicit as in ordinary runs.
+        self.assertNotIn("seed", json.loads(group[0]["decoding_config_json"]))
+        self.assertEqual([json.loads(r["decoding_config_json"]).get("seed") for r in group[1:]], [1, 2])
+        for row in group:
+            self.assertEqual(json.loads(row["run_options_json"]),
+                             {"mode": "quality", "max_concurrency": 3, "suite": "tool-conformance"})
+            self.assertEqual(json.loads(row["quality_config_json"])["name"], "tool-conformance")
+        single = rows[3]
+        self.assertEqual((single["repeat_group_id"], single["repeat_index"], single["repeat_count"]),
+                         (None, None, None))
+        self.assertEqual(json.loads(single["run_options_json"]), {"mode": "quality", "max_concurrency": 3})
+        self.assertNotIn("name", json.loads(single["quality_config_json"]))
+
+        # The dispatcher hands each member its own seed and the suite option.
+        self.stack.enter_context(patch.object(run_queue, "dispatch_next", self.real_dispatch))
+        self.sql("UPDATE run_plans SET scheduled_at = '2020-01-01T00:00:00+00:00'")
+        run_queue.dispatch_next()
+        for row in rows:
+            self.sql("UPDATE test_runs SET status = 'completed' WHERE id = ?", (row["id"],))
+            run_queue.on_run_finished(row["id"])
+        self.assertEqual(self.seeds, [0, 1, 2, 0])
+        self.assertEqual([s[2].get("suite") for s in self.started],
+                         ["tool-conformance"] * 3 + [None])
+
+        # Editing and cloning collapse the group back into one specification.
+        self.assertEqual(self.client.post("/admin/plans/1/clone", follow_redirects=False).status_code, 302)
+        clone = self.sql("SELECT * FROM test_runs WHERE id > 4 ORDER BY id")
+        self.assertEqual(len(clone), 4)
+        self.assertEqual([r["repeat_index"] for r in clone], [0, 1, 2, None])
+        self.assertEqual({r["repeat_group_id"] for r in clone[:3]}, {clone[0]["id"]})
+        self.assertEqual(run_submission.specs_from_runs(rows)[0]["repeats"], 3)
+        self.assertEqual(len(run_submission.specs_from_runs(rows)), 2)
+
+        # Rerunning any member reruns the whole group.
+        before = len(self.sql("SELECT * FROM test_runs"))
+        self.assertEqual(self.client.post(f"/runs/{rows[1]['id']}/rerun", follow_redirects=False).status_code, 302)
+        added = self.sql("SELECT * FROM test_runs WHERE id > ? ORDER BY id", (before,))
+        self.assertEqual([r["repeat_index"] for r in added], [0, 1, 2])
+
+    def test_suite_and_repeat_validation(self):
+        invalid = [
+            [{"model_id": 1, "repeats": 0}],
+            [{"model_id": 1, "repeats": 11}],
+            [{"model_id": 1, "repeats": "x"}],
+            [{"model_id": 1, "repeats": True}],
+            [{"model_id": 1, "repeats": 1.5}],
+            [{"model_id": 1, "suite": "nope"}],
+            [{"model_id": 1, "mode": "performance", "suite": "tool-conformance"}],
+            [{"model_id": 1, "repeats": 10}] * 6,
+        ]
+        for specs in invalid:
+            with self.subTest(specs=specs[0]):
+                self.assertEqual(self.post(specs).status_code, 422)
+        self.assertEqual(self.sql("SELECT * FROM test_runs"), [])
+        self.assertEqual(self.post([{"model_id": 1, "repeats": 10}] * 5,
+                                   scheduled="2099-10-03T05:00").status_code, 302)
+        self.assertEqual(len(self.sql("SELECT * FROM test_runs")), 50)
+        page = self.client.get("/admin/run")
+        self.assertIn("Tool-calling &amp; structured-output conformance", page.text)
 
     def test_creation_and_replacement_roll_back_all_rows(self):
         prepared = asyncio.run(run_submission.validated_specs(json.dumps([{"model_id": 1}])))

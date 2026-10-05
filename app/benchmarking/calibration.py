@@ -14,7 +14,12 @@ from pathlib import Path
 import sqlite3
 import statistics
 
-from app.benchmarking.quality_report import balanced, clusters, paired_comparison
+from app.benchmarking.quality_report import (
+    balanced,
+    clusters,
+    comparable_protocol,
+    paired_comparison,
+)
 from app.storage import DETECT_TYPES
 
 REVISION = "calibration-v1"
@@ -122,7 +127,8 @@ def analyze_runs(runs, *, suite_hash=None, run_ids=None):
         # truncated hash alone is not sufficient evidence of comparability.
         inventory = sorted((row["id"], row["fingerprint"], row["category"], row["family"], row["scope"])
                            for row in report["results"])
-        key = stable_hash([report["protocol"], inventory])
+        # Repeats vary only the model seed, so they pool into one cohort.
+        key = stable_hash([comparable_protocol(report["protocol"]), inventory])
         entry = {**run, "report": report}
         cohorts[key].append(entry)
         included.append(run["id"])

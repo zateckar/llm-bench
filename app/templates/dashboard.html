@@ -71,12 +71,13 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <!-- Radar Chart -->
         <div class="card p-4 lg:col-span-1">
-            <h2 class="text-lg font-semibold text-white mb-4">Last Run Scores</h2>
+            <h2 class="text-lg font-semibold text-white mb-2">Last Run Scores</h2>
             {% if last_run_categories %}
+            <a href="/runs/{{ last_run.id }}" class="block text-sm text-blue-400 hover:text-blue-300 mb-3">Run #{{ last_run.id }} · {{ last_run.model_name }}</a>
             <div style="position: relative; height: 280px;"><canvas id="radarChart"></canvas></div>
             {% else %}
             <div class="flex items-center justify-center h-64 text-zinc-500 text-sm">
-                No completed runs yet
+                No completed runs with quality scores yet
             </div>
             {% endif %}
         </div>
@@ -136,7 +137,7 @@
     const ctx = document.getElementById('radarChart').getContext('2d');
     const labels = {{ last_run_categories | map(attribute='category') | list | tojson }};
     const scoresRaw = {{ last_run_categories | map(attribute='avg_score') | list | tojson }};
-    const scores = scoresRaw.map(s => s * 100);
+    const scores = scoresRaw.map(s => s === null ? null : s * 100);
 
     new Chart(ctx, {
         type: 'radar',
