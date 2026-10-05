@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS test_runs (
     repeat_group_id INTEGER,              -- first run of a repeat group; NULL for single runs
     repeat_index INTEGER,                 -- 0-based position in the group; also its model seed
     repeat_count INTEGER,                 -- planned runs in the group
+    canary_id INTEGER,                    -- set for scheduled canary runs
+    canary_status TEXT,                   -- ok | warning | alert once the canary run is evaluated
+    canary_json TEXT,                     -- canary evaluation detail
     FOREIGN KEY (model_id) REFERENCES models(id),
     FOREIGN KEY (created_by) REFERENCES users(id),
     FOREIGN KEY (plan_id) REFERENCES run_plans(id)
@@ -98,6 +101,54 @@ CREATE TABLE IF NOT EXISTS usecase_suites (
     UNIQUE (slug, version),
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
+
+-- Deployment snapshots, canaries and monitoring events (docs/design-deployment-monitoring.md)
+CREATE TABLE IF NOT EXISTS deployment_checks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_id INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+    run_id INTEGER REFERENCES test_runs(id) ON DELETE SET NULL,  -- NULL for on-demand checks
+    revision TEXT NOT NULL,
+    created_at TIMESTAMP,
+    ok INTEGER NOT NULL,
+    error TEXT,
+    fingerprint TEXT,
+    snapshot_json TEXT NOT NULL,
+    previous_id INTEGER REFERENCES deployment_checks(id) ON DELETE SET NULL,
+    changed TEXT                          -- NULL | configuration | deployment
+);
+CREATE INDEX IF NOT EXISTS idx_deployment_checks_model ON deployment_checks(model_id, id);
+
+CREATE TABLE IF NOT EXISTS canaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    model_id INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+    suite TEXT NOT NULL,
+    max_concurrency INTEGER NOT NULL DEFAULT 4,
+    interval_hours INTEGER NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    baseline_run_id INTEGER REFERENCES test_runs(id) ON DELETE SET NULL,
+    next_run_at TEXT,                     -- UTC ISO
+    webhook_url TEXT,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS monitor_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_id INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+    canary_id INTEGER REFERENCES canaries(id) ON DELETE SET NULL,
+    run_id INTEGER REFERENCES test_runs(id) ON DELETE SET NULL,
+    check_id INTEGER REFERENCES deployment_checks(id) ON DELETE SET NULL,
+    kind TEXT NOT NULL,
+    severity TEXT NOT NULL,               -- alert | warning | info
+    title TEXT NOT NULL,
+    detail_json TEXT,
+    notified TEXT,                        -- NULL, 'sent' or the delivery error
+    created_at TIMESTAMP,
+    acknowledged_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    acknowledged_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_monitor_events_open ON monitor_events(acknowledged_at, severity);
 
 -- Blind A/B studies: pairwise comparison of two runs of one suite (docs/design-ab-studies.md).
 -- Studies copy everything they show, so they outlive the runs they compare.

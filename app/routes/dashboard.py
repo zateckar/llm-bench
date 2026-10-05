@@ -100,10 +100,17 @@ async def dashboard(request: Request):
                 if summary:
                     category["avg_score"] = summary["score"]
 
+    from starlette.concurrency import run_in_threadpool
+
+    from app.services import monitoring
+
+    monitor_counts = await run_in_threadpool(monitoring.open_counts)
+
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         {
+            "monitor_counts": monitor_counts,
             "active_runs": active_runs,
             "recent_runs": recent_runs,
             "total_runs": total_runs,

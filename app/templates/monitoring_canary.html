@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "monitoring_macros.html" import severity_chip, event_rows, canary_form %}
+{% block title %}{{ canary.name }} - Monitoring - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+            <a href="/monitoring" class="text-sm text-zinc-400 hover:text-zinc-200">← Monitoring</a>
+            <h1 class="text-xl font-bold text-white mt-1">{{ canary.name }}{% if not canary.enabled %} <span class="text-sm text-zinc-500">paused</span>{% endif %}</h1>
+            <p class="text-sm text-zinc-400 mt-1"><a class="text-blue-400" href="/monitoring/models/{{ canary.model_id }}">{{ canary.model_name }}</a> · <span class="font-mono text-xs">{{ canary.suite }}</span> · every {{ canary.interval_hours }} h · concurrency {{ canary.max_concurrency }}{% if canary.baseline_run_id %} · baseline <a class="text-blue-400" href="/runs/{{ canary.baseline_run_id }}">#{{ canary.baseline_run_id }}</a>{% else %} · no baseline yet{% endif %}{% if canary.enabled and canary.next_run_at %} · next {{ canary.next_run_at[:16]|replace('T', ' ') }} UTC{% endif %}{% if canary.webhook_url %} · webhook set{% endif %}</p>
+        </div>
+        {% if is_admin %}
+        <div class="flex gap-2">
+            <form method="POST" action="/monitoring/canaries/{{ canary.id }}/run"><button class="btn-primary">Run now</button></form>
+            <form method="POST" action="/monitoring/canaries/{{ canary.id }}/enabled"><input type="hidden" name="enabled" value="{{ 0 if canary.enabled else 1 }}"><button class="btn-ghost">{{ 'Pause' if canary.enabled else 'Resume' }}</button></form>
+            <form method="POST" action="/monitoring/canaries/{{ canary.id }}/delete" onsubmit="return confirm('Delete this canary? Its runs are kept as ordinary runs.')"><button class="btn-ghost text-red-400">Delete</button></form>
+        </div>
+        {% endif %}
+    </div>
+    {% if error %}<div class="p-3 rounded-md bg-red-900/30 border border-red-800 text-sm text-red-300">{{ error }}</div>{% endif %}
+
+    <div class="card p-4 overflow-x-auto">
+        <h2 class="text-lg font-semibold text-white mb-2">Runs</h2>
+        {% if history %}
+        <table class="w-full text-sm">
+            <thead><tr><th class="text-left">Run</th><th class="text-left">Status</th><th class="text-left">Achievement</th><th class="text-left">vs baseline</th><th class="text-left">TTFT p50</th><th class="text-left">Latency p50</th><th class="text-left">Errors</th><th class="text-left">Fingerprint</th>{% if is_admin %}<th></th>{% endif %}</tr></thead>
+            <tbody>{% for r in history %}{% set cmp = r.canary.comparison %}<tr>
+                <td><a class="text-blue-400" href="/runs/{{ r.id }}">#{{ r.id }}</a> <span class="text-xs text-zinc-500">{{ (r.completed_at or r.created_at or '')[:16]|replace('T', ' ') }}</span>{% if r.id == canary.baseline_run_id %} <span class="text-xs text-sky-300">baseline</span>{% endif %}</td>
+                <td>{% if r.canary_status %}{{ severity_chip(r.canary_status) }}{% else %}<span class="text-xs text-zinc-500">{{ r.status }}</span>{% endif %}{% if r.canary.events %}<p class="text-xs text-zinc-500">{{ r.canary.events|join(', ')|replace('_', ' ') }}</p>{% endif %}</td>
+                <td>{{ '%.1f%%'|format(r.avg_score * 100) if r.status == 'completed' else '—' }}</td>
+                <td>{% if cmp and cmp.compatible %}<span class="{{ 'text-red-300' if cmp.verdict == 'left_higher' else 'text-emerald-300' if cmp.verdict == 'right_higher' else 'text-zinc-300' }}">{{ '%+.1f'|format(cmp.balanced_difference * 100) }}</span>{% if cmp.ci95 %} <span class="text-xs text-zinc-500">[{{ '%+.1f'|format(cmp.ci95[0] * 100) }}, {{ '%+.1f'|format(cmp.ci95[1] * 100) }}]</span>{% endif %}{% elif cmp %}<span class="text-xs text-amber-400">not comparable</span>{% else %}<span class="text-zinc-600">—</span>{% endif %}</td>
+                <td>{{ '%.0f ms'|format(r.ttft_p50_ms) if r.ttft_p50_ms else '—' }}</td>
+                <td>{{ '%.0f ms'|format(r.latency_p50_ms) if r.latency_p50_ms else '—' }}</td>
+                <td>{{ r.error_count or 0 }}</td>
+                <td class="font-mono text-xs">{{ r.fingerprint or '—' }}{% if r.changed == 'deployment' %} <span class="text-red-300">changed</span>{% endif %}</td>
+                {% if is_admin %}<td>{% if r.status == 'completed' and r.id != canary.baseline_run_id %}<form method="POST" action="/monitoring/canaries/{{ canary.id }}/baseline"><input type="hidden" name="run_id" value="{{ r.id }}"><button class="btn-ghost text-xs">Set as baseline</button></form>{% endif %}</td>{% endif %}
+            </tr>{% endfor %}</tbody>
+        </table>
+        <p class="text-xs text-zinc-500 mt-2">Differences are paired against the baseline in achievement points with a 95% family bootstrap interval. A regression needs the interval to exclude zero and the sign-flip test to be significant, or a significant McNemar test on full passes. The newest {{ 100 }} runs, the baseline and every run with a warning or alert are kept.</p>
+        {% else %}<p class="text-sm text-zinc-500">No runs yet.{% if is_admin %} Use “Run now” to create the baseline.{% endif %}</p>{% endif %}
+    </div>
+
+    {% if events %}
+    <div class="card p-4 overflow-x-auto">
+        <h2 class="text-lg font-semibold text-white mb-2">Events</h2>
+        {{ event_rows(events, is_admin, '/monitoring/canaries/' ~ canary.id) }}
+    </div>
+    {% endif %}
+
+    {% if is_admin %}
+    <details class="card p-4"><summary class="cursor-pointer text-lg font-semibold text-white">Edit</summary>
+        <div class="mt-3">{{ canary_form('/monitoring/canaries/' ~ canary.id ~ '/edit', models, suites, limits, canary, 'Save') }}</div>
+    </details>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "monitoring_macros.html" import severity_chip, event_rows, canary_form %}
+{% block title %}Monitoring - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div>
+        <h1 class="text-xl font-bold text-white">Monitoring</h1>
+        <p class="text-zinc-400 mt-1">Every run records a fingerprint of the deployment it measured. When a fingerprint changes, the model is served differently than before: a new engine, template, tokenizer, context limit or backend. Canaries rerun a small suite on a schedule and alert when quality, availability or latency regresses against an accepted baseline.</p>
+    </div>
+    {% if error %}<div class="p-3 rounded-md bg-red-900/30 border border-red-800 text-sm text-red-300">{{ error }}</div>{% endif %}
+
+    <div class="card p-4 overflow-x-auto space-y-2">
+        <div class="flex items-center gap-2">
+            <h2 class="text-lg font-semibold text-white">Needs attention</h2>
+            {% if is_admin and open_events %}<form method="POST" action="/monitoring/events/ack" class="ml-auto">{% for e in open_events %}<input type="hidden" name="event_id" value="{{ e.id }}">{% endfor %}<button class="btn-ghost text-xs">Acknowledge all</button></form>{% endif %}
+        </div>
+        {% if open_events %}{{ event_rows(open_events, is_admin) }}{% else %}<p class="text-sm text-zinc-500">No unacknowledged alerts or warnings.</p>{% endif %}
+    </div>
+
+    <div class="card p-4 overflow-x-auto">
+        <h2 class="text-lg font-semibold text-white mb-2">Canaries</h2>
+        {% if canaries %}
+        <table class="w-full text-sm">
+            <thead><tr><th class="text-left">Canary</th><th class="text-left">Model</th><th class="text-left">Suite</th><th class="text-left">Every</th><th class="text-left">Last run</th><th class="text-left">Recent achievement</th><th class="text-left">Next</th></tr></thead>
+            <tbody>{% for c in canaries %}<tr class="{% if not c.enabled %}opacity-60{% endif %}">
+                <td><a class="text-blue-400" href="/monitoring/canaries/{{ c.id }}">{{ c.name }}</a>{% if not c.enabled %} <span class="text-xs text-zinc-500">paused</span>{% endif %}</td>
+                <td class="text-zinc-300">{{ c.model_name }}</td>
+                <td class="font-mono text-xs text-zinc-400">{{ c.suite }}</td>
+                <td>{{ c.interval_hours }} h</td>
+                <td>{% if c.last %}<a class="text-blue-400" href="/runs/{{ c.last.id }}">#{{ c.last.id }}</a> {% if c.last.canary_status %}{{ severity_chip(c.last.canary_status) }}{% else %}<span class="text-xs text-zinc-500">{{ c.last.status }}</span>{% endif %}{% else %}<span class="text-zinc-600">—</span>{% endif %}</td>
+                <td>{% set scores = c.recent|selectattr('status', 'equalto', 'completed')|map(attribute='avg_score')|list %}{% if scores %}<span class="inline-flex items-end gap-0.5 h-5" title="{% for s in scores %}{{ '%.1f'|format(s * 100) }}%{% if not loop.last %}, {% endif %}{% endfor %}">{% for s in scores %}<span class="w-1.5 bg-sky-500/70 rounded-sm" style="height: {{ 10 + 90 * s }}%"></span>{% endfor %}</span> <span class="text-xs text-zinc-400">{{ '%.1f%%'|format(scores[-1] * 100) }}</span>{% else %}<span class="text-zinc-600">—</span>{% endif %}</td>
+                <td class="text-xs text-zinc-400">{{ c.next_run_at[:16]|replace('T', ' ') if c.enabled and c.next_run_at else '—' }}</td>
+            </tr>{% endfor %}</tbody>
+        </table>
+        {% else %}<p class="text-sm text-zinc-500">No canaries yet.</p>{% endif %}
+        {% if is_admin %}
+        <details class="mt-3"><summary class="cursor-pointer text-sm text-blue-400">New canary</summary>
+            <div class="mt-3">{% if models %}{{ canary_form('/monitoring/canaries', models, suites, limits) }}{% else %}<p class="text-sm text-zinc-500">Add a model first.</p>{% endif %}</div>
+        </details>
+        {% endif %}
+    </div>
+
+    <div class="card p-4 overflow-x-auto">
+        <h2 class="text-lg font-semibold text-white mb-2">Deployment fingerprints</h2>
+        <table class="w-full text-sm">
+            <thead><tr><th class="text-left">Model</th><th class="text-left">Latest fingerprint</th><th class="text-left">Taken</th><th class="text-left">Distinct fingerprints</th><th></th></tr></thead>
+            <tbody>{% for c in checks %}<tr>
+                <td><a class="text-blue-400" href="/monitoring/models/{{ c.model_id }}">{{ c.model_name }}</a> <span class="text-xs text-zinc-500">{{ c.identifier }}</span></td>
+                <td>{% if c.id is none %}<span class="text-zinc-600">never checked</span>{% elif not c.ok %}<span class="text-amber-400 text-xs">failed: {{ (c.error or '')[:80] }}</span>{% else %}<span class="font-mono text-xs">{{ c.fingerprint }}</span>{% if c.changed == 'deployment' %} <span class="text-xs text-red-300">changed</span>{% endif %}{% endif %}</td>
+                <td class="text-xs text-zinc-400">{{ c.created_at[:16]|replace('T', ' ') if c.created_at else '' }}{% if c.run_id %} · run <a class="text-blue-400" href="/runs/{{ c.run_id }}">#{{ c.run_id }}</a>{% endif %}</td>
+                <td>{{ c.fingerprints or 0 }}</td>
+                <td>{% if is_admin %}<form method="POST" action="/monitoring/models/{{ c.model_id }}/check"><button class="btn-ghost text-xs">Check now</button></form>{% endif %}</td>
+            </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+
+    {% if recent_events %}
+    <div class="card p-4 overflow-x-auto">
+        <h2 class="text-lg font-semibold text-white mb-2">Recent events</h2>
+        {{ event_rows(recent_events, is_admin) }}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

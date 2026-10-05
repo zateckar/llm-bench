@@ -379,6 +379,11 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, load=N
         return
     validate_endpoint(model["base_url"])
     config = _build_client_config(model)
+    if model.get("id") is not None:
+        # Record what is being measured before the first measured request.
+        from app.services import monitoring
+
+        monitoring.capture_for_run(run_id, model)
     if mode == "sweep":
         _run_context_sweep(run_id, config, sweep_config, model.get("_metrics_scope"))
         return

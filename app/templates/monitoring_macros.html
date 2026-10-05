@@ -1,0 +1,67 @@
+{% macro severity_chip(severity) %}<span class="inline-flex px-1.5 py-0.5 rounded text-xs {{ 'text-red-300 bg-red-900/40' if severity == 'alert' else 'text-amber-300 bg-amber-900/40' if severity == 'warning' else 'text-emerald-300 bg-emerald-900/40' if severity == 'ok' else 'text-zinc-300 bg-zinc-800' }}">{{ severity }}</span>{% endmacro %}
+
+{% macro value(v) %}{% if v is none %}<span class="text-zinc-600">—</span>{% elif v is sameas true %}yes{% elif v is sameas false %}no{% elif v is string %}{{ v }}{% else %}{{ v|tojson }}{% endif %}{% endmacro %}
+
+{% macro changes_table(changes) %}
+<table class="w-full text-xs">
+  <thead><tr><th class="text-left">Field</th><th class="text-left">Before</th><th class="text-left">After</th></tr></thead>
+  <tbody>{% for c in changes %}<tr><td class="font-mono text-zinc-300">{{ c.field }}</td><td class="text-zinc-400">{{ value(c.before) }}</td><td class="text-zinc-200">{{ value(c.after) }}</td></tr>{% endfor %}</tbody>
+</table>
+{% endmacro %}
+
+{% macro snapshot_view(snapshot) %}
+{% set hard = snapshot.hard or {} %}
+<dl class="grid md:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+  <dt class="text-zinc-500">Endpoint</dt><dd class="font-mono text-xs text-zinc-300 break-all">{{ hard.endpoint }}</dd>
+  <dt class="text-zinc-500">Configured model</dt><dd class="text-zinc-300">{{ hard.model }}</dd>
+  {% if hard.served %}<dt class="text-zinc-500">Served model</dt><dd class="text-zinc-300">{% if hard.served.listed is sameas false %}<span class="text-amber-400">not listed by /models</span>{% elif hard.served.status %}/models answered HTTP {{ hard.served.status }}{% else %}{{ hard.served.id or '—' }}{% if hard.served.root and hard.served.root != hard.served.id %} · root {{ hard.served.root }}{% endif %}{% if hard.served.max_model_len %} · max {{ "{:,}".format(hard.served.max_model_len) }} tokens{% endif %}{% if hard.served.owned_by %} · {{ hard.served.owned_by }}{% endif %}{% endif %}</dd>{% endif %}
+  <dt class="text-zinc-500">Server</dt><dd class="text-zinc-300">{{ hard.version or 'version not reported' }}{% if hard.server_header %} · {{ hard.server_header }}{% endif %}</dd>
+  {% if hard.response_model %}<dt class="text-zinc-500">Responding model</dt><dd class="text-zinc-300">{{ hard.response_model|join(', ') }}{% if hard.system_fingerprint %} · fingerprint {{ hard.system_fingerprint|join(', ') }}{% endif %}</dd>{% endif %}
+  {% if hard.probes %}<dt class="text-zinc-500">Prompt tokens</dt><dd class="text-zinc-300">{% for name, p in hard.probes.items() %}{{ name|replace('_', ' ') }} {% if p.status %}<span class="text-amber-400">HTTP {{ p.status }}</span>{% else %}{{ p.prompt_tokens if p.prompt_tokens is not none else 'n/a' }}{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</dd>{% endif %}
+  {% if snapshot.behaviour and snapshot.behaviour.text is defined %}<dt class="text-zinc-500">Behaviour probe</dt><dd class="text-zinc-400 text-xs"><span class="whitespace-pre-wrap">{{ snapshot.behaviour.text }}</span> <span class="text-zinc-600">(not part of the fingerprint)</span></dd>{% endif %}
+</dl>
+{% endmacro %}
+
+{% macro event_rows(events, is_admin, next='/monitoring') %}
+<table class="w-full text-sm">
+  <thead><tr><th class="text-left">When</th><th class="text-left">Model</th><th class="text-left">Severity</th><th class="text-left">Event</th><th class="text-left">Run</th><th class="text-left">Status</th></tr></thead>
+  <tbody>{% for e in events %}<tr class="{% if e.acknowledged_at %}opacity-60{% endif %}">
+    <td class="text-xs text-zinc-400 whitespace-nowrap">{{ e.created_at[:16]|replace('T', ' ') }}</td>
+    <td><a class="text-blue-400" href="/monitoring/models/{{ e.model_id }}">{{ e.model_name }}</a>{% if e.canary_name %}<p class="text-xs text-zinc-500"><a href="/monitoring/canaries/{{ e.canary_id }}">{{ e.canary_name }}</a></p>{% endif %}</td>
+    <td>{{ severity_chip(e.severity) }}</td>
+    <td class="text-zinc-200">{{ e.title }}{% if e.notified and e.notified != 'sent' %}<p class="text-xs text-amber-400">Webhook failed: {{ e.notified }}</p>{% endif %}</td>
+    <td>{% if e.run_id %}<a class="text-blue-400" href="/runs/{{ e.run_id }}">#{{ e.run_id }}</a>{% endif %}</td>
+    <td class="text-xs">{% if e.acknowledged_at %}<span class="text-zinc-500">acknowledged{% if e.acknowledged_by_name %} by {{ e.acknowledged_by_name }}{% endif %}</span>{% elif is_admin and e.severity in ('alert', 'warning') %}<form method="POST" action="/monitoring/events/ack"><input type="hidden" name="event_id" value="{{ e.id }}"><input type="hidden" name="next" value="{{ next }}"><button class="btn-ghost text-xs">Acknowledge</button></form>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% endmacro %}
+
+{% macro canary_form(action, models, suites, limits, canary=none, submit='Create canary') %}
+<form method="POST" action="{{ action }}" class="grid md:grid-cols-3 gap-3">
+  <div><label class="block text-sm text-zinc-300 mb-1">Name</label><input name="name" class="input-field" maxlength="120" required value="{{ canary.name if canary else '' }}" placeholder="e.g. Production chat model"></div>
+  <div><label class="block text-sm text-zinc-300 mb-1">Model</label><select name="model_id" class="input-field" required>{% for m in models %}<option value="{{ m.id }}" {% if canary and canary.model_id == m.id %}selected{% endif %}>{{ m.name }} ({{ m.model_id }})</option>{% endfor %}</select></div>
+  <div><label class="block text-sm text-zinc-300 mb-1">Quality suite</label><select name="suite" class="input-field">{% for s in suites %}<option value="{{ s.name }}" {% if (canary and canary.suite == s.name) or (not canary and s.name == 'tool-conformance') %}selected{% endif %}>{{ s.label }}</option>{% endfor %}{% if canary and canary.suite not in suites|map(attribute='name')|list %}<option value="{{ canary.suite }}" selected>{{ canary.suite }}</option>{% endif %}</select></div>
+  <div><label class="block text-sm text-zinc-300 mb-1">Every … hours</label><input name="interval_hours" type="number" min="{{ limits.min }}" max="{{ limits.max }}" class="input-field" value="{{ canary.interval_hours if canary else 24 }}"></div>
+  <div><label class="block text-sm text-zinc-300 mb-1">Concurrency</label><input name="max_concurrency" type="number" min="1" max="{{ limits.concurrency }}" class="input-field" value="{{ canary.max_concurrency if canary else 4 }}"></div>
+  <div><label class="block text-sm text-zinc-300 mb-1">Webhook <span class="text-zinc-500">(optional, https)</span></label><input name="webhook_url" type="url" class="input-field" value="{{ canary.webhook_url or '' if canary else '' }}" placeholder="Teams / Slack incoming webhook"></div>
+  <div class="md:col-span-3 flex items-center gap-3"><button class="btn-primary" type="submit">{{ submit }}</button>
+    <p class="text-xs text-zinc-500">Canary runs wait in the normal queue. Changing the model, suite or concurrency resets the baseline.</p></div>
+</form>
+{% endmacro %}
+
+{% macro deployment_card(check) %}
+<details class="card p-4" {% if check.changed == 'deployment' %}open{% endif %}>
+  <summary class="cursor-pointer flex flex-wrap items-center gap-2">
+    <span class="text-lg font-semibold text-white">Deployment</span>
+    {% if not check.ok %}<span class="text-sm text-amber-400">snapshot failed: {{ check.error }}</span>
+    {% else %}<span class="font-mono text-xs text-zinc-400">{{ check.fingerprint }}</span>
+      {% if check.changed == 'deployment' %}<span class="text-sm text-red-300">changed since the previous snapshot</span>{% elif check.changed == 'configuration' %}<span class="text-sm text-zinc-300">model configuration changed</span>{% elif check.previous_id %}<span class="text-sm text-emerald-300">unchanged</span>{% else %}<span class="text-sm text-zinc-500">first snapshot of this model</span>{% endif %}
+    {% endif %}
+    <a class="ml-auto text-sm text-blue-400" href="/monitoring/models/{{ check.model_id }}">History</a>
+  </summary>
+  <div class="mt-3 space-y-3">
+    {% if check.changes %}{{ changes_table(check.changes) }}{% endif %}
+    {% if check.snapshot %}{{ snapshot_view(check.snapshot) }}{% endif %}
+  </div>
+</details>
+{% endmacro %}

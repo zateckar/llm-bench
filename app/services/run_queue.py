@@ -224,6 +224,9 @@ def on_run_finished(run_id: int) -> None:
         with _LOCK:
             if _active_run_id == run_id:
                 _active_run_id = None
+        from app.services import monitoring
+
+        monitoring.on_run_finished(run_id)
         dispatch_next()
     except Exception:  # noqa: BLE001
         logger.exception("on_run_finished(%d) failed", run_id)
@@ -341,6 +344,13 @@ def delete_plan(plan_id: int) -> None:
 def _tick_loop() -> None:
     while True:
         time.sleep(_TICK_SECONDS)
+        try:
+            from app.services import monitoring
+
+            # Scheduled canaries become ordinary pending runs before dispatch.
+            monitoring.tick()
+        except Exception:  # noqa: BLE001
+            logger.exception("Canary scheduling failed")
         try:
             dispatch_next()
         except Exception:  # noqa: BLE001

@@ -70,6 +70,24 @@ A **blind A/B study** (**Blind A/B** in the navigation; admins create one from t
 
 Results (`ab-stats-v1`) give the preference for B with a family bootstrap interval and an exact sign test, plus a per-category breakdown. For each judge they add position consistency, length bias, and agreement with people (Cohen's κ). The pair browser shows judge reasons, and the study can be downloaded as JSON. Design: [docs/design-ab-studies.md](docs/design-ab-studies.md).
 
+### Monitoring: deployment fingerprints and canaries
+
+Every run starts by recording a **deployment snapshot** (`deployment-probe-v1`):
+
+- the served-model entry from `/models` (root, context limit);
+- the engine version from `/version`;
+- the responding model;
+- the prompt-token counts of five fixed chat requests with `max_tokens: 1`, which change exactly when the chat template or tokenizer changes.
+
+The snapshot's fingerprint is compared with the model's previous one, and a change raises an alert listing every changed field. A failed snapshot never fails a run. Admins can also **Check now** from **Monitoring**.
+
+**Canaries** (`canary-v1`) queue a quality run of a chosen suite every 1–168 hours through the normal queue, without building a backlog. The first completed run becomes the baseline; admins can promote another run later. Each canary run is compared with the baseline using the paired run comparison, and raises:
+
+- **alerts** for a significant quality regression, a failed run or a deployment change;
+- **warnings** for endpoint errors, a TTFT or latency median 1.5× slower than the baseline, or a baseline that can no longer be compared.
+
+Events appear on the Monitoring page and as a dashboard banner until an admin acknowledges them. A canary can post alerts and warnings to a Teams/Slack-compatible webhook. Each canary keeps its newest 100 runs, its baseline and every flagged run. Design: [docs/design-deployment-monitoring.md](docs/design-deployment-monitoring.md).
+
 ## Performance
 
 One workload uses a **1,024-token reference input** and asks for integers 1 through 80 with a **256-token output limit**. Each request has a unique leading identifier to reduce prefix reuse. Input tokenization happens before timing. Temperature and reasoning effort use the submitted model settings; model seed is 0.
@@ -158,7 +176,7 @@ uv run python selftest_run_queue.py
 uv run python selftest_calibration.py
 uv run python selftest_sweep.py
 uv run python selftest_reconstruction.py
-uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance selftest_usecase_suites selftest_load_test selftest_ab_studies
+uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance selftest_usecase_suites selftest_load_test selftest_ab_studies selftest_monitoring
 uv run --frozen ruff check .
 ```
 

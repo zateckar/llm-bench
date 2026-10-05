@@ -118,7 +118,7 @@ async def runs_list(request: Request):
         """SELECT tr.id,tr.status,tr.total_questions,tr.scored_questions,tr.passed_questions,
                   tr.avg_score,tr.error_count,tr.workers,tr.latency_p50_ms,tr.latency_p95_ms,
                   tr.output_tokens_per_sec,tr.test_suite_hash,tr.created_at,tr.plan_id,
-                  tr.repeat_group_id,tr.repeat_index,tr.repeat_count,
+                  tr.repeat_group_id,tr.repeat_index,tr.repeat_count,tr.canary_id,tr.canary_status,
                   json_extract(CASE WHEN json_valid(tr.run_options_json)
                                     THEN tr.run_options_json END, '$.suite') AS suite_name,
                   (tr.perf_json IS NOT NULL) AS perf_json,
@@ -262,6 +262,16 @@ async def run_detail(request: Request, run_id: int):
     label = f"#{run_id} · {run['model_name']}"
     performance = performance_view([{"label": label, "perf": perf_data or {}}])
     quality_timings = [quality_timing_view({"label": label, "results": results})] if results else []
+    from starlette.concurrency import run_in_threadpool
+
+    from app.services import monitoring
+
+    deployment = await run_in_threadpool(monitoring.run_check, run_id)
+    canary = await run_in_threadpool(monitoring.get_canary, run["canary_id"]) if run.get("canary_id") else None
+    try:
+        canary_detail = json.loads(run.get("canary_json") or "null")
+    except (TypeError, ValueError):
+        canary_detail = None
     return templates.TemplateResponse(
         request,
         "run_detail.html",
@@ -275,6 +285,9 @@ async def run_detail(request: Request, run_id: int):
             "perf": perf_data,
             "performance": performance,
             "quality_timings": quality_timings,
+            "deployment": deployment,
+            "canary": canary,
+            "canary_detail": canary_detail,
         },
     )
 

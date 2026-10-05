@@ -7,6 +7,11 @@
         <h1 class="text-xl font-bold text-white">Dashboard</h1>
         <p class="text-zinc-400 mt-1">Overview of your LLM benchmarks</p>
     </div>
+    {% if monitor_counts and (monitor_counts.alert or monitor_counts.warning) %}
+    <a href="/monitoring" class="block p-3 rounded-md border {{ 'bg-red-900/30 border-red-800 text-red-200' if monitor_counts.alert else 'bg-amber-900/30 border-amber-800 text-amber-200' }} text-sm">
+        Monitoring: {% if monitor_counts.alert %}{{ monitor_counts.alert }} unacknowledged alert{{ 's' if monitor_counts.alert != 1 }}{% endif %}{% if monitor_counts.alert and monitor_counts.warning %} and {% endif %}{% if monitor_counts.warning %}{{ monitor_counts.warning }} warning{{ 's' if monitor_counts.warning != 1 }}{% endif %} — deployment changes or canary regressions. Review →
+    </a>
+    {% endif %}
 
     <!-- Stats -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">

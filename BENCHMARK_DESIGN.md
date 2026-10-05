@@ -729,3 +729,31 @@ Truncated answers stay in, because users would see them. More than 1,000 pairs a
 - **Pages and access:** results, voting and pair pages, export, the compare-page entry point, admin-only actions and login redirects.
 
 As with the other suites, these tests use fake models; they validate the procedure, not the preferences of any real users or judges.
+
+## 2026-10-05 deployment fingerprints and canaries
+
+The full design is in [docs/design-deployment-monitoring.md](docs/design-deployment-monitoring.md).
+
+**Snapshots.** Every run records a snapshot of its endpoint (`deployment-probe-v1`) before the first measured request. This applies to all run modes. The snapshot's hard fields are:
+- the sanitised endpoint and configured model;
+- the matching `/models` entry (without its volatile `created` field);
+- `/version`, the `Server` header, the responding model and `system_fingerprint`;
+- the prompt-token counts of five fixed probes (plain, system, multilingual, multi-turn, tools), or the HTTP status that rejected them.
+
+A short temperature-0 behaviour probe is stored for display but excluded from the fingerprint, because batching makes such output nondeterministic. The fingerprint is a 16-hex SHA-256 of the canonical hard fields. Each successful snapshot is diffed against the model's previous successful one. A change of only the configured endpoint or model is a configuration change (info); anything else is a deployment change (alert). A failed snapshot never fails a run and is never compared.
+
+**Canaries (`canary-v1`).** Canaries are ordinary pending quality runs created by the queue tick. A canary is skipped while its previous run is queued or running, and its next time counts from the current time. Evaluation runs from the queue's finish callback, and the tick also evaluates runs that missed it, for example after a restart:
+- **Baseline:** the first completed run becomes the baseline automatically.
+- **Quality:** comparisons use the existing `compare_groups` (family bootstrap, sign-flip test, McNemar on full passes). A significant decrease is an alert; a significant increase is info; an incomparable pair is a warning.
+- **Latency:** a median TTFT above 1.5× the baseline and at least 250 ms slower, or a median latency above 1.5× and at least 1 s slower, is a warning.
+- **Failures:** endpoint errors are a warning. Failed runs and runs with nothing scored are alerts; runs stopped by an administrator are not.
+
+Alert and warning events are posted once to an optional webhook that passes the endpoint SSRF guard. Delivery failures are recorded on the event. Retention keeps a canary's newest 100 runs, its baseline and every warning or alert run.
+
+The rigorous suite (323 tasks, hash `7909c6325d1abd7b`), evaluator versions and all report protocols are unchanged. `selftest_monitoring.py` covers:
+- **Probes:** contents, fingerprint stability despite volatile fields and behaviour text, diffs, summaries and classification, and unreachable or rejecting endpoints.
+- **Snapshots:** change events and timelines; the runner storing a snapshot and surviving probe failures.
+- **Canaries:** validation, scheduling without backlog, pause and run-now; every evaluation outcome, including webhook delivery and failure; pending evaluation, retention and baseline rules; the queue hooks.
+- **Pages:** monitoring, canary, model and run pages, the dashboard banner, acknowledgement and access rules.
+
+These tests use fake endpoints. They establish detection and bookkeeping, not the stability of any real deployment.

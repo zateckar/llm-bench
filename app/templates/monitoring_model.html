@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "monitoring_macros.html" import event_rows, changes_table, snapshot_view %}
+{% block title %}{{ model.name }} deployment - Monitoring - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+            <a href="/monitoring" class="text-sm text-zinc-400 hover:text-zinc-200">← Monitoring</a>
+            <h1 class="text-xl font-bold text-white mt-1">{{ model.name }} <span class="text-sm font-normal text-zinc-400">{{ model.model_id }}</span></h1>
+            <p class="text-sm text-zinc-400 mt-1">Deployment snapshots from runs and manual checks, newest first. Only changes against the previous successful snapshot are listed.</p>
+        </div>
+        {% if is_admin %}<form method="POST" action="/monitoring/models/{{ model.id }}/check"><button class="btn-primary">Check now</button></form>{% endif %}
+    </div>
+    {% if error %}<div class="p-3 rounded-md bg-red-900/30 border border-red-800 text-sm text-red-300">{{ error }}</div>{% endif %}
+
+    {% set latest = checks|selectattr('ok')|first %}
+    {% if latest %}
+    <div class="card p-4 space-y-2">
+        <h2 class="text-lg font-semibold text-white">Current deployment <span class="font-mono text-sm text-zinc-400">{{ latest.fingerprint }}</span></h2>
+        {{ snapshot_view(latest.snapshot) }}
+    </div>
+    {% endif %}
+
+    <div class="card p-4 overflow-x-auto">
+        <h2 class="text-lg font-semibold text-white mb-2">Timeline</h2>
+        {% if checks %}
+        <table class="w-full text-sm">
+            <thead><tr><th class="text-left">When</th><th class="text-left">Source</th><th class="text-left">Fingerprint</th><th class="text-left">Changes</th></tr></thead>
+            <tbody>{% for c in checks %}<tr class="align-top">
+                <td class="text-xs text-zinc-400 whitespace-nowrap">{{ c.created_at[:16]|replace('T', ' ') }}</td>
+                <td>{% if c.run_id %}<a class="text-blue-400" href="/runs/{{ c.run_id }}">run #{{ c.run_id }}</a>{% else %}<span class="text-zinc-400">manual check</span>{% endif %}</td>
+                <td>{% if c.ok %}<span class="font-mono text-xs">{{ c.fingerprint }}</span>{% else %}<span class="text-xs text-amber-400">failed: {{ c.error }}</span>{% endif %}</td>
+                <td>{% if c.changes %}<span class="text-xs {{ 'text-red-300' if c.changed == 'deployment' else 'text-zinc-300' }}">{{ c.changed }} changed</span>{{ changes_table(c.changes) }}{% elif c.ok and c.previous_id %}<span class="text-xs text-zinc-500">unchanged</span>{% endif %}</td>
+            </tr>{% endfor %}</tbody>
+        </table>
+        {% else %}<p class="text-sm text-zinc-500">No snapshots yet. Every run records one; admins can also check now.</p>{% endif %}
+    </div>
+
+    {% if events %}
+    <div class="card p-4 overflow-x-auto">
+        <h2 class="text-lg font-semibold text-white mb-2">Events</h2>
+        {{ event_rows(events, is_admin, '/monitoring/models/' ~ model.id) }}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

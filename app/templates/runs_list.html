@@ -58,6 +58,10 @@
                         <a href="/runs/groups/{{ run.repeat_group_id }}" class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs text-sky-300 bg-sky-900/40"
                            title="Repeat {{ run.repeat_index + 1 }} of {{ run.repeat_count }} (model seed {{ run.repeat_index }}); open the group summary">R{{ run.repeat_index + 1 }}/{{ run.repeat_count }}</a>
                         {% endif %}
+                        {% if run.canary_id %}
+                        <a href="/monitoring/canaries/{{ run.canary_id }}" class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs {{ 'text-red-300 bg-red-900/40' if run.canary_status == 'alert' else 'text-amber-300 bg-amber-900/40' if run.canary_status == 'warning' else 'text-emerald-300 bg-emerald-900/40' }}"
+                           title="Scheduled canary run{% if run.canary_status %} · {{ run.canary_status }}{% endif %}">canary</a>
+                        {% endif %}
                     </td>
                     <td>
                         {% if run.status == 'completed' and run.scored_questions == 0 %}

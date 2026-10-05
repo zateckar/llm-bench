@@ -77,6 +77,18 @@
         </div>
     </div>
 
+    {% if canary %}
+    {% from "monitoring_macros.html" import severity_chip %}
+    {% set verdicts = {'left_higher': 'baseline significantly higher', 'right_higher': 'this run significantly higher', 'no_detectable_difference': 'no detectable difference'} %}
+    <div class="card p-4 text-sm flex flex-wrap items-center gap-2">
+        <span class="text-zinc-400">Canary run of</span> <a class="text-blue-400" href="/monitoring/canaries/{{ canary.id }}">{{ canary.name }}</a>
+        {% if run.canary_status %}{{ severity_chip(run.canary_status) }}{% endif %}
+        {% if canary_detail and canary_detail.comparison and canary_detail.comparison.compatible %}<span class="text-zinc-300">vs baseline run #{{ canary_detail.baseline_run_id }}: {{ '%+.1f'|format(canary_detail.comparison.balanced_difference * 100) }} points ({{ verdicts.get(canary_detail.comparison.verdict, canary_detail.comparison.verdict) }})</span>
+        {% elif canary_detail and canary_detail.baseline_run_id == run.id %}<span class="text-zinc-300">This run is the canary's baseline.</span>{% endif %}
+    </div>
+    {% endif %}
+    {% if deployment %}{% from "monitoring_macros.html" import deployment_card %}{{ deployment_card(deployment) }}{% endif %}
+
     <div class="view-tabs" role="group" aria-label="Run sections">
         <button @click="tab = 'quality'" :class="{ 'active': tab === 'quality' }" :aria-pressed="tab === 'quality'">Quality</button>
         <button @click="tab = 'performance'" :class="{ 'active': tab === 'performance' }" :aria-pressed="tab === 'performance'">Performance</button>

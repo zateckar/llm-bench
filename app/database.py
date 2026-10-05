@@ -63,6 +63,9 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("test_runs", "repeat_group_id", "INTEGER"),
     ("test_runs", "repeat_index", "INTEGER"),
     ("test_runs", "repeat_count", "INTEGER"),
+    ("test_runs", "canary_id", "INTEGER"),
+    ("test_runs", "canary_status", "TEXT"),
+    ("test_runs", "canary_json", "TEXT"),
 ]
 
 
