@@ -84,6 +84,17 @@ def main() -> int:
     if not args.quiet:
         print(f"Validated {len(open_questions)} open-ended questions ({open_suite.REVISION}).")
 
+    from app.benchmarking import safety_suite
+
+    safety_questions = safety_suite.load_questions()
+    for problem in safety_suite.validate_suite(safety_questions):
+        report.error("safety-language", problem)
+    for q in safety_questions:
+        if q.metadata.get("protocol") != "native-tools-v1":
+            validate_question(report, q)
+    if not args.quiet:
+        print(f"Validated {len(safety_questions)} safety and language questions ({safety_suite.REVISION}).")
+
     by_category = Counter(q.category for q in questions)
     by_evaluator = Counter(q.evaluator for q in questions)
     by_difficulty = Counter(q.difficulty for q in questions)

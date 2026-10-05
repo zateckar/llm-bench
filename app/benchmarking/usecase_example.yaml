@@ -4,7 +4,9 @@
 #
 # Allowed evaluators: exact_match, mcq, numeric_match, numeric_set,
 # contains_keywords, regex_all, json_match, set_match, format_check,
-# ordered_labels, refusal_calibration, admits_uncertainty.
+# ordered_labels, refusal_calibration, admits_uncertainty, open_ended (no key;
+# for blind A/B studies) and language_adherence (expected: {language: cs,
+# patterns: [...], must_not: [...], min_words: 8}; languages en, cs, sk, de).
 # Question fields are the same as in tests/questions (id, category, prompt,
 # evaluator, expected, system_prompt, difficulty, weight, pass_threshold,
 # max_tokens, description, source, rubric, metadata). `response_format` is

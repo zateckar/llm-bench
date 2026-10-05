@@ -129,6 +129,25 @@
 
     {% if quality and quality.schema_version != 3 %}<p class="text-sm text-amber-400">Historical evaluation protocol. Run the current complete suite for comparable scores.</p>{% endif %}
     {% include "quality_summary.html" %}
+    {% if languages %}
+    <section class="card p-4 space-y-2">
+        <h2 class="text-lg font-semibold text-white">Answer language</h2>
+        <p class="text-sm text-zinc-400">Answers to questions that declare a language, checked with {{ languages.revision }}. Diagnostic only: it does not change any score. Answers under 12 words are too short to tell.</p>
+        <table class="w-full text-sm">
+            <thead><tr><th class="text-left">Required</th><th class="text-left">Answers</th><th class="text-left">In that language</th><th class="text-left">Other or mixed</th><th class="text-left">Too short</th></tr></thead>
+            <tbody>{% for l in languages.languages %}{% set measured = l.adherent + l.other %}<tr>
+                <td class="text-zinc-200">{{ l.name }}</td><td>{{ l.answers }}</td>
+                <td>{{ l.adherent }}{% if measured %} <span class="text-xs text-zinc-500">({{ '%.0f'|format(100 * l.adherent / measured) }}%)</span>{% endif %}</td>
+                <td class="{{ 'text-amber-300' if l.other else '' }}">{{ l.other }}</td><td class="text-zinc-500">{{ l.short }}</td>
+            </tr>{% endfor %}</tbody>
+        </table>
+        {% if languages.mismatches %}
+        <details><summary class="cursor-pointer text-sm text-amber-300">{{ languages.mismatch_count }} answer{{ 's' if languages.mismatch_count != 1 }} in another language or mixed</summary>
+            <ul class="mt-2 text-xs space-y-0.5">{% for m in languages.mismatches %}<li><span class="font-mono text-zinc-300">{{ m.id }}</span> <span class="text-zinc-500">{{ m.category }}</span> · required {{ m.required }}, detected {{ m.detected or 'undetermined' }}{% if m.detected == m.required %} with {{ '%.0f'|format(100 * m.share) }}% of sentences{% endif %}</li>{% endfor %}</ul>
+        </details>
+        {% endif %}
+    </section>
+    {% endif %}
     {% if not quality and not quality_timings %}<div class="card p-4"><h2 class="text-lg font-semibold">No quality results</h2><p class="text-sm text-zinc-400">This run has no recorded quality tasks.</p></div>{% endif %}
     {% include "quality_timing_report.html" %}
 

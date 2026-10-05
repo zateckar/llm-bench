@@ -576,8 +576,28 @@ def check_open_ended(report: Report, where: str, expected: object) -> None:
         report.error(where, "open_ended `reference` must be non-empty text of at most 20,000 characters")
 
 
+def check_language_adherence(report: Report, where: str, expected: object) -> None:
+    if not isinstance(expected, dict) or set(expected) - {"language", "patterns", "must_not", "min_words"}:
+        report.error(where, "language_adherence expects a mapping with `language`, optional `patterns`, "
+                            "`must_not` and `min_words`")
+        return
+    if expected.get("language") not in {"en", "cs", "sk", "de"}:
+        report.error(where, "language_adherence `language` must be one of en, cs, sk, de")
+    for key in ("patterns", "must_not"):
+        values = expected.get(key) or []
+        if not isinstance(values, list):
+            report.error(where, f"language_adherence `{key}` must be a list")
+            continue
+        for i, pattern in enumerate(values, 1):
+            check_regex(report, where, pattern, f"{key} #{i}")
+    min_words = expected.get("min_words", 8)
+    if type(min_words) is not int or not 1 <= min_words <= 2000:
+        report.error(where, "language_adherence `min_words` must be an integer between 1 and 2000")
+
+
 VALIDATORS = {
     "open_ended": check_open_ended,
+    "language_adherence": check_language_adherence,
     "contains_keywords": check_contains_keywords,
     "format_check": check_format_check,
     "code_exec": check_code_exec,

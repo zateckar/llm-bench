@@ -2203,8 +2203,66 @@ def eval_open_ended(response: str, expected, **_kwargs) -> tuple[float, str]:
     return 0.0, "Open-ended answer recorded for pairwise comparison"
 
 
+def eval_language_adherence(response: str, expected: Any, **kwargs) -> tuple[float, str]:
+    """The answer is in the required language, does not drift, and has the content.
+
+    ``expected``::
+
+        expected:
+          language: cs            # en | cs | sk | de
+          patterns: ["4444"]       # content that must appear (regex, case-insensitive)
+          must_not: ["CANARY"]     # regexes that fail the answer
+          min_words: 12            # default 8
+
+    Like ``open_ended`` it is absent from EVALUATOR_VERSIONS: suites that use it
+    version it through their own revision and record ``language-id`` in provenance.
+    """
+    from app.benchmarking import language_id
+
+    spec = expected if isinstance(expected, dict) else {}
+    required = spec.get("language")
+    patterns = [str(p) for p in spec.get("patterns") or []]
+    must_not = [str(p) for p in spec.get("must_not") or []]
+    min_words = int(spec.get("min_words", 8))
+    body = strip_emphasis(strip_think_blocks(response))
+    _, found, share = language_id.adherence(body, required)
+    detected = found["language"] or "undetermined"
+    present = [p for p in patterns if safe_re_search(p, body, re.IGNORECASE | re.DOTALL)]
+    forbidden = [p for p in must_not if safe_re_search(p, body, re.IGNORECASE | re.DOTALL)]
+    in_language = found["language"] == required
+
+    def criterion(ident, ok, reason, *, critical=False, gated=True, evidence=None):
+        return {"id": ident, "status": "pass" if ok else "fail", "earned": float(ok), "possible": 1.0,
+                "mandatory": True, "critical": critical, "depends_on": ["language"] if gated else [],
+                "reason_code": reason if ok else f"not_{reason}", "evidence": evidence or {}}
+
+    criteria = [
+        criterion("language", in_language, "required_language", critical=True, gated=False,
+                  evidence={"required": required, "detected": found["language"], "scores": found["scores"]}),
+        criterion("no-drift", share >= 0.85, "single_language", evidence={"shares": found["shares"]}),
+        criterion("length", found["words"] >= min_words, "substantive", evidence={"words": found["words"]}),
+        *(criterion(f"content-{i}", p in present, "content_present", evidence={"pattern": p[:120]})
+          for i, p in enumerate(patterns, 1)),
+        *(criterion(f"must-not-{i}", p not in forbidden, "forbidden_absent", critical=True, gated=False,
+                    evidence={"pattern": p[:120]}) for i, p in enumerate(must_not, 1)),
+    ]
+    sink = kwargs.get("_diagnostics")
+    if isinstance(sink, dict):
+        sink["criteria"] = criteria
+    if forbidden:
+        return 0.0, "Forbidden content: " + ", ".join(f[:40] for f in forbidden[:3])
+    if not in_language:
+        return 0.0, (f"Answered in {language_id.NAMES.get(detected, detected)}"
+                     f" ({share:.0%} of classified words in {language_id.NAMES.get(required, required)})")
+    failed = [c["id"] for c in criteria if c["status"] != "pass"]
+    if not failed:
+        return 1.0, f"{language_id.NAMES[required]} answer with all {len(patterns)} required element(s)"
+    return (len(criteria) - len(failed)) / len(criteria), "Unmet: " + ", ".join(failed[:6])
+
+
 EVALUATORS: dict[str, Callable] = {
     "open_ended": eval_open_ended,
+    "language_adherence": eval_language_adherence,
     "exact_match": eval_exact_match,
     "mcq": eval_mcq,
     "contains_keywords": eval_contains_keywords,

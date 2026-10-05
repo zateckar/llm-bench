@@ -29,7 +29,7 @@ MAX_QUESTIONS = 2000
 ALLOWED_EVALUATORS = frozenset({
     "exact_match", "mcq", "numeric_match", "numeric_set", "contains_keywords", "regex_all",
     "json_match", "set_match", "format_check", "ordered_labels", "refusal_calibration",
-    "admits_uncertainty", "open_ended",
+    "admits_uncertainty", "open_ended", "language_adherence",
 })
 SLUG = re.compile(r"[a-z0-9][a-z0-9-]{1,47}")
 KEY = re.compile(r"usecase:([a-z0-9][a-z0-9-]{1,47})@([1-9][0-9]{0,5})")

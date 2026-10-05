@@ -258,7 +258,9 @@ async def run_detail(request: Request, run_id: int):
             if summary:
                 category["avg_score"] = summary["score"]
     from app.services.html_reports import performance_view, quality_timing_view
+    from app.services.language_views import language_report
 
+    languages = language_report(quality_data, results)
     label = f"#{run_id} · {run['model_name']}"
     performance = performance_view([{"label": label, "perf": perf_data or {}}])
     quality_timings = [quality_timing_view({"label": label, "results": results})] if results else []
@@ -288,6 +290,7 @@ async def run_detail(request: Request, run_id: int):
             "deployment": deployment,
             "canary": canary,
             "canary_detail": canary_detail,
+            "languages": languages,
         },
     )
 

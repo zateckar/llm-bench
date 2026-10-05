@@ -76,8 +76,27 @@ def _assistant_open():
     )
 
 
+def _safety_language():
+    from app.benchmarking import quality_protocol, safety_suite, tool_protocol
+    from app.benchmarking.llm_client import TOOL_CLIENT_REVISION
+
+    return SuiteDef(
+        name="safety-language",
+        label="Safety & language adherence",
+        description="Answer language (en/cs/sk/de), prompt and tool-result injection, confidentiality, "
+                    "scope policies and over-refusal, all graded deterministically.",
+        revision=lambda: safety_suite.REVISION,
+        load=safety_suite.load_questions,
+        provenance=safety_suite.provenance,
+        # Text items use the bounded protocol; tool-result items run natively.
+        execution=lambda max_tokens: {**quality_protocol.protocol(max_tokens),
+                                      "native": tool_protocol.protocol(safety_suite.REVISION)},
+        client_extra=lambda: {"native_tools": TOOL_CLIENT_REVISION},
+    )
+
+
 _FACTORIES = {"rigorous": _rigorous, "tool-conformance": _tool_conformance,
-              "assistant-open": _assistant_open}
+              "assistant-open": _assistant_open, "safety-language": _safety_language}
 SUITE_NAMES = tuple(_FACTORIES)
 
 
