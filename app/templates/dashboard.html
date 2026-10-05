@@ -13,6 +13,24 @@
     </a>
     {% endif %}
 
+    {% if decision_profiles %}
+    <div class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="text-lg font-semibold text-white">Decision profiles</h2>
+            <a href="/scorecard" class="text-sm text-blue-400 hover:text-blue-300">Scorecard</a>
+        </div>
+        <div class="space-y-1">
+            {% for p in decision_profiles %}
+            <a href="/scorecard/profiles/{{ p.id }}" class="flex flex-wrap items-center gap-x-3 p-2 rounded-md bg-zinc-800/50 hover:bg-zinc-800 transition-colors text-sm">
+                <span class="font-medium text-zinc-200">{{ p.name }}</span>
+                <span class="text-xs {{ 'text-emerald-300' if p.meeting else 'text-zinc-500' }}">{% if p.meeting %}met by {{ p.meeting|join(', ') }}{% else %}no model meets it{% endif %}</span>
+                <span class="ml-auto text-xs text-zinc-500">{{ p.counts.incomplete }} incomplete · {{ p.counts.fails }} do not meet</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Stats -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="card p-4">

@@ -757,3 +757,37 @@ The rigorous suite (323 tasks, hash `7909c6325d1abd7b`), evaluator versions and 
 - **Pages:** monitoring, canary, model and run pages, the dashboard banner, acknowledgement and access rules.
 
 These tests use fake endpoints. They establish detection and bookkeeping, not the stability of any real deployment.
+
+## 2026-10-05 scorecards and decision profiles
+
+The full design is in [docs/design-decision-dashboard.md](docs/design-decision-dashboard.md).
+
+**Evidence (`scorecard-v1`).** Evidence is computed on request from completed runs and is never stored. For each model the scorecard takes the latest completed run per evidence key:
+- quality per suite key;
+- closed-loop latency;
+- context sweep;
+- open-loop capacity per workload (the preset, or `custom:<workload hash>`).
+
+The scorecard never picks the best of several runs. A repeat group is one piece of evidence: the mean of its usable runs, with the run-spread t interval (or the pooled task bootstrap when only two runs are usable). Failed, stopped and unscored runs are excluded, and so is the open-ended suite. Canary runs count.
+
+**Freshness:**
+- *current* if the run's snapshot fingerprint equals the model's latest successful fingerprint;
+- *stale* if it differs, or, for runs without a snapshot, if a deployment change was recorded after the run started;
+- *unverified* otherwise.
+
+**Ties.** Leaders and ties use the existing `compare_groups` from the leader to every other non-stale model in a column, Holm-adjusted together. A tie means no detectable difference; incompatible protocols are labelled not comparable instead of being ranked. Comparisons are cached by run ids and computed per column after the page loads, because a group comparison takes seconds.
+
+**Gates (`decision-gates-v1`).** Gates are a closed list: quality (suite, optional category, achievement or full pass), capacity, latency, context and operations.
+- **Uncertain flag:** a quality result whose 95% interval contains the threshold is flagged uncertain. So is a capacity that is only a lower bound below the threshold. The point estimate still decides.
+- **Stale evidence** gives the status *stale* together with its would-be outcome.
+- **Context** uses the measured sweep context unless it is stale; otherwise it uses the context limit declared in the deployment snapshot.
+- **Verdicts:** *does not meet* when any gate fails; otherwise *incomplete* when any gate is missing or stale; otherwise *meets*.
+
+**Decision records** are append-only. Each stores the evaluation, the gate texts, the gate revision and the deployment fingerprint at the time of the decision, so later runs never rewrite it. A record is shown as drifted when the model's current fingerprint differs.
+
+No report protocol, evaluator version or suite changed; the rigorous suite stays at 323 tasks and hash `7909c6325d1abd7b`. `selftest_scorecard.py` covers:
+- **Gates:** validation, every gate's pass, fail, missing and stale paths, and the verdict rules.
+- **Evidence:** latest-not-best selection and exclusions, repeat groups, every freshness rule and age, closed-loop, open-loop, sweep and declared context, and operations.
+- **Ties:** the leader, ties, the Holm-adjusted below mark, incompatible protocols and a stale leader.
+- **Profiles and decisions:** profile validation and evaluation, decision snapshots surviving later runs, drift, superseding and cascade deletion.
+- **Pages:** pages, JSON exports, the dashboard card and access rules.

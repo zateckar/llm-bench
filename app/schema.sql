@@ -227,6 +227,33 @@ CREATE TABLE IF NOT EXISTS ab_votes (
 );
 CREATE INDEX IF NOT EXISTS idx_ab_votes_pair ON ab_votes(pair_id);
 
+-- Decision profiles and decision records (docs/design-decision-dashboard.md).
+-- Records copy the evaluation they were made on, so later runs never rewrite them.
+CREATE TABLE IF NOT EXISTS decision_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    gates_json TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS decision_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL REFERENCES decision_profiles(id) ON DELETE CASCADE,
+    model_id INTEGER REFERENCES models(id) ON DELETE SET NULL,
+    model_name TEXT NOT NULL,
+    decision TEXT NOT NULL,               -- approved | conditional | rejected
+    note TEXT NOT NULL,
+    revision TEXT NOT NULL,
+    evaluation_json TEXT NOT NULL,
+    fingerprint TEXT,                     -- the model's deployment fingerprint when decided
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_decision_records_profile ON decision_records(profile_id, model_id, id);
+
 -- Test Results
 CREATE TABLE IF NOT EXISTS test_results (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

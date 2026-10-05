@@ -1,0 +1,99 @@
+{% macro fresh(item, old_days=90) %}{% if item %}{% if item.freshness == 'stale' %}<span class="inline-flex px-1.5 py-0.5 rounded text-xs text-red-300 bg-red-900/40" title="Measured on a deployment that is no longer served">stale</span>{% elif item.freshness == 'unverified' %}<span class="inline-flex px-1.5 py-0.5 rounded text-xs text-zinc-300 bg-zinc-800" title="No deployment snapshot for this run and no later change known">unverified</span>{% else %}<span class="inline-flex px-1.5 py-0.5 rounded text-xs text-emerald-300 bg-emerald-900/40" title="Measured on the deployment served now">current</span>{% endif %}{% if item.old %} <span class="inline-flex px-1.5 py-0.5 rounded text-xs text-amber-300 bg-amber-900/40" title="Older than {{ old_days }} days">{{ item.age_days }} d old</span>{% endif %}{% endif %}{% endmacro %}
+
+{% macro pct(v, digits=1) %}{% if v is none %}<span class="text-zinc-600">—</span>{% else %}{{ ("%." ~ digits ~ "f%%")|format(v * 100) }}{% endif %}{% endmacro %}
+
+{% macro ci(interval) %}{% if interval and interval[0] is not none and interval[1] is not none %}<span class="text-xs text-zinc-500">{{ "%.1f"|format(interval[0] * 100) }}–{{ "%.1f"|format(interval[1] * 100) }}</span>{% endif %}{% endmacro %}
+
+{% macro ms(v) %}{% if v is none %}<span class="text-zinc-600">—</span>{% elif v >= 1000 %}{{ "%.2f s"|format(v / 1000) }}{% else %}{{ "%.0f ms"|format(v) }}{% endif %}{% endmacro %}
+
+{% macro num(v, unit='', fmt='%.1f') %}{% if v is none %}<span class="text-zinc-600">—</span>{% else %}{{ fmt|format(v) }}{% if unit %} {{ unit }}{% endif %}{% endif %}{% endmacro %}
+
+{% macro verdict_chip(verdict) %}<span class="inline-flex px-1.5 py-0.5 rounded text-xs font-medium {{ 'text-emerald-300 bg-emerald-900/40' if verdict == 'meets' else 'text-red-300 bg-red-900/40' if verdict == 'fails' else 'text-amber-300 bg-amber-900/40' }}">{{ {'meets': 'meets', 'fails': 'does not meet', 'incomplete': 'incomplete evidence'}[verdict] }}</span>{% endmacro %}
+
+{% macro decision_chip(decision, label) %}<span class="inline-flex px-1.5 py-0.5 rounded text-xs font-medium {{ 'text-emerald-300 bg-emerald-900/40' if decision == 'approved' else 'text-sky-300 bg-sky-900/40' if decision == 'conditional' else 'text-red-300 bg-red-900/40' }}">{{ label }}</span>{% endmacro %}
+
+{% macro gate_value(r) %}{% if r.value is none %}<span class="text-zinc-600">—</span>{% elif r.unit == '%' %}{{ "%.1f%%"|format(r.value * 100) }}{% elif r.unit == 'ms' %}{{ ms(r.value) }}{% elif r.unit == 'tokens' %}{{ "{:,}".format(r.value) }} tokens{% elif r.unit == 'req/s' %}{{ "%.2f"|format(r.value) }} req/s{% elif r.unit == 'tok/s' %}{{ "%.1f"|format(r.value) }} tok/s{% else %}{{ r.value }}{% endif %}{% endmacro %}
+
+{% macro gate_cell(r, old_days=90) %}
+<div class="space-y-0.5">
+  <div class="flex items-center gap-1.5">
+    <span class="inline-flex px-1.5 py-0.5 rounded text-xs font-medium {{ 'text-emerald-300 bg-emerald-900/40' if r.status == 'pass' else 'text-red-300 bg-red-900/40' if r.status == 'fail' else 'text-amber-300 bg-amber-900/40' if r.status == 'stale' else 'text-zinc-400 bg-zinc-800' }}" {% if r.status == 'stale' %}title="Would {{ r.outcome }} on evidence from a deployment that is no longer served"{% endif %}>{{ r.status }}</span>
+    <span class="text-sm text-zinc-200">{{ gate_value(r) }}</span>
+    {% if r.uncertain %}<span class="text-xs text-amber-300" title="{{ r.note }}">±</span>{% endif %}
+  </div>
+  {% if r.note and not r.uncertain %}<p class="text-xs text-zinc-500">{{ r.note }}</p>{% endif %}
+  {% if r.run_id %}<p class="text-xs text-zinc-500">{% if r.group_id %}<a class="text-blue-400" href="/runs/groups/{{ r.group_id }}">group #{{ r.group_id }}</a>{% else %}<a class="text-blue-400" href="/runs/{{ r.run_id }}">run #{{ r.run_id }}</a>{% endif %}{% if r.freshness and r.freshness != 'current' %} · {{ r.freshness }}{% endif %}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro gate_editor(action, options, profile=none, submit='Create profile') %}
+<form method="POST" action="{{ action }}" class="space-y-3" x-data="gateEditor({{ (profile.gates if profile else [])|tojson|forceescape }}, {{ options|tojson|forceescape }})">
+  <div class="grid md:grid-cols-3 gap-3">
+    <div><label class="block text-sm text-zinc-300 mb-1">Name</label><input name="name" class="input-field" maxlength="120" required value="{{ profile.name if profile else '' }}" placeholder="e.g. Coding agents"></div>
+    <div class="md:col-span-2"><label class="block text-sm text-zinc-300 mb-1">Use case <span class="text-zinc-500">(optional)</span></label><input name="description" class="input-field" maxlength="2000" value="{{ profile.description or '' if profile else '' }}" placeholder="Who uses it and what matters"></div>
+  </div>
+  <div class="space-y-2">
+    <template x-for="(g, i) in gates" :key="g.uid">
+      <div class="flex flex-wrap items-end gap-2 p-2 rounded-md bg-zinc-900/60 border border-zinc-800">
+        <div><label class="block text-xs text-zinc-400 mb-1">Gate</label>
+          <select class="input-field" x-model="g.type">
+            <option value="quality">Quality</option><option value="capacity">Capacity under SLO</option>
+            <option value="latency">Latency</option><option value="context">Context</option>
+            <option value="operations">Operations</option>
+          </select></div>
+        <template x-if="g.type === 'quality'"><div class="flex flex-wrap items-end gap-2">
+          <div><label class="block text-xs text-zinc-400 mb-1">Suite</label><select class="input-field" x-model="g.suite"><template x-for="s in options.suites" :key="s.key"><option :value="s.key" x-text="s.label" :selected="s.key === g.suite"></option></template></select></div>
+          <div><label class="block text-xs text-zinc-400 mb-1">Metric</label><select class="input-field" x-model="g.metric"><option value="score">Achievement</option><option value="full_pass">Full pass</option></select></div>
+          <div><label class="block text-xs text-zinc-400 mb-1">Category <span class="text-zinc-500">(optional)</span></label><input class="input-field" x-model="g.category" :list="'cats-' + g.uid" placeholder="whole suite"><datalist :id="'cats-' + g.uid"><template x-for="c in (options.categories[g.suite] || [])" :key="c"><option :value="c"></option></template></datalist></div>
+          <div><label class="block text-xs text-zinc-400 mb-1">At least (%)</label><input class="input-field w-24" type="number" min="0.1" max="100" step="0.1" x-model="g.pct"></div>
+        </div></template>
+        <template x-if="g.type === 'capacity'"><div class="flex flex-wrap items-end gap-2">
+          <div><label class="block text-xs text-zinc-400 mb-1">Workload</label><select class="input-field" x-model="g.workload"><template x-for="w in options.workloads" :key="w.key"><option :value="w.key" x-text="w.label" :selected="w.key === g.workload"></option></template></select></div>
+          <div><label class="block text-xs text-zinc-400 mb-1">At least (req/s)</label><input class="input-field w-24" type="number" min="0.001" step="any" x-model="g.threshold"></div>
+        </div></template>
+        <template x-if="g.type === 'latency'"><div class="flex flex-wrap items-end gap-2">
+          <div><label class="block text-xs text-zinc-400 mb-1">Metric</label><select class="input-field" x-model="g.metric"><template x-for="m in options.latency_metrics" :key="m.key"><option :value="m.key" x-text="m.label + (m.lower ? ' (at most, ' : ' (at least, ') + m.unit + ')'" :selected="m.key === g.metric"></option></template></select></div>
+          <div><label class="block text-xs text-zinc-400 mb-1">Concurrency</label><input class="input-field w-20" type="number" min="1" step="1" x-model="g.concurrency"></div>
+          <div><label class="block text-xs text-zinc-400 mb-1">Threshold</label><input class="input-field w-28" type="number" min="0.001" step="any" x-model="g.threshold"></div>
+        </div></template>
+        <template x-if="g.type === 'context'"><div><label class="block text-xs text-zinc-400 mb-1">At least (tokens)</label><input class="input-field w-32" type="number" min="1" step="1" x-model="g.threshold"></div></template>
+        <template x-if="g.type === 'operations'"><p class="text-xs text-zinc-400 pb-2">No unacknowledged monitoring alert, and every enabled canary's latest run is ok.</p></template>
+        <button type="button" class="btn-ghost text-xs ml-auto" @click="gates.splice(i, 1)">Remove</button>
+      </div>
+    </template>
+    <button type="button" class="btn-ghost text-sm" @click="add()">+ Add gate</button>
+  </div>
+  <input type="hidden" name="gates" :value="JSON.stringify(serialized())">
+  <div class="flex items-center gap-3"><button class="btn-primary" type="submit">{{ submit }}</button>
+    <p class="text-xs text-zinc-500">Each gate uses the model's latest evidence. Evidence from a deployment that is no longer served counts as stale, not as a pass.</p></div>
+</form>
+<script>
+function gateEditor(initial, options) {
+    let uid = 0;
+    const defaults = () => ({uid: ++uid, type: 'quality', suite: (options.suites[0] || {}).key || 'rigorous', metric: 'score',
+                              category: '', pct: 70, workload: (options.workloads[0] || {}).key || 'chat',
+                              threshold: '', concurrency: 1});
+    return {
+        options,
+        gates: initial.map(g => {
+            const row = {...defaults(), ...g, category: g.category || ''};
+            if (g.type === 'quality') row.pct = +(g.threshold * 100).toFixed(3);
+            if (g.type === 'latency' && !(g.metric in Object.fromEntries(options.latency_metrics.map(m => [m.key, 1])))) row.metric = 'ttft_p95';
+            return row;
+        }),
+        add() { this.gates.push(defaults()); },
+        serialized() {
+            return this.gates.map(g => {
+                if (g.type === 'quality') return {type: g.type, suite: g.suite, metric: g.metric === 'full_pass' ? 'full_pass' : 'score',
+                                                  category: g.category || null, threshold: Number(g.pct) / 100};
+                if (g.type === 'capacity') return {type: g.type, workload: g.workload, threshold: Number(g.threshold)};
+                if (g.type === 'latency') return {type: g.type, metric: ['ttft_p95', 'latency_p95', 'request_output'].includes(g.metric) ? g.metric : 'ttft_p95',
+                                                  concurrency: Number(g.concurrency), threshold: Number(g.threshold)};
+                if (g.type === 'context') return {type: g.type, threshold: Number(g.threshold)};
+                return {type: g.type};
+            });
+        },
+    };
+}
+</script>
+{% endmacro %}

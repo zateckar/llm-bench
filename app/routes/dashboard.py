@@ -102,15 +102,17 @@ async def dashboard(request: Request):
 
     from starlette.concurrency import run_in_threadpool
 
-    from app.services import monitoring
+    from app.services import monitoring, scorecard
 
     monitor_counts = await run_in_threadpool(monitoring.open_counts)
+    decision_profiles = await run_in_threadpool(scorecard.profile_overview)
 
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         {
             "monitor_counts": monitor_counts,
+            "decision_profiles": decision_profiles,
             "active_runs": active_runs,
             "recent_runs": recent_runs,
             "total_runs": total_runs,

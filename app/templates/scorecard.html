@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% from "scorecard_macros.html" import fresh, pct, ci, ms, num, verdict_chip %}
+{% from "monitoring_macros.html" import severity_chip %}
+{% block title %}Scorecard - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex flex-wrap items-start gap-3">
+        <div class="flex-1 min-w-[20rem]">
+            <h1 class="text-xl font-bold text-white">Scorecard</h1>
+            <p class="text-zinc-400 mt-1">The latest evidence for every model, never the best run. There is no combined score: each column keeps its own unit and uncertainty. A mark says whether the evidence was measured on the deployment served now. Quality leaders are compared with every other model by a paired test, and models without a detectable difference count as tied.</p>
+        </div>
+        <div class="flex gap-2"><a class="btn-ghost text-sm" href="/scorecard/profiles">Decision profiles</a><a class="btn-ghost text-sm" href="/scorecard.json">JSON</a></div>
+    </div>
+
+    {% if profiles %}
+    <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+        {% for p in profiles %}
+        <a href="/scorecard/profiles/{{ p.id }}" class="card p-3 hover:bg-zinc-800/60 transition-colors">
+            <p class="font-medium text-white">{{ p.name }}</p>
+            <p class="text-xs text-zinc-400 mt-1">{{ p.gates }} gate{{ 's' if p.gates != 1 }} · <span class="text-emerald-300">{{ p.counts.meets }} meet</span> · <span class="text-amber-300">{{ p.counts.incomplete }} incomplete</span> · <span class="text-red-300">{{ p.counts.fails }} do not meet</span></p>
+            {% if p.meeting %}<p class="text-xs text-zinc-300 mt-1 truncate">{{ p.meeting|join(', ') }}</p>{% endif %}
+        </a>
+        {% endfor %}
+    </div>
+    {% elif is_admin %}
+    <div class="card p-3 text-sm text-zinc-400">No decision profiles yet. <a class="text-blue-400" href="/scorecard/profiles">Create one</a> to state the requirements of a use case and see which models meet them.</div>
+    {% endif %}
+
+    {% set suites = data.suites %}
+    <div class="card p-4 overflow-x-auto" x-data="scorecardTies({{ suites|map(attribute='key')|list|tojson|forceescape }})">
+        {% if not data.models %}<p class="text-sm text-zinc-500">No models yet.</p>{% else %}
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="align-bottom">
+                    <th class="text-left">Model</th>
+                    {% if profiles %}<th class="text-left">Profiles</th>{% endif %}
+                    {% for s in suites %}<th class="text-left">{{ s.label }}<p class="text-xs font-normal text-zinc-500">achievement · 95% interval <span x-show="loading['{{ s.key }}']" class="text-zinc-600">· comparing…</span></p></th>{% endfor %}
+                    {% for w in data.workloads %}<th class="text-left">{{ w.label }}<p class="text-xs font-normal text-zinc-500">sustainable rate under SLO</p></th>{% endfor %}
+                    <th class="text-left">Latency<p class="text-xs font-normal text-zinc-500">TTFT p95 · per-request output</p></th>
+                    <th class="text-left">Context</th>
+                    <th class="text-left">Operations</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for e in data.models %}{% set mid = e.model.id %}
+                <tr class="align-top">
+                    <td class="whitespace-nowrap pr-3"><a class="text-blue-400 font-medium" href="/scorecard/models/{{ mid }}">{{ e.model.name }}</a><p class="text-xs text-zinc-500">{{ e.model.identifier }}</p></td>
+                    {% if profiles %}<td class="space-y-1">{% for p in profiles %}<div class="text-xs whitespace-nowrap"><a class="text-zinc-400 hover:text-white" href="/scorecard/profiles/{{ p.id }}">{{ p.name }}</a> {{ verdict_chip(p.verdicts[mid]) }}</div>{% endfor %}</td>{% endif %}
+                    {% for s in suites %}{% set q = e.quality.get(s.key) %}
+                    <td>{% if q %}
+                        <div class="flex items-baseline gap-1.5"><span class="text-zinc-100 font-medium">{{ pct(q.score) }}</span>{{ ci(q.score_ci95) }}</div>
+                        <p class="text-xs"><span :class="cls('{{ s.key }}', '{{ mid }}')" :title="title('{{ s.key }}', '{{ mid }}')" x-text="text('{{ s.key }}', '{{ mid }}')"></span></p>
+                        <p class="text-xs text-zinc-500">{% if q.group_id %}<a class="text-blue-400" href="/runs/groups/{{ q.group_id }}">{{ q.runs }} runs</a>{% else %}<a class="text-blue-400" href="/runs/{{ q.run_id }}">#{{ q.run_id }}</a>{% endif %} · full pass {{ pct(q.full_pass, 0) }}</p>
+                        <div class="mt-0.5">{{ fresh(q, old_days) }}</div>
+                    {% else %}<span class="text-zinc-600">—</span>{% endif %}</td>
+                    {% endfor %}
+                    {% for w in data.workloads %}{% set c = e.capacity.get(w.key) %}
+                    <td>{% if c %}
+                        <p class="text-zinc-100 font-medium">{% if c.rate is not none %}{% if c.status == 'lower_bound' %}≥ {% endif %}{{ "%.2f"|format(c.rate) }} req/s{% else %}<span class="text-red-300">no rate met the SLO</span>{% endif %}</p>
+                        <p class="text-xs text-zinc-500"><a class="text-blue-400" href="/runs/{{ c.run_id }}">#{{ c.run_id }}</a>{% if c.attainment_target %} · {{ "%.0f"|format(c.attainment_target * 100) }}% attainment{% endif %}</p>
+                        <div class="mt-0.5">{{ fresh(c, old_days) }}</div>
+                    {% else %}<span class="text-zinc-600">—</span>{% endif %}</td>
+                    {% endfor %}
+                    <td>{% set l = e.latency %}{% if l %}{% set level_key = 1 if 1 in l.levels else (l.levels|list|min) %}{% set level = l.levels[level_key] %}
+                        <p class="text-zinc-100">{{ ms(level.ttft_p95) }} · {{ num(level.request_output, 'tok/s') }}</p>
+                        <p class="text-xs text-zinc-500">concurrency {{ level_key }} · <a class="text-blue-400" href="/runs/{{ l.run_id }}">#{{ l.run_id }}</a></p>
+                        <div class="mt-0.5">{{ fresh(l, old_days) }}</div>
+                    {% else %}<span class="text-zinc-600">—</span>{% endif %}</td>
+                    <td>{% if e.context %}<p class="text-zinc-100">{{ "{:,}".format(e.context.tokens) }}</p><p class="text-xs text-zinc-500">measured · <a class="text-blue-400" href="/runs/{{ e.context.run_id }}">#{{ e.context.run_id }}</a></p><div class="mt-0.5">{{ fresh(e.context, old_days) }}</div>
+                        {% elif e.declared_context %}<p class="text-zinc-100">{{ "{:,}".format(e.declared_context.tokens) }}</p><p class="text-xs text-zinc-500">declared by the deployment</p>
+                        {% else %}<span class="text-zinc-600">—</span>{% endif %}</td>
+                    <td>{% set o = e.operations %}
+                        <p class="text-xs">{% if o.open_alerts %}<span class="text-red-300">{{ o.open_alerts }} open alert{{ 's' if o.open_alerts != 1 }}</span>{% elif o.open_warnings %}<span class="text-amber-300">{{ o.open_warnings }} open warning{{ 's' if o.open_warnings != 1 }}</span>{% else %}<span class="text-zinc-400">no open alerts</span>{% endif %}</p>
+                        {% for c in o.canaries %}<p class="text-xs"><a class="text-zinc-400 hover:text-white" href="/monitoring/canaries/{{ c.id }}">{{ c.name }}</a> {% if c.status %}{{ severity_chip(c.status) }}{% else %}<span class="text-zinc-600">not evaluated</span>{% endif %}</p>{% endfor %}
+                        <p class="text-xs text-zinc-500">{% if e.fingerprint %}<a class="font-mono" href="/monitoring/models/{{ mid }}">{{ e.fingerprint[:8] }}</a> · {{ (e.last_check_at or '')[:10] }}{% else %}<a href="/monitoring/models/{{ mid }}">never fingerprinted</a>{% endif %}</p>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+    <p class="text-xs text-zinc-500">Evidence older than {{ old_days }} days is marked old; age alone never makes it stale. Failed and stopped runs are not evidence. The open-ended suite has no automatic score; its answers are compared in <a class="text-blue-400" href="/studies">blind A/B studies</a>.</p>
+</div>
+<script>
+function scorecardTies(suites) {
+    return {
+        marks: {}, loading: {},
+        async init() {
+            for (const suite of suites) {
+                this.loading[suite] = true;
+                try {
+                    const response = await fetch('/scorecard/ties?suite=' + encodeURIComponent(suite));
+                    if (response.ok) this.marks[suite] = await response.json();
+                } finally { this.loading[suite] = false; }
+            }
+        },
+        mark(suite, model) { return (this.marks[suite] || {})[model]; },
+        text(suite, model) {
+            const m = this.mark(suite, model);
+            if (!m) return '';
+            return {leader: '★ leader', tied: '≈ tied with the leader', below: 'below the leader', not_comparable: 'not comparable'}[m.mark] || '';
+        },
+        cls(suite, model) {
+            const m = this.mark(suite, model);
+            return !m ? '' : m.mark === 'leader' ? 'text-amber-300' : m.mark === 'tied' ? 'text-sky-300' : 'text-zinc-500';
+        },
+        title(suite, model) {
+            const m = this.mark(suite, model);
+            if (!m) return '';
+            if (m.mark === 'not_comparable') return m.reason || '';
+            if (m.difference === undefined) return 'Highest achievement among current evidence';
+            const interval = m.ci95 ? `, 95% interval ${(m.ci95[0] * 100).toFixed(1)} to ${(m.ci95[1] * 100).toFixed(1)}` : '';
+            const p = m.p_adjusted == null ? '' : `, p = ${m.p_adjusted.toFixed(3)}${m.adjustment ? ' (Holm-adjusted)' : ''}`;
+            return `Paired difference to the leader ${(m.difference * 100).toFixed(1)} points${interval}${p}`;
+        },
+    };
+}
+</script>
+{% endblock %}

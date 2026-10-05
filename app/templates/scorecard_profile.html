@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "scorecard_macros.html" import gate_cell, verdict_chip, decision_chip, gate_editor %}
+{% block title %}{{ profile.name }} - Decision profile - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex flex-wrap items-start gap-3">
+        <div class="flex-1 min-w-[20rem]">
+            <a href="/scorecard/profiles" class="text-sm text-blue-400">← Decision profiles</a>
+            <h1 class="text-xl font-bold text-white mt-1">{{ profile.name }}</h1>
+            {% if profile.description %}<p class="text-zinc-300 mt-1">{{ profile.description }}</p>{% endif %}
+            <p class="text-xs text-zinc-500 mt-1">{% if profile.created_by_name %}Created by {{ profile.created_by_name }} · {% endif %}updated {{ (profile.updated_at or '')[:16]|replace('T', ' ') }}</p>
+        </div>
+        <a class="btn-ghost text-sm" href="/scorecard/profiles/{{ profile.id }}/export.json">JSON</a>
+    </div>
+    {% if error %}<div class="p-3 rounded-md bg-red-900/30 border border-red-800 text-sm text-red-300">{{ error }}</div>{% endif %}
+
+    <div class="card p-4">
+        <h2 class="text-lg font-semibold text-white mb-2">Requirements</h2>
+        <ol class="list-decimal list-inside text-sm text-zinc-200 space-y-0.5">{% for r in requirements %}<li>{{ r }}</li>{% endfor %}</ol>
+        <p class="text-xs text-zinc-500 mt-2">± marks a result whose 95% interval contains the threshold (quality), or a capacity that is only a lower bound. The point estimate still decides.</p>
+    </div>
+
+    <div class="card p-4 overflow-x-auto">
+        <h2 class="text-lg font-semibold text-white mb-2">Models</h2>
+        <table class="w-full text-sm">
+            <thead><tr class="align-bottom"><th class="text-left">Model</th><th class="text-left">Verdict</th>{% for r in requirements %}<th class="text-left font-normal text-xs text-zinc-400 max-w-[14rem]">{{ loop.index }}. {{ r }}</th>{% endfor %}</tr></thead>
+            <tbody>{% for row in rows %}<tr class="align-top">
+                <td><a class="text-blue-400" href="/scorecard/models/{{ row.model.id }}">{{ row.model.name }}</a><p class="text-xs text-zinc-500">{{ row.model.identifier }}</p></td>
+                <td>{{ verdict_chip(row.evaluation.verdict) }}</td>
+                {% for r in row.evaluation.results %}<td>{{ gate_cell(r, old_days) }}</td>{% endfor %}
+            </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+
+    <div class="card p-4 overflow-x-auto space-y-3" id="decisions">
+        <h2 class="text-lg font-semibold text-white">Decisions</h2>
+        {% if decisions %}
+        <table class="w-full text-sm">
+            <thead><tr><th class="text-left">When</th><th class="text-left">Model</th><th class="text-left">Decision</th><th class="text-left">Note</th><th class="text-left">Evidence then</th><th class="text-left">By</th></tr></thead>
+            <tbody>{% for d in decisions %}<tr class="align-top {% if d.superseded %}opacity-60{% endif %}">
+                <td class="text-xs text-zinc-400 whitespace-nowrap">{{ d.created_at[:16]|replace('T', ' ') }}</td>
+                <td>{% if d.model_id %}<a class="text-blue-400" href="/scorecard/models/{{ d.model_id }}">{{ d.model_name }}</a>{% else %}{{ d.model_name }} <span class="text-xs text-zinc-500">(deleted)</span>{% endif %}</td>
+                <td>{{ decision_chip(d.decision, d.decision_label) }}{% if d.superseded %}<p class="text-xs text-zinc-500">superseded</p>{% endif %}
+                    {% if d.drifted and not d.superseded %}<p class="text-xs text-red-300 mt-1"><a href="/monitoring/models/{{ d.model_id }}">Deployment changed since this decision</a></p>{% endif %}</td>
+                <td class="text-zinc-200 whitespace-pre-wrap max-w-md">{{ d.note }}</td>
+                <td class="text-xs">{% if d.evaluation.verdict %}{{ verdict_chip(d.evaluation.verdict) }}{% endif %}
+                    <details class="mt-1"><summary class="cursor-pointer text-zinc-400">gates</summary>
+                        <ol class="list-decimal list-inside mt-1 space-y-0.5">{% for r in d.evaluation.results or [] %}<li><span class="{{ 'text-emerald-300' if r.status == 'pass' else 'text-red-300' if r.status == 'fail' else 'text-amber-300' }}">{{ r.status }}</span> {{ (d.evaluation.requirements or [])[loop.index0] }}{% if r.run_id %} · run #{{ r.run_id }}{% endif %}</li>{% endfor %}</ol>
+                        <p class="text-zinc-500 mt-1">fingerprint {{ d.fingerprint or 'unknown' }} · {{ d.revision }}</p>
+                    </details></td>
+                <td class="text-xs text-zinc-400">{{ d.created_by_name or '' }}</td>
+            </tr>{% endfor %}</tbody>
+        </table>
+        {% else %}<p class="text-sm text-zinc-500">No decisions recorded yet.</p>{% endif %}
+
+        {% if is_admin and rows %}
+        <details><summary class="cursor-pointer text-sm text-blue-400">Record a decision</summary>
+            <form method="POST" action="/scorecard/profiles/{{ profile.id }}/decisions" class="grid md:grid-cols-3 gap-3 mt-3">
+                <div><label class="block text-sm text-zinc-300 mb-1">Model</label><select name="model_id" class="input-field">{% for row in rows %}<option value="{{ row.model.id }}">{{ row.model.name }} — {{ {'meets': 'meets', 'fails': 'does not meet', 'incomplete': 'incomplete'}[row.evaluation.verdict] }}</option>{% endfor %}</select></div>
+                <div><label class="block text-sm text-zinc-300 mb-1">Decision</label><select name="decision" class="input-field">{% for key, label in decision_choices.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></div>
+                <div class="md:col-span-3"><label class="block text-sm text-zinc-300 mb-1">Note <span class="text-zinc-500">(required: reasons, conditions, what was outside the measurements)</span></label><textarea name="note" class="input-field" rows="3" maxlength="4000" required></textarea></div>
+                <div class="md:col-span-3 flex items-center gap-3"><button class="btn-primary" type="submit">Record decision</button><p class="text-xs text-zinc-500">The record keeps the current gate results, run ids and deployment fingerprint. Records cannot be edited; a new decision supersedes the previous one.</p></div>
+            </form>
+        </details>
+        {% endif %}
+    </div>
+
+    {% if is_admin %}
+    <div class="card p-4 space-y-3">
+        <details><summary class="cursor-pointer text-sm text-blue-400">Edit profile</summary>
+            <div class="mt-3">{{ gate_editor('/scorecard/profiles/' ~ profile.id ~ '/edit', options, profile, 'Save profile') }}</div>
+        </details>
+        {% set count = decisions|length %}
+        <form method="POST" action="/scorecard/profiles/{{ profile.id }}/delete" onsubmit="return confirm('Delete this profile{% if count %} and its {{ count }} decision record{{ "s" if count != 1 }}{% endif %}?')">
+            <button class="btn-ghost text-sm text-red-300">Delete profile{% if count %} and {{ count }} decision record{{ 's' if count != 1 }}{% endif %}</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "scorecard_macros.html" import gate_editor %}
+{% block title %}Decision profiles - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div>
+        <a href="/scorecard" class="text-sm text-blue-400">← Scorecard</a>
+        <h1 class="text-xl font-bold text-white mt-1">Decision profiles</h1>
+        <p class="text-zinc-400 mt-1">A profile states what one use case needs: minimum quality on a suite, capacity under the SLO of a workload, latency, context and a clean operational record. Every model is checked against it with its latest evidence. A gate passes or fails only on evidence from the deployment served now or not known to have changed; evidence from an older deployment is stale and leaves the verdict incomplete.</p>
+    </div>
+    {% if error %}<div class="p-3 rounded-md bg-red-900/30 border border-red-800 text-sm text-red-300">{{ error }}</div>{% endif %}
+
+    <div class="card p-4 overflow-x-auto">
+        {% if profiles %}
+        <table class="w-full text-sm">
+            <thead><tr><th class="text-left">Profile</th><th class="text-left">Gates</th><th class="text-left">Meet</th><th class="text-left">Incomplete</th><th class="text-left">Do not meet</th><th class="text-left">Models meeting it</th></tr></thead>
+            <tbody>{% for p in profiles %}<tr>
+                <td><a class="text-blue-400" href="/scorecard/profiles/{{ p.id }}">{{ p.name }}</a></td>
+                <td>{{ p.gates }}</td>
+                <td class="text-emerald-300">{{ p.counts.meets }}</td>
+                <td class="text-amber-300">{{ p.counts.incomplete }}</td>
+                <td class="text-red-300">{{ p.counts.fails }}</td>
+                <td class="text-zinc-300">{{ p.meeting|join(', ') or '—' }}</td>
+            </tr>{% endfor %}</tbody>
+        </table>
+        {% else %}<p class="text-sm text-zinc-500">No decision profiles yet.</p>{% endif %}
+    </div>
+
+    {% if is_admin %}
+    <div class="card p-4">
+        <h2 class="text-lg font-semibold text-white mb-3">New profile</h2>
+        {{ gate_editor('/scorecard/profiles', options) }}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

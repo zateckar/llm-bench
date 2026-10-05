@@ -147,6 +147,37 @@ Optional B300 vLLM correlation uses the `PROMETHEUS_API_*` credentials and `PROM
 
 Benchmark results show **achieved output rates** separately from provisional **traffic budgets**, with an **Adjust assumptions** page and JSON/HTML exports. Quality workload usage is divided by its recorded question-phase duration, excluding queue time; its rate is corroborating evidence, not a chat latency result. Defaults reserve 30% headroom and 98% availability, put 80% of traffic in 10 busy hours with 2× peak bursts, and model chat (1k context, 256 output, 2s p95 TTFT, 300 output tokens/min/user) separately from agents (32k context, 256 output, 10s p95 TTFT, 2k output tokens/min/user). Only matching context/output, reasoning and cache measurements meeting latency, streaming and completion targets qualify for workload budgets. Reports separate observed-rate 24h equivalents from traffic budgets, active users from simultaneous requests, and homogeneous tests from modeled mixed traffic. A concurrency-capped test leaves maximum serving capacity unknown. Missing long-context measurements stay unavailable; quality usage is never substituted for a matching load test.
 
+## Scorecard and decision profiles
+
+**Scorecard** shows one row per model with its latest evidence: never the best run, and never a combined score.
+- **Quality:** one column per suite, showing achievement with its 95% interval. A repeat group counts as one piece of evidence.
+- **Capacity:** one column per load workload, showing the sustainable rate under the SLO.
+- **Latency:** TTFT p95 and per-request output speed at concurrency 1.
+- **Context:** the context measured by a sweep, or declared by the deployment.
+- **Operations:** canary status, open alerts and the deployment fingerprint.
+
+**Freshness.** Every cell is marked *current*, *stale* or *unverified*:
+- *current*: measured on the fingerprint served now;
+- *stale*: the deployment has changed since;
+- *unverified*: there is no snapshot and no later change is known.
+
+Evidence older than 90 days is also flagged as old.
+
+**Leaders and ties.** In each quality column the leader is compared with every other model by the paired test, Holm-adjusted. Models without a detectable difference are marked tied, and different protocols are marked not comparable.
+
+**Decision profiles** state the requirements of one use case as gates:
+- quality on a suite or category;
+- sustainable rate on a workload;
+- TTFT, whole-answer time or output speed at a concurrency;
+- context;
+- no open alerts and all canaries ok.
+
+Each gate passes, fails, is missing or is stale. A model *meets* a profile only when every gate passes on evidence that is current or unverified.
+
+**Decisions.** Admins record a decision per model (approved, approved with conditions or rejected) with a required note. The record keeps the gate results, run ids and fingerprint at that moment. It is flagged when the deployment changes later.
+
+**Exports:** `/scorecard.json` and `/scorecard/profiles/{id}/export.json`. Design: [docs/design-decision-dashboard.md](docs/design-decision-dashboard.md).
+
 ## Database storage
 
 Large prompts, answers and report payloads are stored as versioned, lossless zlib blobs. Application reads and JSON/HTML downloads decode them transparently; indexed scores and queryable outcomes remain plain columns. Standalone SQLite readers must use `app.storage.DETECT_TYPES` with sqlite3 or call `unpack_text` on payload columns.
@@ -176,7 +207,7 @@ uv run python selftest_run_queue.py
 uv run python selftest_calibration.py
 uv run python selftest_sweep.py
 uv run python selftest_reconstruction.py
-uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance selftest_usecase_suites selftest_load_test selftest_ab_studies selftest_monitoring
+uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance selftest_usecase_suites selftest_load_test selftest_ab_studies selftest_monitoring selftest_scorecard
 uv run --frozen ruff check .
 ```
 

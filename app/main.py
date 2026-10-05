@@ -78,7 +78,7 @@ async def add_user_to_context(request: Request, call_next):
     return await call_next(request)
 
 
-from app.routes import auth_routes, dashboard, runs, compare, tests_browser, admin, plans, suites, studies, monitoring
+from app.routes import auth_routes, dashboard, runs, compare, tests_browser, admin, plans, suites, studies, monitoring, scorecard
 
 app.include_router(auth_routes.router)
 app.include_router(dashboard.router)
@@ -90,6 +90,7 @@ app.include_router(plans.router)
 app.include_router(suites.router)
 app.include_router(studies.router)
 app.include_router(monitoring.router)
+app.include_router(scorecard.router)
 
 
 @app.get("/", include_in_schema=False)
