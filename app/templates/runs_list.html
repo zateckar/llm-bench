@@ -23,7 +23,7 @@
                     <th class="text-left">Status</th>
                     <th class="text-left">Quality score</th>
                     <th class="text-left">Quality tasks</th>
-                    <th class="text-left">Suite</th>
+                    <th class="text-left">Measures</th>
                     <th class="text-left">Created</th>
                     <th class="text-right">Actions</th>
                 </tr>
@@ -80,7 +80,15 @@
                         {% endif %}
                         {% else %}-{% endif %}
                     </td>
-                    <td class="text-xs font-mono text-zinc-500 whitespace-nowrap" title="{{ run.test_suite_hash or 'N/A' }}">{{ (run.test_suite_hash or '-')[:8] }}{% if run.suite_name %}<span class="ml-1 px-1 rounded bg-zinc-800 text-zinc-300" title="Quality suite">{{ run.suite_name }}</span>{% endif %}</td>
+                    <td class="text-xs whitespace-nowrap">
+                        {% if run.measures_quality %}
+                        <span class="px-1 rounded bg-blue-900/40 text-blue-300" title="Quality suite{% if run.test_suite_hash %} · hash {{ run.test_suite_hash }}{% endif %}">Quality · {{ run.suite_name or 'rigorous' }}</span>
+                        {% endif %}
+                        {% if run.measures_performance %}
+                        <span class="px-1 rounded bg-violet-900/40 text-violet-300" title="Performance test">{{ performance_labels[run.measures_performance] }}</span>
+                        {% endif %}
+                        {% if run.test_suite_hash %}<span class="ml-1 font-mono text-zinc-500" title="Quality suite hash">{{ run.test_suite_hash[:8] }}</span>{% endif %}
+                    </td>
                     <td class="text-sm text-zinc-500">{{ run.created_at[:16].replace('T', ' ') if run.created_at else '-' }}</td>
                     <td class="text-right whitespace-nowrap">
                         <div class="flex items-center justify-end gap-1">

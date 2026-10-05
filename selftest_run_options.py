@@ -203,12 +203,14 @@ class SubmissionTests(unittest.TestCase):
             "Create Plan",
         ):
             self.assertNotIn(word, page.text)
-        # SLOs and shared prefixes belong to the open-loop load mode only.
-        self.assertIn('<option value="load">Performance · open-loop load</option>', page.text)
+        # Quality and performance are chosen independently; the performance
+        # test is one of the fixed workload, the sweep and open-loop load.
+        self.assertIn('<option value="load">Open-loop load · SLO capacity</option>', page.text)
         self.post(scheduled="2099-10-03T05:00")
         editor = self.client.get("/admin/plans/1/edit")
         self.assertEqual(editor.status_code, 200)
-        for word in ("Maximum concurrency", "Quality + performance", "Add another run"):
+        for word in ("Maximum concurrency", "> Quality</label>", "> Performance</label>", "Performance test",
+                     "Add another run"):
             self.assertIn(word, page.text)
             self.assertIn(word, editor.text)
         self.assertIn("2099-10-03T03:00:00+00:00", editor.text)

@@ -2,6 +2,8 @@
 
 Status: accepted (recommended decisions), 2026-10-05. Item 5 of the evaluation roadmap.
 
+Update: open-loop load is now a *performance test* and can follow a quality suite in the same run. It is stored as `mode: "performance"` or `"both"` with `performance: "load"`, and `mode: "load"` is still accepted. See [design-run-modes.md](design-run-modes.md).
+
 ## Problem
 
 Both existing performance modes are **closed loop**. A fixed number of workers each send their next request only when the previous one finishes. When the server slows down, offered load drops with it, so queueing, tail latency under bursts and the arrival rate a deployment can sustain are never observed. `capacity.py` therefore reports *maximum capacity: not established*, and it models the chat/agent mix instead of measuring it.

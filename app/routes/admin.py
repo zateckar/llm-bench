@@ -10,6 +10,7 @@ from app.auth import hash_password, set_session_cookie
 from app.database import fetch_all, fetch_one, execute
 from app.templates_config import templates
 from app.services import run_submission
+from app.services.run_modes import describe
 from app.services.model_settings import decoding_settings
 from app.benchmarking.vllm_telemetry import metrics_model
 from fastapi import HTTPException
@@ -43,7 +44,8 @@ async def admin_run_page(request: Request):
     models = await fetch_all("SELECT * FROM models ORDER BY name")
     specs = None
     if request.query_params.get("mode") == "sweep":
-        specs = [{"model_id": None, **run_submission.make_run_options(mode="sweep", max_concurrency=256)}]
+        specs = [{"model_id": None, **run_submission.make_run_options(mode="performance", performance="sweep",
+                                                                      max_concurrency=256)}]
     return templates.TemplateResponse(
         request, "admin/run_test.html", run_submission.form_context(models, specs=specs)
     )
@@ -81,7 +83,7 @@ async def admin_run_progress(request: Request, run_id: int):
     return templates.TemplateResponse(
         request,
         "admin/run_progress.html",
-        {"run": run},
+        {"run": run, "measures": describe(run.get("run_options_json"))},
     )
 
 

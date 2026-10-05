@@ -11,7 +11,14 @@ uv sync --frozen
 uv run python -m app.main
 ```
 
-Open http://localhost:8000. Add an endpoint under Models and select **Run benchmark**. Configure **mode** (quality + performance, quality, or performance) and **maximum concurrency** (default 8, range 1–32). Quality uses up to four workers, bounded by that maximum. Quality runs can choose the **quality suite** (the rigorous suite, or tool-calling & structured-output conformance) and a number of **repeats** (1–10; a submission expands to at most 50 runs). The same form handles immediate and scheduled runs: leave the start time empty to run now, or set it in your browser's local timezone. Add more runs in that form for an ordered comparison. All submissions share validation, storage and one queue; only one benchmark runs at a time. Manage them under **Queue & schedules**. Editing, cloning and “Run again” use the same submission code and current suite.
+Open http://localhost:8000. Add an endpoint under Models and select **Run benchmark**. Under **Measure**, tick **Quality**, **Performance** or both.
+- **Quality:** choose the **quality suite** (the rigorous suite, tool-calling & structured-output conformance, safety & language adherence, the open-ended suite or an uploaded use-case suite). Quality uses up to four workers.
+- **Performance:** choose the **performance test**:
+  - the **fixed workload** (latency and throughput at automatically chosen load levels, maximum concurrency 1–32, default 8);
+  - the **context & reasoning sweep**;
+  - **open-loop load** (SLO capacity, with an in-flight cap).
+
+A run that measures both runs quality first and the performance test after it, and stores both results in the same run; the performance test is skipped if no quality answer could be scored. The run list's **Measures** column shows what each run measured. Any run can have **repeats** (1–10; a submission expands to at most 50 runs). The same form handles immediate and scheduled runs: leave the start time empty to run now, or set it in your browser's local timezone. Add more runs in that form for an ordered comparison. All submissions share validation, storage and one queue; only one benchmark runs at a time. Manage them under **Queue & schedules**. Editing, cloning and “Run again” use the same submission code and current suite.
 
 The base URL usually ends in /v1; the client appends /chat/completions. Runs offer self-contained HTML downloads, quality JSON, performance JSON and side-by-side comparisons. Run details and comparisons have separate Quality, Performance and Answers views. The compact interface uses a neutral, Shadcn-inspired token theme with responsive navigation; Jinja, Alpine, HTMX and Tailwind remain in place.
 
@@ -117,7 +124,7 @@ Reports show end-to-end latency and first-delivered-token p50/p95/p99, request e
 
 TTFT includes first delivered content or reasoning and depends on provider buffering. Available-byte streaming reads avoid an added read-to-fill delay, and complete HTTP bodies return sockets to the connection pool. Malformed or prematurely ended streams count as request errors. Single-chunk or short-burst delivery and estimated token counts are marked explicitly. Provider completion counts may include reasoning; estimates cover all delivered final text and reasoning and may differ from the provider tokenizer. Cached token counts, when supplied, remain in JSON. Missing or malformed usage is estimated at four characters per token; explicit reported zero counts are preserved. Latency includes every attempt and backoff, with successful-attempt latency also retained in JSON. Quality requests use a 180-second inactivity timeout and an independent 1,800-second total stream budget; performance retains the 360-second stream budget. Deadlines and invalid stream protocols stop without retries. Transient transport/HTTP failures retain bounded retries. Future failures retain per-attempt TTFT, delivery counts, reasoning/content character counts and last-delivery timing. The total stream budget is checked at received bytes and EOF; a blocked read can overrun it up to the inactivity timeout. Quality request timing and error concentration are shown separately from the controlled performance suite, including for historical runs. Timed performance calls still make one attempt.
 
-The separate **Performance · context & reasoning sweep** mode uses input lengths **256, 32,768, 65,536, 131,072, …, 1,048,576** and concurrency **1, 16, 32, …, 256**. Administrators can cap either range, choose 1–8 rounds per cell and set the output limit (default 8,192, including reasoning). There are 306 paired cells, 78,372 timed cold/warm requests and 18 untimed cache primes per accepted effort (2,448 cells / 4,896 cold/warm measurements across all eight efforts) at the full range with one round. Setup displays this budget. Lengths are exact cl100k_base input-text tokens, excluding chat framing; provider input counts are recorded separately. Each cell pairs unique cold prefixes with a primed shared prefix and changing suffixes. Long padding is shared; only active workers build a full prompt.
+The **context & reasoning sweep** performance test uses input lengths **256, 32,768, 65,536, 131,072, …, 1,048,576** and concurrency **1, 16, 32, …, 256**. Administrators can cap either range, choose 1–8 rounds per cell and set the output limit (default 8,192, including reasoning). There are 306 paired cells, 78,372 timed cold/warm requests and 18 untimed cache primes per accepted effort (2,448 cells / 4,896 cold/warm measurements across all eight efforts) at the full range with one round. Setup displays this budget. Lengths are exact cl100k_base input-text tokens, excluding chat framing; provider input counts are recorded separately. Each cell pairs unique cold prefixes with a primed shared prefix and changing suffixes. Long padding is shared; only active workers build a full prompt.
 
 Sweeps probe provider default plus every standard reasoning value above, retain unsupported and failed probes, and measure API-accepted settings. Acceptance cannot prove that a gateway honors or distinguishes efforts. Explicit field rejections can omit temperature/seed or remap max_tokens to max_completion_tokens during probes; reasoning effort is retained. Streaming capabilities and these changes are recorded before one-attempt timed calls. Worker connections are warmed with small inputs and reused. Sweeps use a 1,800-second stream budget and the configured socket inactivity timeout.
 
@@ -129,7 +136,7 @@ These are closed-loop concurrency measurements. They do not establish arrival-ra
 
 ### Open-loop load tests
 
-**Performance · open-loop load** sends requests on a seeded schedule, whether or not earlier requests have finished, the way people and applications actually arrive ([design](docs/design-open-loop-load.md)).
+The **open-loop load** performance test sends requests on a seeded schedule, whether or not earlier requests have finished, the way people and applications actually arrive ([design](docs/design-open-loop-load.md)).
 
 **Workload.** A workload is up to six request classes. Each class has:
 - a mix weight
@@ -224,7 +231,7 @@ uv run python selftest_run_queue.py
 uv run python selftest_calibration.py
 uv run python selftest_sweep.py
 uv run python selftest_reconstruction.py
-uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance selftest_usecase_suites selftest_load_test selftest_ab_studies selftest_monitoring selftest_scorecard selftest_safety_language
+uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance selftest_usecase_suites selftest_load_test selftest_ab_studies selftest_monitoring selftest_scorecard selftest_safety_language selftest_run_modes
 uv run --frozen ruff check .
 ```
 

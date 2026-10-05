@@ -121,6 +121,10 @@ async def runs_list(request: Request):
                   tr.repeat_group_id,tr.repeat_index,tr.repeat_count,tr.canary_id,tr.canary_status,
                   json_extract(CASE WHEN json_valid(tr.run_options_json)
                                     THEN tr.run_options_json END, '$.suite') AS suite_name,
+                  json_extract(CASE WHEN json_valid(tr.run_options_json)
+                                    THEN tr.run_options_json END, '$.mode') AS run_mode,
+                  json_extract(CASE WHEN json_valid(tr.run_options_json)
+                                    THEN tr.run_options_json END, '$.performance') AS run_performance,
                   (tr.perf_json IS NOT NULL) AS perf_json,
                   m.name as model_name, m.model_id AS provider_model_id,
                   (SELECT COUNT(*) FROM test_results
@@ -131,11 +135,20 @@ async def runs_list(request: Request):
            JOIN models m ON tr.model_id = m.id
            ORDER BY tr.id DESC"""
     )
+    from app.services.run_modes import PERFORMANCE_LABELS, parts
+
+    for run in runs:
+        mode, performance = run.pop("run_mode"), run.pop("run_performance")
+        if mode is None:  # Rows from before run options were stored: infer from the results.
+            run["measures_quality"] = bool(run["total_questions"])
+            run["measures_performance"] = "fixed" if run["perf_json"] else None
+        else:
+            run["measures_quality"], run["measures_performance"] = parts({"mode": mode, "performance": performance})
 
     return templates.TemplateResponse(
         request,
         "runs_list.html",
-        {"runs": runs},
+        {"runs": runs, "performance_labels": PERFORMANCE_LABELS},
     )
 
 
@@ -261,6 +274,9 @@ async def run_detail(request: Request, run_id: int):
     from app.services.language_views import language_report
 
     languages = language_report(quality_data, results)
+    from app.services.run_modes import describe
+
+    measures = describe(run.get("run_options_json"))
     label = f"#{run_id} · {run['model_name']}"
     performance = performance_view([{"label": label, "perf": perf_data or {}}])
     quality_timings = [quality_timing_view({"label": label, "results": results})] if results else []
@@ -291,6 +307,7 @@ async def run_detail(request: Request, run_id: int):
             "canary": canary,
             "canary_detail": canary_detail,
             "languages": languages,
+            "measures": measures,
         },
     )
 

@@ -148,7 +148,7 @@ def _finish_run(
                       duration_ms = ?, workers = ?,
                       latency_p50_ms = ?, latency_p95_ms = ?, latency_p99_ms = ?,
                       ttft_p50_ms = ?, ttft_p95_ms = ?, output_tokens_per_sec = ?,
-                      perf_json = ?
+                      perf_json = COALESCE(?, perf_json)
                 WHERE id = ? AND status IN ('pending', 'running')""",
             (
                 status,
@@ -350,19 +350,21 @@ def _run_benchmark(run_id, model, mode, max_concurrency, on_finish: Callable[[in
                 logger.exception("Queue callback failed for run %d", run_id)
 
 
-def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, load=None, **sweep_options):
+def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, load=None, performance=None,
+                        **sweep_options):
+    from app.services.run_modes import normalise
     from app.services.url_guard import validate_endpoint
 
-    if mode not in {"both", "quality", "performance", "sweep", "load"}:
-        raise ValueError("Mode must be both, quality, performance, sweep or load")
+    # Quality runs first, then the chosen performance test, into the same run.
+    quality, kind = normalise(mode, performance)
     suite_def = get_suite(suite)
-    perf_config = PerfConfig(max_concurrency) if mode not in {"sweep", "load"} else None
-    if mode == "load":
+    perf_config = PerfConfig(max_concurrency) if kind == "fixed" or kind is None else None
+    if kind == "load":
         from app.benchmarking.load_workload import MAX_IN_FLIGHT, parse_settings
         load_settings = parse_settings(load)
         if not 1 <= max_concurrency <= MAX_IN_FLIGHT:
             raise ValueError(f"The in-flight cap must be between 1 and {MAX_IN_FLIGHT}")
-    if mode == "sweep":
+    if kind == "sweep":
         from app.benchmarking.perf_sweep import SweepConfig
         sweep_config = SweepConfig(max_concurrency=max_concurrency, **sweep_options)
     workers = min(QUALITY_WORKERS, max_concurrency)
@@ -384,13 +386,13 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, load=N
         from app.services import monitoring
 
         monitoring.capture_for_run(run_id, model)
-    if mode == "sweep":
+    if not quality and kind == "sweep":
         _run_context_sweep(run_id, config, sweep_config, model.get("_metrics_scope"))
         return
-    if mode == "load":
+    if not quality and kind == "load":
         _run_open_loop(run_id, config, load_settings, max_concurrency, model.get("_metrics_scope"))
         return
-    if mode == "performance":
+    if not quality:
         questions = []
     elif suite_def.name == "rigorous":
         questions = load_questions()
@@ -449,7 +451,19 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, load=N
             if results:
                 message += " " + results[0].detail
     perf_json = None
-    if mode != "quality" and not message and _run_is_active(run_id):
+    if kind in ("sweep", "load") and not message and _run_is_active(run_id):
+        try:
+            if kind == "sweep":
+                perf_json, message, _ = _measure_context_sweep(run_id, config, sweep_config,
+                                                               model.get("_metrics_scope"))
+            else:
+                perf_json, message, _ = _measure_open_loop(run_id, config, load_settings, max_concurrency,
+                                                           model.get("_metrics_scope"))
+        except Exception as error:
+            # Keep the quality results; the performance part failed.
+            logger.exception("Performance measurement failed for run %d", run_id)
+            message = f"Performance measurement failed: {error}"
+    elif kind == "fixed" and not message and _run_is_active(run_id):
         telemetry = _begin_telemetry(model.get("_metrics_scope"), run_id)
         started = time.perf_counter()
         try:
@@ -534,6 +548,15 @@ def _begin_telemetry(scope, run_id):
 
 
 def _run_context_sweep(run_id, client_config, sweep_config, metrics_scope=None):
+    measured = _measure_context_sweep(run_id, client_config, sweep_config, metrics_scope)
+    if _run_is_active(run_id):
+        perf_json, message, elapsed = measured
+        _summarise_and_finish(run_id, [], 0, sweep_config.max_concurrency, elapsed, perf_json, message,
+                              client_config)
+
+
+def _measure_context_sweep(run_id, client_config, sweep_config, metrics_scope=None):
+    """Run the sweep; returns ``(perf_json, error message, elapsed ms)``."""
     from app.benchmarking.perf_sweep import run_sweep
 
     telemetry = _begin_telemetry(metrics_scope, run_id)
@@ -560,14 +583,19 @@ def _run_context_sweep(run_id, client_config, sweep_config, metrics_scope=None):
     finally:
         if telemetry:
             telemetry.session.close()
-    if _run_is_active(run_id):
-        message = report.stop_error or ("" if report.successful_requests else "No complete answers were measured in the context sweep.")
-        _summarise_and_finish(run_id, [], 0, sweep_config.max_concurrency,
-                              measurement_elapsed,
-                              json.dumps(payload), message, client_config)
+    message = report.stop_error or ("" if report.successful_requests else "No complete answers were measured in the context sweep.")
+    return json.dumps(payload), message, measurement_elapsed
 
 
 def _run_open_loop(run_id, client_config, settings, in_flight_cap, metrics_scope=None):
+    measured = _measure_open_loop(run_id, client_config, settings, in_flight_cap, metrics_scope)
+    if _run_is_active(run_id):
+        perf_json, message, elapsed = measured
+        _summarise_and_finish(run_id, [], 0, in_flight_cap, elapsed, perf_json, message, client_config)
+
+
+def _measure_open_loop(run_id, client_config, settings, in_flight_cap, metrics_scope=None):
+    """Run the load test; returns ``(perf_json, error message, elapsed ms)``."""
     from app.benchmarking.load_test import run_load_test
 
     telemetry = _begin_telemetry(metrics_scope, run_id)
@@ -589,11 +617,9 @@ def _run_open_loop(run_id, client_config, settings, in_flight_cap, metrics_scope
     finally:
         if telemetry:
             telemetry.session.close()
-    if _run_is_active(run_id):
-        completed = sum(step["completed"] for step in report.steps)
-        message = "" if completed else (report.stop_reason or "No open-loop request completed.")
-        _summarise_and_finish(run_id, [], 0, in_flight_cap, measurement_elapsed,
-                              json.dumps(payload, separators=(",", ":")), message, client_config)
+    completed = sum(step["completed"] for step in report.steps)
+    message = "" if completed else (report.stop_reason or "No open-loop request completed.")
+    return json.dumps(payload, separators=(",", ":")), message, measurement_elapsed
 
 
 def _summarise_and_finish(

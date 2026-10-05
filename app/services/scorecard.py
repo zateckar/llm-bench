@@ -16,6 +16,7 @@ import threading
 
 from app.benchmarking import decision_gates
 from app.benchmarking.decision_gates import GateError
+from app.services import run_modes
 
 REVISION = "scorecard-v1"
 OLD_DAYS = 90
@@ -24,8 +25,6 @@ DESCRIPTION_LIMIT = 2000
 NOTE_LIMIT = 4000
 DECISIONS = {"approved": "Approved", "conditional": "Approved with conditions", "rejected": "Rejected"}
 UNSCORED_SUITES = {"assistant-open"}
-QUALITY_MODES = {None, "quality", "both"}
-PERF_MODES = {None, "performance", "both", "sweep", "load"}
 
 
 class ScorecardError(ValueError):
@@ -348,8 +347,8 @@ def collect(now=None):
             seen_groups = set()
             for run in mine:
                 options = _loads(run["run_options_json"], {}) or {}
-                mode = options.get("mode")
-                if run["scored_questions"] and mode in QUALITY_MODES:
+                measures_quality, measures_performance = run_modes.parts(options)
+                if run["scored_questions"] and measures_quality:
                     suite = options.get("suite") or "rigorous"
                     if suite not in UNSCORED_SUITES and suite not in evidence["quality"] \
                             and run["repeat_group_id"] not in seen_groups:
@@ -371,7 +370,7 @@ def collect(now=None):
                             item["suite"] = suite
                             evidence["quality"][suite] = item
                             suites.add(suite)
-                if run["has_perf"] and mode in PERF_MODES:
+                if run["has_perf"] and measures_performance:
                     extract = _perf.get((run["id"], run["completed_at"]), lambda run=run: _perf_extract(db, run["id"]))
                     if not extract:
                         continue

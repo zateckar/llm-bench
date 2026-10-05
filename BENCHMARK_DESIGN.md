@@ -825,3 +825,23 @@ No report protocol or existing evaluator version changed; the rigorous suite sta
 - **Registration:** the suite registry and use-case suite registration.
 
 These checks establish that the grading discriminates on constructed answers. They do not establish how real models behave.
+
+## 2026-10-05 quality, performance or both
+
+The full design is in [docs/design-run-modes.md](docs/design-run-modes.md).
+
+A run now measures quality, performance or both. The performance part is one of the fixed workload, the context and reasoning sweep, or open-loop load; before, only the fixed workload could follow a quality suite. In a combined run, quality runs first and the performance test after it, so the two never compete for the endpoint. The performance test is skipped when no quality answer could be scored. Both results are stored in one run.
+
+**Stored options.** `mode` is one of `quality`, `performance` or `both`. `performance` is `sweep` or `load`, and is omitted for the fixed workload. Historical snapshots are therefore unchanged. The legacy modes `sweep` and `load` are still accepted and normalised, so queued runs, saved plans and API callers keep working.
+
+**Failures.** A performance failure after a successful quality phase keeps the quality results. A final update without a performance report no longer erases steps that a sweep or load test checkpointed.
+
+No report schema, evaluator, suite or comparison protocol changed; the rigorous suite stays at 323 tasks and hash `7909c6325d1abd7b`. `selftest_run_modes.py` covers:
+- **Options:** normalisation and validation of every combination, including legacy and contradictory modes, and canonical reruns.
+- **Runner:**
+  - quality then sweep, ordering included;
+  - quality then a real open-loop load test against a fake server, including scorecard evidence;
+  - skipping performance after a quality outage;
+  - keeping quality and checkpointed steps after a performance failure;
+  - unchanged performance-only dispatch.
+- **Pages:** the run list, run detail, progress page and form.

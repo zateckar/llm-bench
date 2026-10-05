@@ -9,7 +9,7 @@
         </a>
         <div>
             <h1 class="text-xl font-bold text-white">Benchmark Progress</h1>
-            <p class="text-zinc-400 mt-1">Run #{{ run.id }}</p>
+            <p class="text-zinc-400 mt-1">Run #{{ run.id }}{% if measures %} · {{ measures }}{% endif %}</p>
         </div>
         {% if run.status in ('running', 'pending') %}
         <form method="POST" action="/runs/{{ run.id }}/stop" class="ml-auto"

@@ -393,7 +393,9 @@ class SubmissionAndReportTests(unittest.TestCase):
         posted = self.submit({"model_id": 1, "mode": "load", "max_concurrency": 128, "load": load})
         self.assertEqual(posted.status_code, 302)
         options = json.loads(self.sql("SELECT run_options_json FROM test_runs")[0]["run_options_json"])
-        self.assertEqual((options["mode"], options["max_concurrency"]), ("load", 128))
+        # The legacy mode "load" is stored canonically as a performance run.
+        self.assertEqual((options["mode"], options["performance"], options["max_concurrency"]),
+                         ("performance", "load", 128))
         self.assertEqual(options["load"]["workload"]["classes"][0]["name"], "chat")
         self.assertEqual(options["load"]["arrival"], "gamma")
         spec = spec_from_run({"model_id": 1, "run_options_json": json.dumps(options)})
@@ -410,7 +412,7 @@ class SubmissionAndReportTests(unittest.TestCase):
             self.assertIn(needle, response.text)
         with self.assertRaises(HTTPException):
             make_run_options(mode="load", max_concurrency=8, load={"preset": "chat", "rates": []})
-        self.assertIn("Performance · open-loop load", self.client.get("/admin/run").text)
+        self.assertIn("Open-loop load · SLO capacity", self.client.get("/admin/run").text)
 
     def run_load(self, run_id, rates=(2, 60), ttft=400):
         load = {"preset": "custom", "workload": workload(ttft=ttft), "rates": list(rates), "step_seconds": 2}
