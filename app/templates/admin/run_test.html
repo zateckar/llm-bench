@@ -30,8 +30,36 @@
             r.suite ??= 'rigorous';
             r.repeats ??= 1;
             r.model_id ??= '';
+            r.load ??= JSON.parse(JSON.stringify(this.loadForm.defaults));
+            r._ratesText = r.load.rates.join(', ');
+            r._workloadText = this.workloadJson(r.load.workload);
             r._key = this.nextKey++;
             return r;
+        },
+        loadForm: {{ load_form | tojson | forceescape }},
+        workloadJson(workload) { return JSON.stringify(workload, null, 2).replace(/\[\s+([-\d.]+),\s+([-\d.]+),\s+([-\d.]+)\s+\]/g, '[$1, $2, $3]'); },
+        setPreset(run) {
+            const preset = this.loadForm.presets[run.load.preset];
+            if (preset) { run.load.workload = JSON.parse(JSON.stringify(preset.workload)); run._workloadText = this.workloadJson(preset.workload); }
+        },
+        setLoadShape(run, shape) {
+            if (shape === 'soak') { const rates = this.parseRates(run); run._ratesText = String(rates.length ? rates[rates.length - 1] : 1); run.load.step_seconds = 3600; }
+            else { run._ratesText = this.loadForm.defaults.rates.join(', '); run.load.step_seconds = this.loadForm.defaults.step_seconds; }
+        },
+        parseRates(run) { return String(run._ratesText).split(/[\s,;]+/).filter(Boolean).map(Number); },
+        loadSize(run) {
+            const rates = this.parseRates(run), step = Number(run.load.step_seconds) || 0;
+            if (!rates.length || rates.some(r => !(r > 0))) return 'Enter increasing arrival rates in requests per second, e.g. 0.5, 1, 2, 4.';
+            const arrivals = Math.round(rates.reduce((a, b) => a + b, 0) * step), minutes = rates.length * step / 60;
+            return rates.length + ' step' + (rates.length > 1 ? 's' : '') + ' × ' + step.toLocaleString() + ' s ≈ ' + minutes.toLocaleString(undefined, {maximumFractionDigits: 1}) +
+                   ' min of arrivals plus drain time, about ' + arrivals.toLocaleString() + ' requests if no step stops the ladder early.';
+        },
+        loadSpec(run) {
+            const load = {...run.load, rates: this.parseRates(run)};
+            if (load.preset === 'custom') {
+                try { load.workload = JSON.parse(run._workloadText); } catch (e) { load.workload = run._workloadText; }
+            } else { delete load.workload; }
+            return load;
         },
         setModel(run, el) {
             const v = el.value;
@@ -55,7 +83,7 @@
             return this.runs.map((r, i) => (r.model_id == null || r.model_id === '' ? i + 1 : null)).filter(v => v !== null);
         },
         setMode(run) {
-            run.max_concurrency = run.mode === 'sweep' ? 256 : Math.min(run.max_concurrency, {{ max_concurrency }});
+            run.max_concurrency = run.mode === 'sweep' ? 256 : run.mode === 'load' ? this.loadForm.default_in_flight : Math.min(run.max_concurrency, {{ max_concurrency }});
         },
         sweepSize(run) {
             const ctx = Number(run.context_max), c = Number(run.max_concurrency);
@@ -73,8 +101,10 @@
         suiteFor(run) { return this.suites.find(s => s.name === run.suite) || this.suites[0]; },
         usesQuality(run) { return run.mode === 'both' || run.mode === 'quality'; },
         totalRuns() { return this.runs.reduce((n, r) => n + Math.max(1, Number(r.repeats) || 1), 0); },
-        payload() { return JSON.stringify(this.runs.map(({_key, context_max, sweep_rounds, sweep_output_tokens, suite, repeats, ...rest}) => {
+        payload() { return JSON.stringify(this.runs.map(run => {
+            const {_key, _ratesText, _workloadText, load, context_max, sweep_rounds, sweep_output_tokens, suite, repeats, ...rest} = run;
             const spec = rest.mode === 'sweep' ? {...rest, context_max, sweep_rounds, sweep_output_tokens} : {...rest};
+            if (rest.mode === 'load') spec.load = this.loadSpec(run);
             if (this.usesQuality(rest) && suite && suite !== 'rigorous') spec.suite = suite;
             if (Number(repeats) > 1) spec.repeats = Number(repeats);
             return spec;
@@ -133,15 +163,27 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div><label class="block text-xs text-zinc-400">Mode</label><select x-model="run.mode" @change="setMode(run)" class="bg-zinc-800 rounded px-3 py-2 w-full"><option value="both">Quality + performance</option><option value="quality">Quality</option><option value="performance">Performance · fixed context</option><option value="sweep">Performance · context &amp; reasoning sweep</option></select></div>
+                    <div><label class="block text-xs text-zinc-400">Mode</label><select x-model="run.mode" @change="setMode(run)" class="bg-zinc-800 rounded px-3 py-2 w-full"><option value="both">Quality + performance</option><option value="quality">Quality</option><option value="performance">Performance · fixed context</option><option value="sweep">Performance · context &amp; reasoning sweep</option><option value="load">Performance · open-loop load</option></select></div>
                     <div x-show="usesQuality(run)"><label class="block text-xs text-zinc-400">Quality suite</label><select x-model="run.suite" class="bg-zinc-800 rounded px-3 py-2 w-full">{% for suite in suites %}<option value="{{ suite.name }}">{{ suite.label }}{% if suite.questions %} · {{ suite.questions }} tasks{% endif %}</option>{% endfor %}</select><p class="text-xs text-zinc-500 mt-1" x-text="suiteFor(run).description"></p></div>
                     <div><label class="block text-xs text-zinc-400">Repeats</label><input type="number" min="1" max="{{ max_repeats }}" x-model.number="run.repeats" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1" x-show="run.repeats > 1">Runs this configuration <span x-text="run.repeats"></span> times with model seeds 0–<span x-text="run.repeats - 1"></span> to measure run-to-run variability. Quality mode is usually enough for repeats.</p></div>
-                    <div><label class="block text-xs text-zinc-400">Maximum concurrency</label><input type="number" min="1" :max="run.mode === 'sweep' ? 256 : {{ max_concurrency }}" x-model.number="run.max_concurrency" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p x-show="run.mode === 'sweep'" class="text-xs text-zinc-500 mt-1">1, then 16, 32, … up to this limit.</p></div>
+                    <div><label class="block text-xs text-zinc-400" x-text="run.mode === 'load' ? 'In-flight cap' : 'Maximum concurrency'"></label><input type="number" min="1" :max="run.mode === 'sweep' ? 256 : run.mode === 'load' ? loadForm.max_in_flight : {{ max_concurrency }}" x-model.number="run.max_concurrency" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p x-show="run.mode === 'sweep'" class="text-xs text-zinc-500 mt-1">1, then 16, 32, … up to this limit.</p><p x-show="run.mode === 'load'" class="text-xs text-zinc-500 mt-1">Arrivals that find this many requests in flight are dropped and count as SLO misses; they are never delayed.</p></div>
+                    <template x-if="run.mode === 'load'"><div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div><label class="block text-xs text-zinc-400">Workload</label><select x-model="run.load.preset" @change="setPreset(run)" class="bg-zinc-800 rounded px-3 py-2 w-full"><template x-for="(preset, key) in loadForm.presets" :key="key"><option :value="key" x-text="preset.label" :selected="run.load.preset === key"></option></template><option value="custom">Custom · JSON request classes</option></select></div>
+                        <div><label class="block text-xs text-zinc-400">Shape</label><div class="flex gap-2"><button type="button" class="btn-ghost text-xs" @click="setLoadShape(run, 'ladder')">Rate ladder</button><button type="button" class="btn-ghost text-xs" @click="setLoadShape(run, 'soak')">Soak · one rate, 60 min</button></div></div>
+                        <div><label class="block text-xs text-zinc-400">Offered arrival rates · requests/s</label><input type="text" x-model="run._ratesText" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1">Increasing values; the ladder stops after consecutive SLO failures.</p></div>
+                        <div><label class="block text-xs text-zinc-400">Seconds per rate</label><input type="number" min="10" max="14400" x-model.number="run.load.step_seconds" class="bg-zinc-800 rounded px-3 py-2 w-full" required></div>
+                        <div><label class="block text-xs text-zinc-400">Arrivals</label><select x-model="run.load.arrival" class="bg-zinc-800 rounded px-3 py-2 w-full"><option value="poisson">Poisson · independent users</option><option value="gamma">Bursty · gamma gaps</option></select></div>
+                        <div x-show="run.load.arrival === 'gamma'"><label class="block text-xs text-zinc-400">Burstiness · gap coefficient of variation</label><input type="number" min="1" max="10" step="0.1" x-model.number="run.load.burstiness" class="bg-zinc-800 rounded px-3 py-2 w-full"></div>
+                        <div><label class="block text-xs text-zinc-400">SLO attainment target</label><input type="number" min="0.5" max="0.999" step="0.001" x-model.number="run.load.attainment" class="bg-zinc-800 rounded px-3 py-2 w-full"><p class="text-xs text-zinc-500 mt-1">0.95 = 95% of arrivals in every class meet their SLO.</p></div>
+                        <div><label class="block text-xs text-zinc-400">Schedule seed</label><input type="number" min="0" x-model.number="run.load.seed" class="bg-zinc-800 rounded px-3 py-2 w-full"><p class="text-xs text-zinc-500 mt-1">Same seed and settings = identical traffic for every model.</p></div>
+                        <div class="sm:col-span-2" x-show="run.load.preset === 'custom'"><label class="block text-xs text-zinc-400">Request classes (JSON)</label><textarea rows="12" x-model="run._workloadText" class="bg-zinc-800 rounded px-3 py-2 w-full font-mono text-xs" spellcheck="false"></textarea><p class="text-xs text-zinc-500 mt-1">Up to 6 classes: name, weight, input and output histograms as [min, max, weight] buckets in reference tokens, shared_prefix tokens and slo {ttft_ms, tpot_ms, e2e_ms}. Export bucket counts from gateway logs to mirror production traffic.</p></div>
+                        <div class="sm:col-span-2 rounded-md border border-blue-900 bg-blue-950/20 p-3 space-y-2 text-xs text-zinc-300"><p x-text="loadSize(run)"></p><p>Requests are sent on a seeded schedule regardless of earlier responses. Each class has its own SLO; a step passes when the attainment target is met overall and per class, no arrival was dropped and the client kept up. The highest passing rate is reported as the sustainable arrival rate and feeds the capacity report.</p></div>
+                    </div></template>
                     <div x-show="run.mode === 'sweep'"><label class="block text-xs text-zinc-400">Maximum input context · reference tokens</label><input type="number" min="256" max="1048576" x-model.number="run.context_max" :disabled="run.mode !== 'sweep'" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1">256 and 32,768, then 65,536-token steps to 1,048,576.</p></div>
                     <div x-show="run.mode === 'sweep'"><label class="block text-xs text-zinc-400">Rounds per cell</label><input type="number" min="1" max="8" x-model.number="run.sweep_rounds" :disabled="run.mode !== 'sweep'" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1">Each round sends one cold and one warm-prefix request per concurrent worker.</p></div>
                     <div x-show="run.mode === 'sweep'"><label class="block text-xs text-zinc-400">Output token limit · includes reasoning</label><input type="number" min="256" max="65536" x-model.number="run.sweep_output_tokens" :disabled="run.mode !== 'sweep'" class="bg-zinc-800 rounded px-3 py-2 w-full" required></div>
                 </div>
-                <p x-show="run.mode !== 'sweep'" class="text-xs text-zinc-400">Quality uses up to four workers. Ordinary questions allow two requests sharing a 65,536-token budget, with 8,192 tokens reserved for a final answer. Model sampling settings apply to both suites. Performance load levels are chosen automatically.</p>
+                <p x-show="run.mode !== 'sweep' && run.mode !== 'load'" class="text-xs text-zinc-400">Quality uses up to four workers. Ordinary questions allow two requests sharing a 65,536-token budget, with 8,192 tokens reserved for a final answer. Model sampling settings apply to both suites. Performance load levels are chosen automatically.</p>
                 <div x-show="run.mode === 'sweep'" class="rounded-md border border-blue-900 bg-blue-950/20 p-3 space-y-2 text-xs text-zinc-300"><p x-text="sweepSize(run)"></p><p>Records first-token and whole-answer latency, per-request token/s, aggregate output, errors and truncations. Probes every standard reasoning setting; rejected settings stay visible. Input lengths use cl100k_base; provider token counts may differ. Explicit context-limit rejections skip larger inputs. Three consecutive failed contexts or load levels trigger a small control probe: healthy controls infer a ceiling; failed controls stop the sweep as an endpoint/completion failure.</p><p>With one round, concurrency 1 has one sample. Increase rounds for repeated measurements; p95 needs enough observations to be useful. Completed cells are saved as the sweep runs.</p></div>
             </div>
         </template>

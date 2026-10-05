@@ -198,13 +198,13 @@ class SubmissionTests(unittest.TestCase):
         for word in (
             "Question limit",
             "Quality profile",
-            "SLO",
-            "Shared prefix",
             "Question seeds",
             "Context sweep",
             "Create Plan",
         ):
             self.assertNotIn(word, page.text)
+        # SLOs and shared prefixes belong to the open-loop load mode only.
+        self.assertIn('<option value="load">Performance · open-loop load</option>', page.text)
         self.post(scheduled="2099-10-03T05:00")
         editor = self.client.get("/admin/plans/1/edit")
         self.assertEqual(editor.status_code, 200)

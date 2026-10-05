@@ -55,7 +55,8 @@ def _parse_perf(raw: str | None) -> dict | None:
     except (TypeError, ValueError):
         return None
     return data if isinstance(data, dict) and (data.get("schema_version") == 3 or
-            data.get("schema_version") == 4 and data.get("kind") == "context_sweep") else None
+            data.get("schema_version") == 4 and data.get("kind") == "context_sweep" or
+            data.get("schema_version") == 5 and data.get("kind") == "open_loop") else None
 
 
 @router.get("/runs/{run_id}/performance.json")
@@ -310,6 +311,9 @@ async def stop_run(request: Request, run_id: int):
                         THEN CASE WHEN json_extract(perf_json,'$.schema_version')=4
                                   AND json_extract(perf_json,'$.kind')='context_sweep'
                              THEN json_set(perf_json,'$.cancelled',json('true'),'$.finished',json('false'))
+                             WHEN json_extract(perf_json,'$.schema_version')=5
+                                  AND json_extract(perf_json,'$.kind')='open_loop'
+                             THEN json_set(perf_json,'$.cancelled',json('true'))
                              ELSE perf_json END ELSE perf_json END
                         WHERE id=? AND status='failed' AND error_message='Stopped by administrator.'""",
                     (run_id,),

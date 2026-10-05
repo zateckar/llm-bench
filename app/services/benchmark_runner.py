@@ -350,13 +350,18 @@ def _run_benchmark(run_id, model, mode, max_concurrency, on_finish: Callable[[in
                 logger.exception("Queue callback failed for run %d", run_id)
 
 
-def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, **sweep_options):
+def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, load=None, **sweep_options):
     from app.services.url_guard import validate_endpoint
 
-    if mode not in {"both", "quality", "performance", "sweep"}:
-        raise ValueError("Mode must be both, quality, performance, or sweep")
+    if mode not in {"both", "quality", "performance", "sweep", "load"}:
+        raise ValueError("Mode must be both, quality, performance, sweep or load")
     suite_def = get_suite(suite)
-    perf_config = PerfConfig(max_concurrency) if mode != "sweep" else None
+    perf_config = PerfConfig(max_concurrency) if mode not in {"sweep", "load"} else None
+    if mode == "load":
+        from app.benchmarking.load_workload import MAX_IN_FLIGHT, parse_settings
+        load_settings = parse_settings(load)
+        if not 1 <= max_concurrency <= MAX_IN_FLIGHT:
+            raise ValueError(f"The in-flight cap must be between 1 and {MAX_IN_FLIGHT}")
     if mode == "sweep":
         from app.benchmarking.perf_sweep import SweepConfig
         sweep_config = SweepConfig(max_concurrency=max_concurrency, **sweep_options)
@@ -376,6 +381,9 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, **swee
     config = _build_client_config(model)
     if mode == "sweep":
         _run_context_sweep(run_id, config, sweep_config, model.get("_metrics_scope"))
+        return
+    if mode == "load":
+        _run_open_loop(run_id, config, load_settings, max_concurrency, model.get("_metrics_scope"))
         return
     if mode == "performance":
         questions = []
@@ -474,9 +482,9 @@ def _sanitize_sweep_errors(value):
     """Control probes and inferred-limit explanations also carry provider errors."""
     if isinstance(value, dict):
         for key, item in value.items():
-            if key in {"error", "reason", "stop_error"} and isinstance(item, str):
+            if key in {"error", "reason", "stop_error", "stop_reason"} and isinstance(item, str):
                 value[key] = _sanitize_error_detail(item)
-            elif key == "notes" and isinstance(item, list):
+            elif key in {"notes", "error_examples"} and isinstance(item, list):
                 value[key] = [_sanitize_error_detail(note) if isinstance(note, str) else note
                               for note in item]
             else:
@@ -552,6 +560,35 @@ def _run_context_sweep(run_id, client_config, sweep_config, metrics_scope=None):
         _summarise_and_finish(run_id, [], 0, sweep_config.max_concurrency,
                               measurement_elapsed,
                               json.dumps(payload), message, client_config)
+
+
+def _run_open_loop(run_id, client_config, settings, in_flight_cap, metrics_scope=None):
+    from app.benchmarking.load_test import run_load_test
+
+    telemetry = _begin_telemetry(metrics_scope, run_id)
+    started = time.perf_counter()
+    try:
+        report = run_load_test(
+            client_config, settings, in_flight_cap,
+            progress=lambda label, n, total: _update_progress(
+                run_id, label, n, total, f"Dispatched {n:,}/{total:,} expected arrivals", "load"),
+            cancelled=lambda: not _run_is_active(run_id),
+            # Long ladders and soaks keep finished steps if the process stops.
+            on_step=lambda report: _store_sweep_checkpoint(run_id, report.to_dict()),
+        )
+        measurement_elapsed = (time.perf_counter() - started) * 1000
+        if telemetry:
+            report.telemetry = telemetry.finish()
+        payload = report.to_dict()
+        _sanitize_sweep_errors(payload)
+    finally:
+        if telemetry:
+            telemetry.session.close()
+    if _run_is_active(run_id):
+        completed = sum(step["completed"] for step in report.steps)
+        message = "" if completed else (report.stop_reason or "No open-loop request completed.")
+        _summarise_and_finish(run_id, [], 0, in_flight_cap, measurement_elapsed,
+                              json.dumps(payload, separators=(",", ":")), message, client_config)
 
 
 def _summarise_and_finish(

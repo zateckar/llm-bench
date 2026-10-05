@@ -10,6 +10,8 @@
 
     {% if performance.notes %}<div class="perf-notices" role="note">{% for note in performance.notes %}<p>{{ note }}</p>{% endfor %}</div>{% endif %}
 
+    {% include "performance_load.html" %}
+
     {% include "performance_comparison.html" %}
 
     {% with capacity_views = performance.capacity_views %}{% include "capacity_report.html" %}{% endwith %}
@@ -61,7 +63,7 @@
             <p>p50 is the median; p95 is the time within which 95% of measured successful requests finished. Tail percentiles come from small samples. Compare common load levels, matching protocols and output lengths, and repeat runs to assess variability.</p>
         </div></details>
     </section>
-    {% elif not performance.sweep_views %}<div class="perf-empty"><h3>No fixed-workload measurements</h3><p>Run a benchmark with performance enabled to measure throughput at different load levels.</p></div>{% endif %}
+    {% elif not performance.sweep_views and not performance.open_loop %}<div class="perf-empty"><h3>No fixed-workload measurements</h3><p>Run a benchmark with performance enabled to measure throughput at different load levels.</p></div>{% endif %}
 
 
 </section>

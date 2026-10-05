@@ -1,6 +1,7 @@
 """Explicit planning assumptions applied to measured, matching workloads.
 
-No hardware multiplier, input/output token equivalence, or arrival-rate claim.
+No hardware multiplier or input/output token equivalence. Arrival-rate claims
+come only from open-loop runs and apply to their own workload and SLOs.
 The user population includes think/tool time; in-flight requests do not.
 """
 
@@ -10,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-REVISION = "serving-capacity-v2"
+REVISION = "serving-capacity-v3"
 
 
 class CapacityAssumptions(BaseModel):
@@ -223,9 +224,53 @@ def monitoring(perf):
     return result
 
 
+def arrival_capacity(perf, assumptions):
+    """Measured open-loop evidence: the highest seeded arrival rate meeting every class SLO."""
+    if perf.get("schema_version") != 5 or perf.get("kind") != "open_loop":
+        return None
+    summary = perf.get("summary") or {}
+    protocol = perf.get("protocol") or {}
+    classes = (protocol.get("workload") or {}).get("classes") or []
+    status = summary.get("sustainable_status", "not_measured")
+    rate = finite(summary.get("sustainable_rate"))
+    result = {"status": status, "requests_per_second": rate, "goodput_rps": finite(summary.get("goodput_at_sustainable")),
+              "workload_hash": protocol.get("workload_hash"), "preset": protocol.get("preset"),
+              "attainment_target": protocol.get("attainment_target"), "estimate": None, "classes": [],
+              "inconclusive_rates": summary.get("inconclusive_rates") or []}
+    step = next((s for s in perf.get("steps", []) if s.get("passed") and s.get("offered_rate") == rate), None)
+    if rate is None or step is None:
+        result["reason"] = ("No tested arrival rate met the SLO target." if status == "not_met"
+                            else "No finished open-loop step.")
+        return result
+    answered = finite(step.get("completed"), 0) + finite(step.get("incomplete"), 0)
+    mean_input = finite(step.get("input_tokens_reported"), 0) / answered if answered else 0
+    mean_output = finite(step.get("output_tokens_delivered"), 0) / answered if answered else 0
+    weight = sum(finite(c.get("weight"), 0) for c in classes) or 1
+    demand = {"chat": assumptions.chat_user_tokens_minute, "agent": assumptions.agent_user_tokens_minute}
+    planned = rate * (1 - assumptions.headroom_percent / 100)
+    estimate = projection(planned, mean_input, mean_output, 0, assumptions)
+    if classes and all(c.get("name") in demand for c in classes):
+        # Users per class: that class's planned output tokens/min / its per-user demand.
+        users = sum(planned * finite(c.get("weight"), 0) / weight * 60 * mean_output / demand[c["name"]] for c in classes)
+        estimate["active_users"] = math.floor(users)
+    else:
+        estimate["active_users"] = None
+    result.update(
+        estimate=estimate, mean_input=mean_input, mean_output=mean_output,
+        output_tokens_per_second=rate * mean_output,
+        classes=[{"name": name, "share": finite(next((c.get("weight") for c in classes if c.get("name") == name), 0), 0) / weight,
+                  "attainment": item.get("attainment"), "ttft_p95_ms": (item.get("ttft") or {}).get("p95_ms"),
+                  "slo": item.get("slo")} for name, item in (step.get("classes") or {}).items()],
+        reason=("A higher tested rate missed the SLO because of the server." if status == "established"
+                else "Every tested rate passed or failed only because of the client; capacity may be higher."),
+    )
+    return result
+
+
 def estimate_capacity(run, assumptions=None):
     assumptions = assumptions or CapacityAssumptions()
     perf = run.get("perf") or {}
+    arrival = arrival_capacity(perf, assumptions)
     points = evidence(perf)
     ready = run.get("status", "completed") in {"completed", "failed"} and not perf.get("cancelled")
     scenarios = []
@@ -278,11 +323,16 @@ def estimate_capacity(run, assumptions=None):
                 "output_tokens": point["mean_output"]*point["completed"], "output_tokens_per_second": point["output_rate"],
                 "output_tokens_per_hour": point["output_rate"]*3600, "flat_24h_output_tokens": point["output_rate"]*86400,
                 "workers": point["concurrency"], "mean_output_tokens_per_task": point["mean_output"], "limit": row["limit"]})
+    maximum = {"status": "not_established", "output_tokens_per_second": None,
+               "reason": "A capped closed-loop test does not establish the maximum serving rate or maximum user population."}
+    if arrival and arrival["estimate"]:
+        maximum = {"status": arrival["status"], "requests_per_second": arrival["requests_per_second"],
+                   "output_tokens_per_second": arrival["output_tokens_per_second"],
+                   "reason": "Highest seeded arrival rate meeting every class SLO for this workload only. " + arrival["reason"]}
     return {"revision": REVISION, "run_id": run.get("id"), "label": run.get("label", "Run"),
             "assumptions": assumptions.model_dump(), "scenarios": scenarios, "mix": mix,
-            "observations": observations,
-            "maximum_capacity": {"status": "not_established", "output_tokens_per_second": None,
-                                 "reason": "A capped closed-loop test does not establish the maximum serving rate or maximum user population."},
+            "observations": observations, "arrival": arrival,
+            "maximum_capacity": maximum,
             "monitoring": monitoring(perf), "reasoning": assumptions.effort, "cache_mode": assumptions.cache_mode,
             "notes": ["Each standalone scenario uses the whole measured deployment. Do not add their capacities or multiply by GPU count.",
                       "The mix uses a weighted service-demand model, not a measured mixed-load result. Prefill/decode interference can lower it.",

@@ -1,0 +1,62 @@
+{% from "measurement_macros.html" import metrics, chart_panel %}
+{% set open_loop = performance.open_loop %}
+{% if open_loop %}
+{% for view in open_loop.views %}
+<section class="perf-section" aria-label="Open-loop load test">
+    <div class="perf-section-heading"><div><h3>Open-loop load{% if open_loop.views|length > 1 %} · {{ view.label }}{% endif %}</h3>
+        <p class="perf-caption">Requests arrive on a seeded schedule whether or not earlier ones have finished, as real users and applications do. Each request is checked against its class SLO; goodput counts only requests that met it.</p></div>
+        <span class="perf-tag">{{ view.protocol.revision }}</span></div>
+    {% if view.cancelled %}<div class="perf-notices" role="note"><p>The test was stopped; the last step is partial and excluded from the result.</p></div>{% endif %}
+    {% if view.stop_reason %}<div class="perf-notices" role="note"><p>{{ view.stop_reason }}</p></div>{% endif %}
+    {% if view.non_monotonic %}<div class="perf-notices" role="note"><p>A lower rate failed while a higher rate passed. Results near the boundary are unstable; repeat the run or lengthen the steps.</p></div>{% endif %}
+    {% if view.inconclusive %}<div class="perf-notices" role="note"><p>Rates {{ view.inconclusive|join(', ') }} req/s failed only because of the client (in-flight cap or dispatch lag); they do not bound capacity. Raise the in-flight cap or run the client closer to the endpoint.</p></div>{% endif %}
+    {% for note in view.notes %}<div class="perf-notices" role="note"><p>{{ note }}</p></div>{% endfor %}
+    {{ metrics(view.metrics) }}
+    <div class="perf-protocol"><span>{{ view.protocol.workload }} · {{ view.protocol.workload_hash }}</span><span>{{ view.protocol.arrival }}</span><span>{{ view.protocol.step }} per step · rates {{ view.protocol.rates }} req/s</span><span>In-flight cap {{ view.protocol.cap }}</span><span>Seed {{ view.protocol.seed }}</span></div>
+
+    <div class="perf-chart-grid">{% for chart in view.charts %}{{ chart_panel(chart) }}{% endfor %}</div>
+
+    <div class="perf-table-wrap"><table class="perf-table"><caption>Results by offered rate <span>Timings are p95 of completed requests and include dispatch lag. Attainment counts every arrival.</span></caption>
+        <thead><tr><th scope="col">Offered</th><th scope="col">Achieved arrivals</th><th scope="col">Requests</th><th scope="col">SLO attainment</th><th scope="col">Goodput</th><th scope="col">First token · p95</th><th scope="col">Answer · p95</th><th scope="col">Token time · p95</th><th scope="col">Errors / dropped</th><th scope="col">Mean / max in flight</th><th scope="col">Output</th><th scope="col">Result</th></tr></thead>
+        <tbody>{% for row in view.steps %}<tr {% if row.passed %}class="perf-peak"{% endif %}><th scope="row">{{ row.rate }}</th><td>{{ row.achieved }}</td><td>{{ row.arrivals }}</td><td>{{ row.attainment }}</td><td>{{ row.goodput }}</td><td>{{ row.ttft }}</td><td>{{ row.latency }}</td><td>{{ row.tpot }}</td><td>{{ row.errors }} / {{ row.dropped }}</td><td>{{ row.in_flight }}</td><td>{{ row.output }}</td><td class="{{ '' if row.passed else 'perf-warning' }}">{{ row.status }}{% if not row.passed %} <small>· {{ row.reasons }}</small>{% endif %}</td></tr>{% endfor %}</tbody>
+    </table></div>
+
+    <div class="perf-table-wrap"><table class="perf-table"><caption>Request classes <span>Every class must reach the attainment target for a step to pass.</span></caption>
+        <thead><tr><th scope="col">Class</th><th scope="col">Share</th><th scope="col">Mean input</th><th scope="col">Mean output</th><th scope="col">Shared prefix</th><th scope="col">SLO</th></tr></thead>
+        <tbody>{% for c in view.classes %}<tr><th scope="row">{{ c.name }}</th><td>{{ c.share }}</td><td>{{ c.input }}</td><td>{{ c.output }}</td><td>{{ c.prefix }}</td><td>{{ c.slo }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+
+    <details class="perf-details"><summary>Per-class results <span>Attainment, timings and miss reasons for each step</span></summary>
+        <div class="perf-table-wrap"><table class="perf-table"><thead><tr><th scope="col">Offered</th><th scope="col">Class</th><th scope="col">Requests</th><th scope="col">Attainment</th><th scope="col">First token · p95</th><th scope="col">Token time · p95</th><th scope="col">Answer · p95</th><th scope="col">Mean output</th><th scope="col">Main misses</th></tr></thead>
+            <tbody>{% for row in view.class_rows %}<tr><th scope="row">{{ row.rate }}</th><td>{{ row.name }}</td><td>{{ row.arrivals }}</td><td class="{{ '' if row.meets else 'perf-warning' }}">{{ row.attainment }}</td><td>{{ row.ttft }}</td><td>{{ row.tpot }}</td><td>{{ row.latency }}</td><td>{{ row.output }}</td><td>{{ row.reasons }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+    </details>
+
+    {% if view.drift %}<details class="perf-details" open><summary>Stability over time <span>Windows within long steps; first vs last third</span></summary>
+        {% for d in view.drift %}<p class="perf-caption{% if d.degrading %} perf-warning{% endif %}"><strong>{{ d.rate }}</strong> · {{ 'Degrading' if d.degrading else 'Stable' }} · {{ d.text }}</p>
+        <div class="perf-chart-grid">{% for chart in d.charts %}{{ chart_panel(chart, false) }}{% endfor %}</div>{% endfor %}
+    </details>{% endif %}
+
+    <details class="perf-details"><summary>Load-test diagnostics <span>Dispatch lag, connections, cache and errors</span></summary>
+        <div class="perf-table-wrap"><table class="perf-table"><thead><tr><th scope="col">Offered</th><th scope="col">Dispatch lag · p99</th><th scope="col">Reported cache hit</th><th scope="col">Retained samples</th><th scope="col">Error examples</th></tr></thead>
+            <tbody>{% for row in view.steps %}<tr><th scope="row">{{ row.rate }}</th><td>{{ row.lag }}</td><td>{{ row.cache }}</td><td>{{ row.samples }}</td><td>{{ row.errors_text or '—' }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+    </details>
+    <details class="perf-details"><summary>How to read this test <span>Protocol &amp; interpretation</span></summary><div class="perf-method">
+        <p>Arrivals follow a seeded {{ view.protocol.arrival|lower }} schedule; runs with the same settings receive identical traffic. Inputs and outputs are drawn from each class's length histograms; output length is enforced by the token limit. A request meets its SLO when it completes and its user-visible first token, token time and answer time are within the class targets. Dispatch lag is added to user-visible timings.</p>
+        <p>A step passes when at least the target share of all arrivals, and of each class, met the SLO, and the client kept up (no dropped arrivals, dispatch lag p99 ≤ 100 ms). The sustainable rate is the highest passing rate. It is established only when a higher rate failed because of the server; otherwise it is a lower bound.</p>
+        <p>The result applies to this workload, SLO and deployment state. Other traffic on the deployment during the test affects it; see vLLM monitoring. Expected arrivals: {{ view.protocol.expected }} · request timeout {{ view.protocol.timeout }}.</p>
+    </div></details>
+</section>
+{% endfor %}
+{% if open_loop.comparison %}{% set cmp = open_loop.comparison %}
+<section class="perf-section" aria-label="Open-loop comparison">
+    <div class="perf-section-heading"><div><h3>Open-loop comparison</h3><p class="perf-caption">{{ cmp.note }}</p></div></div>
+    {% if cmp.excluded %}<p class="perf-footnote">Not comparable with these runs (different traffic, SLOs or sampling): {{ cmp.excluded|join(', ') }}.</p>{% endif %}
+    {% if cmp.rows %}<div class="perf-table-wrap"><table class="perf-table perf-comparison-table">
+        <thead><tr><th scope="col">Offered</th>{% for run in cmp.runs %}<th scope="col">{{ run.label }}<small>sustainable {{ run.sustainable }}{% if run.status == 'lower_bound' %} (lower bound){% endif %}</small></th>{% endfor %}</tr></thead>
+        <tbody>{% for row in cmp.rows %}<tr><th scope="row">{{ row.rate }}</th>{% for cell in row.cells %}<td class="{{ 'perf-warning' if cell and not cell.passed else '' }}">{% if cell %}{{ cell.attainment }} · {{ cell.goodput }}<small>first token p95 {{ cell.ttft }} · {{ cell.status }}</small>{% else %}—{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+    </table></div>{% endif %}
+</section>
+{% endif %}
+{% endif %}

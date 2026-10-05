@@ -79,7 +79,38 @@ The desktop sweep explorer provides a context/concurrency matrix, effort and met
 
 Each resolved cell is committed individually. Stop requests preserve saved cells and prevent late workers from changing terminal status or results. An explicit context rejection at concurrency 1 skips larger contexts for that effort with the same output allocation; a rejection at higher load does not establish a global context limit. Three consecutive contexts without a complete single-worker answer or three consecutive load levels without any complete answers trigger an untimed 256-token single-worker control probe. A healthy control infers a workload-specific ceiling and skips larger contexts or load levels for that effort; an unsuccessful control stops the sweep with a visible endpoint/completion error. Success resets failure streaks. A single failed context skips its higher loads while later contexts still start at concurrency 1. Controls and worker warmups are additional requests outside the timed budget. Skipped and unmeasured cells carry no invented timing. Schema-4 JSON downloads hydrate the saved cells; offline HTML includes script-free matrices and complete measurement tables. Historical schema-3 fixed-context reports remain separate.
 
-These are closed-loop concurrency measurements. They do not establish arrival-rate capacity or infer model-side prefill/decode speed. There are no SLO thresholds, user-capacity estimates, cache probes or mixed workloads. Small-sample tail percentiles and different output lengths limit comparisons; compare common settings and repeat measurements when stability matters.
+These are closed-loop concurrency measurements. They do not establish arrival-rate capacity or infer model-side prefill/decode speed. Small-sample tail percentiles and different output lengths limit comparisons; compare common settings and repeat measurements when stability matters. Arrival-rate capacity comes from the open-loop mode below.
+
+### Open-loop load tests
+
+**Performance · open-loop load** sends requests on a seeded schedule, whether or not earlier requests have finished, the way people and applications actually arrive ([design](docs/design-open-loop-load.md)).
+
+**Workload.** A workload is up to six request classes. Each class has:
+- a mix weight
+- input and output length histograms (`[min, max, weight]` buckets in reference tokens)
+- a shared system prefix, for example tool definitions
+- its own SLO: first token, optional output token time and optional whole-answer time
+
+Presets cover chat, long-context agents, retrieval-augmented answers and an 80/20 chat/agent mix. Custom JSON lets teams mirror histograms from their gateway logs.
+
+**Arrivals.**
+- Arrivals are Poisson or bursty (gamma gaps with a chosen coefficient of variation). The same seed and settings give every model identical traffic.
+- Output length is enforced by the token limit on a counting prompt.
+- Arrivals that find the in-flight cap full are dropped and count as SLO misses. They are never delayed.
+- Dispatch lag is added to user-visible timings, so a slow client cannot hide server queueing.
+
+**Rate ladder and result.**
+- A step passes when the SLO attainment target (default 95%) is met overall and for every class, no arrival was dropped and dispatch lag p99 stays at or below 100 ms.
+- The ladder stops after consecutive failures. The highest passing rate is the **sustainable arrival rate**. It is *established* when a higher rate failed because of the server, and a *lower bound* otherwise.
+- **Goodput** counts only requests that met their SLO.
+
+**Soak.** A soak runs one rate for a long step. Long steps are summarised in time windows, and drift between the first and last third is flagged.
+
+**Reports and capacity.**
+- Finished steps are saved as the ladder runs.
+- Reports show results by rate and by class, miss reasons, drift, dispatch diagnostics and cache telemetry.
+- Runs with identical traffic, SLOs and sampling settings are compared by rate.
+- The capacity page adds an **open-loop arrival capacity** block: the measured rate with headroom, availability and busy-hour assumptions applied. It covers only that workload and those SLOs.
 
 Performance v8 also pairs cold and warm prefixes at 8,192 and 32,768 reference tokens, at concurrency 1 and the configured maximum, using at least four requests per mode. Both fixed performance and context sweeps report cache telemetry coverage, cached-token fraction, uncached prefill and effective input rates (prompt tokens divided by client TTFT), decode delivery rate, TTFT and aggregate throughput. Unknown cache usage stays n/a; explicit zero is a reported miss. Prefill rates include queue, network and first-token overhead, and decode rates exclude estimated counts and buffered bursts. These are client proxies, not engine timings. Prefix reuse saves repeated prefill work; see [vLLM automatic prefix caching](https://docs.vllm.ai/en/v0.9.2/features/automatic_prefix_caching.html). Historical runs cannot supply paired cache measurements.
 
@@ -116,7 +147,7 @@ uv run python selftest_run_queue.py
 uv run python selftest_calibration.py
 uv run python selftest_sweep.py
 uv run python selftest_reconstruction.py
-uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance selftest_usecase_suites
+uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance selftest_usecase_suites selftest_load_test
 uv run --frozen ruff check .
 ```
 

@@ -7,6 +7,9 @@ from fastapi import HTTPException
 
 from app.database import fetch_all, get_db
 from app.benchmarking.perf import DEFAULT_MAX_CONCURRENCY, MAX_CONCURRENCY, PerfConfig
+from app.benchmarking.load_workload import (
+    DEFAULT_IN_FLIGHT, MAX_IN_FLIGHT, PRESET_LABELS, PRESETS, default_settings, error_text, parse_settings,
+)
 from app.benchmarking.perf_sweep import SweepConfig
 from app.benchmarking.quality_suite import QUALITY_WORKERS, load_questions, provenance
 from app.benchmarking.suites import DEFAULT_SUITE, SUITE_NAMES, get_suite, suite_choices
@@ -18,9 +21,9 @@ MAX_PLAN_RUNS = 50
 
 def make_run_options(*, mode="both", max_concurrency=DEFAULT_MAX_CONCURRENCY,
                      context_max=1_048_576, sweep_rounds=1, sweep_output_tokens=8192,
-                     suite=DEFAULT_SUITE):
-    if not isinstance(mode, str) or mode not in {"both", "quality", "performance", "sweep"}:
-        raise HTTPException(status_code=422, detail="Choose quality, performance, both, or a context sweep")
+                     suite=DEFAULT_SUITE, load=None):
+    if not isinstance(mode, str) or mode not in {"both", "quality", "performance", "sweep", "load"}:
+        raise HTTPException(status_code=422, detail="Choose quality, performance, both, a context sweep or an open-loop load test")
     if not isinstance(suite, str) or not (suite in SUITE_NAMES or is_usecase_key(suite)):
         raise HTTPException(status_code=422, detail="Choose a known quality suite")
     if suite != DEFAULT_SUITE and mode not in {"both", "quality"}:
@@ -36,13 +39,18 @@ def make_run_options(*, mode="both", max_concurrency=DEFAULT_MAX_CONCURRENCY,
 
     try:
         value = integer(max_concurrency)
+        if mode == "load":
+            if not 1 <= value <= MAX_IN_FLIGHT:
+                raise ValueError(f"The in-flight cap must be between 1 and {MAX_IN_FLIGHT}")
+            settings = parse_settings(load if load is not None else default_settings())
+            return {"mode": mode, "max_concurrency": value, "load": settings.model_dump()}
         if mode == "sweep":
             config = SweepConfig(integer(context_max), value, integer(sweep_rounds), integer(sweep_output_tokens))
             return {"mode": mode, "max_concurrency": value, "context_max": config.context_max,
                     "sweep_rounds": config.sweep_rounds, "sweep_output_tokens": config.sweep_output_tokens}
         PerfConfig(value)
     except (TypeError, ValueError) as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
+        raise HTTPException(status_code=422, detail=error_text(error)) from error
     options = {"mode": mode, "max_concurrency": value}
     # The default suite is implicit so historical option snapshots stay identical.
     if suite != DEFAULT_SUITE:
@@ -67,6 +75,7 @@ def spec_from_run(run):
             sweep_rounds=previous.get("sweep_rounds", 1),
             sweep_output_tokens=previous.get("sweep_output_tokens", 8192),
             suite=previous.get("suite", DEFAULT_SUITE),
+            load=previous.get("load"),
         )
     except (ValueError, TypeError, AttributeError, HTTPException):
         options = make_run_options()
@@ -118,7 +127,7 @@ async def validated_specs(raw: str) -> list[tuple[int, dict, dict, int]]:
     models = {model["id"] for model in await fetch_all("SELECT id FROM models")}
     prepared = []
     allowed = set(spec_defaults()) | {"context_max", "sweep_rounds", "sweep_output_tokens",
-                                      "suite", "repeats"}
+                                      "suite", "repeats", "load"}
     for index, spec in enumerate(specs, 1):
         if not isinstance(spec, dict):
             raise HTTPException(status_code=422, detail=f"Run {index} is malformed")
@@ -135,6 +144,8 @@ async def validated_specs(raw: str) -> list[tuple[int, dict, dict, int]]:
             raise HTTPException(status_code=422, detail=f"Run {index} has unsupported settings")
         if spec.get("mode", "both") != "sweep" and set(spec) & {"context_max", "sweep_rounds", "sweep_output_tokens"}:
             raise HTTPException(status_code=422, detail=f"Run {index}: context sweep settings require sweep mode")
+        if spec.get("mode", "both") != "load" and "load" in spec:
+            raise HTTPException(status_code=422, detail=f"Run {index}: load settings require open-loop load mode")
         options = make_run_options(
             mode=spec.get("mode", "both"),
             max_concurrency=spec.get("max_concurrency", DEFAULT_MAX_CONCURRENCY),
@@ -142,6 +153,7 @@ async def validated_specs(raw: str) -> list[tuple[int, dict, dict, int]]:
             sweep_rounds=spec.get("sweep_rounds", 1),
             sweep_output_tokens=spec.get("sweep_output_tokens", 8192),
             suite=spec.get("suite", DEFAULT_SUITE),
+            load=spec.get("load"),
         )
         prepared.append((model_id, options, _repeats(spec.get("repeats"), index)))
     if sum(repeats for _, _, repeats in prepared) > MAX_PLAN_RUNS:
@@ -213,6 +225,12 @@ def form_context(
         "spec_defaults": spec_defaults(),
         "prefill": specs,
         "max_concurrency": MAX_CONCURRENCY,
+        "load_form": {
+            "defaults": default_settings(),
+            "presets": {key: {"label": PRESET_LABELS[key], "workload": workload} for key, workload in PRESETS.items()},
+            "max_in_flight": MAX_IN_FLIGHT,
+            "default_in_flight": DEFAULT_IN_FLIGHT,
+        },
         "submission_name": name,
         "scheduled_utc": scheduled,
         "action": action,

@@ -440,7 +440,9 @@ def performance_view(runs, *, offline=False):
         raw = run["perf"]
         return raw if raw.get("schema_version") == 3 else {}
 
-    current = [{**r, "perf": current_perf(r), "is_sweep": r["perf"].get("schema_version") == 4
+    from app.services.load_views import is_open_loop, open_loop_views
+
+    current = [{**r, "perf": current_perf(r), "raw_perf": r["perf"], "is_sweep": r["perf"].get("schema_version") == 4
                 and r["perf"].get("kind") == "context_sweep"} for r in runs]
     suite_rows = [
         {"label": label, "values": [fmt(at(r["perf"], key), unit) for r in current]}
@@ -491,7 +493,7 @@ def performance_view(runs, *, offline=False):
     for r in current:
         perf = r["perf"]
         load_view = load_performance_view(r)
-        if not perf and not r["is_sweep"]:
+        if not perf and not r["is_sweep"] and not is_open_loop(r.get("raw_perf")):
             notes.append(f"{r['label']}: no performance report for the current protocol.")
         if perf.get("cancelled"):
             notes.append(f"{r['label']}: stopped early; measurements are incomplete.")
@@ -589,6 +591,7 @@ def performance_view(runs, *, offline=False):
                 })
     return {
         "comparison": performance_comparison(runs),
+        "open_loop": open_loop_views(runs),
         "cache_rows": cache_rows,
         "capacity_views": [estimate_capacity(r) for r in runs if r.get("perf")],
         "telemetry_views": [view for r in runs if (view := telemetry_view(r))],
