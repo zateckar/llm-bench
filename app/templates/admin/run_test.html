@@ -85,7 +85,7 @@
         <p class="text-zinc-400 mt-1">Select a model and start now, or choose a start time. Add runs to compare several models. Runs execute one at a time, in the order listed.</p>
     </div>
 
-    <p x-show="runs.some(r => r.mode !== 'sweep')" class="text-sm text-zinc-400">The rigorous suite has {{ question_count }} questions with strict evaluations and partial-credit diagnostics, including interactive tasks and 8k / 32k context accuracy checks. The conformance suite tests native tool calls and structured output through this deployment's parsers.</p>
+    <p x-show="runs.some(r => r.mode !== 'sweep')" class="text-sm text-zinc-400">The rigorous suite has {{ question_count }} questions with strict evaluations and partial-credit diagnostics, including interactive tasks and 8k / 32k context accuracy checks. The conformance suite tests native tool calls and structured output through this deployment's parsers. Use-case suites uploaded under <a class="text-blue-400" href="/admin/suites">Use-case suites</a> run with the same protocol; a run keeps the suite version it was submitted with.</p>
     {% if suite_error %}<p class="text-red-400">{{ suite_error }}</p>{% endif %}
 
     {% if not models %}

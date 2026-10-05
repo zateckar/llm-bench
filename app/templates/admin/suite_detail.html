@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ shown.name }} - Use-case suites - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <a href="/admin/suites" class="text-sm text-zinc-400 hover:text-white">← Use-case suites</a>
+            <h1 class="text-xl font-bold text-white mt-1">{{ shown.name }}</h1>
+            <p class="text-zinc-400 mt-1"><span class="font-mono">{{ slug }}</span>{% if shown.owner %} · owner {{ shown.owner }}{% endif %}{% if versions[0].archived %} · <span class="text-amber-400">archived</span>{% endif %}</p>
+            {% if shown.description %}<p class="text-sm text-zinc-400 mt-1">{{ shown.description }}</p>{% endif %}
+        </div>
+        <form method="POST" action="/admin/suites/{{ slug }}/archive">
+            <input type="hidden" name="archived" value="{{ 0 if versions[0].archived else 1 }}">
+            <button class="btn-ghost text-xs">{{ 'Unarchive' if versions[0].archived else 'Archive' }}</button>
+        </form>
+    </div>
+    {% if saved %}<div class="p-3 rounded-md bg-emerald-900/30 border border-emerald-800 text-sm text-emerald-200">Saved version {{ saved }}. Select it under Run benchmark → Quality suite.</div>{% endif %}
+
+    <div class="card overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead><tr><th class="text-left">Version</th><th class="text-left">Questions</th><th class="text-left">Fingerprint</th><th class="text-left">Uploaded</th><th class="text-left">Runs</th><th class="text-left">Warnings</th><th></th></tr></thead>
+            <tbody>
+            {% for v in versions %}
+            <tr class="{% if v.version == shown.version %}bg-zinc-800/50{% endif %}">
+                <td><a class="text-blue-400" href="/admin/suites/{{ slug }}?version={{ v.version }}">v{{ v.version }}</a></td>
+                <td>{{ v.question_count }}</td>
+                <td class="font-mono text-xs text-zinc-500">{{ v.suite_hash }}</td>
+                <td class="text-zinc-400">{{ (v.created_at or '')[:16].replace('T', ' ') }}{% if v.created_by_name %} · {{ v.created_by_name }}{% endif %}</td>
+                <td>{{ v.runs }}</td>
+                <td>{% if v.warnings %}<details class="text-xs text-amber-300"><summary>{{ v.warnings|length }}</summary><ul class="list-disc pl-4">{% for w in v.warnings %}<li>{{ w }}</li>{% endfor %}</ul></details>{% else %}<span class="text-zinc-500">0</span>{% endif %}</td>
+                <td><a class="btn-ghost text-xs" href="/admin/suites/{{ slug }}/{{ v.version }}.yaml">YAML</a></td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card p-4 space-y-3">
+        <h2 class="text-lg font-semibold text-white">Questions in v{{ shown.version }}</h2>
+        <p class="text-xs text-zinc-500">Runs reference this version as <code>{{ run_key }}</code>. Comparisons across versions use only questions that are identical in both.</p>
+        {% if parse_error %}<p class="text-sm text-red-400 whitespace-pre-wrap">{{ parse_error }}</p>{% endif %}
+        {% for category, questions in categories.items() %}
+        <details class="rounded-md bg-zinc-800/50" {% if loop.first %}open{% endif %}>
+            <summary class="cursor-pointer px-3 py-2 text-sm font-medium text-zinc-200">{{ category }} · {{ questions|length }}</summary>
+            <div class="px-3 pb-3 space-y-2">
+            {% for q in questions %}
+            <div class="rounded bg-zinc-900/60 p-2 text-xs">
+                <p class="font-mono text-zinc-400">{{ q.id }} · {{ q.evaluator }}{% if q.request %} · response_format {{ q.request.response_format.type }}{% endif %} · {{ q.difficulty }}</p>
+                <pre class="whitespace-pre-wrap text-zinc-300 mt-1 max-h-40 overflow-auto">{{ q.prompt }}</pre>
+            </div>
+            {% endfor %}
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

@@ -80,6 +80,25 @@ CREATE TABLE IF NOT EXISTS run_plans (
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
+-- Use-case suites uploaded by administrators; every changed upload is a new immutable version
+CREATE TABLE IF NOT EXISTS usecase_suites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    owner TEXT,
+    source_yaml TEXT NOT NULL,            -- the uploaded document, packed like other payloads
+    suite_hash TEXT NOT NULL,
+    question_count INTEGER NOT NULL,
+    warnings_json TEXT,
+    created_by INTEGER,
+    created_at TIMESTAMP,
+    archived INTEGER NOT NULL DEFAULT 0,  -- hidden from the run form; runs keep working
+    UNIQUE (slug, version),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
 -- Test Results
 CREATE TABLE IF NOT EXISTS test_results (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

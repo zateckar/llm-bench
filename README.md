@@ -53,6 +53,12 @@ Grading ([tool_protocol.py](app/benchmarking/tool_protocol.py)) separates **wire
 
 A submission with repeats creates one ordinary run per repeat, linked as a **repeat group**; repeat *i* uses model seed *i* and everything else is identical. Editing, cloning and “Run again” keep the group together. The group page (`/runs/groups/{id}`) reports the run spread with a t interval over runs, pooled achievement, per-task stability, unstable tasks, and **pass^k** (succeeds in all *k* tries) next to pass@k, using unbiased estimators. Groups can be compared with each other: tasks pair by fingerprint, the interval resamples families and runs, and p-values come from a family-level sign-flip randomization test, Holm-adjusted when several comparisons are shown. Seed differences alone do not block pairing; any other protocol difference does. Single-run comparisons use the same test and add an exact McNemar test on full passes.
 
+### Use-case suites
+
+Application teams' golden examples can be uploaded as **use-case suites** under **Admin → Use-case suites**. A suite is one YAML document with a `suite` header (slug, name, description, owner, optional default system prompt) and a `questions` list using the built-in question fields; start from the [example document](app/benchmarking/usecase_example.yaml). Only deterministic evaluators are accepted; evaluators that execute code are not. A `json_match` question may add a `response_format` (`json_object` or a `json_schema` in the supported subset), which sends it through the native structured-output path. Uploads are fully validated, and **Check** reports problems and warnings without saving anything.
+
+Every changed upload becomes a new immutable version; uploading the same questions again is rejected. Runs pin `usecase:<slug>@<version>`, so a run, its edits, clones and reruns keep using the version they were submitted with, even after newer uploads or archiving. All versions of a suite share the report suite name `usecase:<slug>`, so runs on different versions compare on the questions that are identical in both. Use-case suites are never paired with built-in suites. Archiving hides a suite from the run form but keeps its versions and runs.
+
 ## Performance
 
 One workload uses a **1,024-token reference input** and asks for integers 1 through 80 with a **256-token output limit**. Each request has a unique leading identifier to reduce prefix reuse. Input tokenization happens before timing. Temperature and reasoning effort use the submitted model settings; model seed is 0.
@@ -110,7 +116,7 @@ uv run python selftest_run_queue.py
 uv run python selftest_calibration.py
 uv run python selftest_sweep.py
 uv run python selftest_reconstruction.py
-uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance
+uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance selftest_usecase_suites
 uv run --frozen ruff check .
 ```
 

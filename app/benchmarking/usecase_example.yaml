@@ -1,0 +1,92 @@
+# Example use-case suite. Upload it under Admin -> Use-case suites, or copy it
+# as a starting point. Every changed upload of the same slug becomes a new
+# version; runs pin the version they were submitted with.
+#
+# Allowed evaluators: exact_match, mcq, numeric_match, numeric_set,
+# contains_keywords, regex_all, json_match, set_match, format_check,
+# ordered_labels, refusal_calibration, admits_uncertainty.
+# Question fields are the same as in tests/questions (id, category, prompt,
+# evaluator, expected, system_prompt, difficulty, weight, pass_threshold,
+# max_tokens, description, source, rubric, metadata). `response_format` is
+# allowed with json_match and is sent to the endpoint as-is.
+
+suite:
+  slug: example-service-desk
+  name: Example - service desk assistant
+  description: Ticket triage, invoice field extraction and policy answers in EN/CS/DE.
+  owner: platform-team@example.com
+  system_prompt: You are the internal service desk assistant. Answer precisely and concisely.
+
+questions:
+  - id: triage-printer-cs
+    category: Ticket triage
+    prompt: |
+      Classify the ticket into exactly one queue: NETWORK, PRINTING, ACCOUNTS or HARDWARE.
+      Reply with the queue name only.
+
+      Ticket: "Tiskárna ve 2. patře budovy M1 tiskne prázdné stránky, toner jsme už vyměnili."
+    evaluator: exact_match
+    expected: PRINTING
+    metadata: {family: triage-printer}
+
+  - id: triage-vpn-de
+    category: Ticket triage
+    prompt: |
+      Classify the ticket into exactly one queue: NETWORK, PRINTING, ACCOUNTS or HARDWARE.
+      Reply with the queue name only.
+
+      Ticket: "Seit dem Update verbindet sich mein Laptop nicht mehr mit dem VPN, Fehler 809."
+    evaluator: exact_match
+    expected: NETWORK
+    metadata: {family: triage-vpn}
+
+  - id: invoice-header-en
+    category: Invoice extraction
+    prompt: |
+      Extract the supplier VAT ID, the invoice number and the total amount due (a number, no currency)
+      from this invoice text.
+
+      ACME Components s.r.o., VAT ID CZ27082440
+      Invoice no. 2026-0042, issued 14 September 2026
+      Subtotal 1,033.47 EUR, VAT 21 % 217.03 EUR, Total due 1,250.50 EUR
+    evaluator: json_match
+    expected:
+      value: {vat_id: CZ27082440, invoice_number: "2026-0042", total: 1250.5}
+    response_format:
+      type: json_schema
+      json_schema:
+        name: invoice_header
+        strict: true
+        schema:
+          type: object
+          additionalProperties: false
+          required: [vat_id, invoice_number, total]
+          properties:
+            vat_id: {type: string}
+            invoice_number: {type: string}
+            total: {type: number}
+    metadata: {family: invoice-header}
+
+  - id: invoice-total-cs
+    category: Invoice extraction
+    prompt: |
+      Jaká je celková částka k úhradě v Kč? Odpověz pouze číslem.
+
+      Faktura 7781: základ 10 000 Kč, DPH 21 % 2 100 Kč, celkem k úhradě 12 100 Kč.
+    evaluator: numeric_match
+    expected: {value: 12100, tolerance: 0}
+    metadata: {family: invoice-total}
+
+  - id: policy-laptop-replacement
+    category: Policy answers
+    prompt: |
+      Policy: standard laptops are replaced after 48 months; developer laptops after 36 months.
+      A developer received a laptop 40 months ago. Is it due for replacement, and after how many
+      months is a developer laptop replaced? Answer in one sentence.
+    evaluator: contains_keywords
+    expected:
+      groups:
+        - ["yes", "due", "eligible"]
+        - ["36"]
+      none: ["48 months for developers"]
+    metadata: {family: policy-laptop}

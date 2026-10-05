@@ -10,6 +10,7 @@ from app.benchmarking.perf import DEFAULT_MAX_CONCURRENCY, MAX_CONCURRENCY, Perf
 from app.benchmarking.perf_sweep import SweepConfig
 from app.benchmarking.quality_suite import QUALITY_WORKERS, load_questions, provenance
 from app.benchmarking.suites import DEFAULT_SUITE, SUITE_NAMES, get_suite, suite_choices
+from app.benchmarking.usecase_suites import is_key as is_usecase_key
 
 MAX_REPEATS = 10
 MAX_PLAN_RUNS = 50
@@ -20,7 +21,7 @@ def make_run_options(*, mode="both", max_concurrency=DEFAULT_MAX_CONCURRENCY,
                      suite=DEFAULT_SUITE):
     if not isinstance(mode, str) or mode not in {"both", "quality", "performance", "sweep"}:
         raise HTTPException(status_code=422, detail="Choose quality, performance, both, or a context sweep")
-    if not isinstance(suite, str) or suite not in SUITE_NAMES:
+    if not isinstance(suite, str) or not (suite in SUITE_NAMES or is_usecase_key(suite)):
         raise HTTPException(status_code=422, detail="Choose a known quality suite")
     if suite != DEFAULT_SUITE and mode not in {"both", "quality"}:
         raise HTTPException(status_code=422, detail="A quality suite applies only to quality runs")
@@ -147,8 +148,14 @@ async def validated_specs(raw: str) -> list[tuple[int, dict, dict, int]]:
         raise HTTPException(status_code=422,
                             detail=f"Repeats expand to more than {MAX_PLAN_RUNS} runs")
     # Rows share one snapshot of each suite's current fixed protocol.
-    return [(model_id, quality_config_for(options), options, repeats)
-            for model_id, options, repeats in prepared]
+    validated = []
+    for index, (model_id, options, repeats) in enumerate(prepared, 1):
+        try:
+            config = quality_config_for(options)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=f"Run {index}: {error}") from error
+        validated.append((model_id, config, options, repeats))
+    return validated
 
 
 def parse_browser_local(raw: str, tz_offset_min: str) -> str | None:
@@ -180,6 +187,8 @@ def form_context(
         question_count, suite_error = len(load_questions()), None
     except Exception as error:
         question_count, suite_error = 0, str(error)
+    from app.benchmarking import usecase_suites
+
     suites = []
     for choice in suite_choices():
         try:
@@ -187,6 +196,14 @@ def form_context(
         except Exception:
             count = None
         suites.append({**choice, "questions": count})
+    suites.extend(usecase_suites.choice(row) for row in usecase_suites.latest_versions())
+    # Edited plans keep a pinned older (or archived) version selectable.
+    for spec in specs or []:
+        key = spec.get("suite")
+        if is_usecase_key(key) and key not in {s["name"] for s in suites}:
+            row = usecase_suites.load_version(*usecase_suites.split_key(key))
+            if row:
+                suites.append(usecase_suites.choice(row))
     return {
         "models": models,
         "question_count": question_count,

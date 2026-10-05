@@ -65,6 +65,11 @@ SUITE_NAMES = tuple(_FACTORIES)
 
 def get_suite(name=None) -> SuiteDef:
     key = name or DEFAULT_SUITE
+    if key.startswith("usecase:"):
+        # Uploaded suites live in the database; the key pins one version.
+        from app.benchmarking.usecase_suites import suite_def
+
+        return suite_def(key)
     if key not in _FACTORIES:
         raise ValueError(f"Unknown quality suite {key!r}")
     return _FACTORIES[key]()
