@@ -138,7 +138,8 @@ def summarize(rows):
     ]
     groups = clusters(capability)
     categories = {}
-    for category in sorted({r["category"] for r in rows}):
+    open_ended = [r for r in rows if r["scope"] == "open_ended"]
+    for category in sorted({r["category"] for r in rows if r["scope"] != "open_ended"}):
         items = [r for r in usable if r["category"] == category]
         categories[category] = {
             "count": len(items),
@@ -172,6 +173,14 @@ def summarize(rows):
     recovery_rows = [r for r in rows if r["diagnostics"].get("recovery")]
     native = [r for r in rows if r["metadata"].get("protocol") == "native-tools-v1"]
     extra = {"native": native_summary(native)} if native else {}
+    if open_ended:
+        # Unscored: answers wait for pairwise A/B studies.
+        extra["open_ended"] = {
+            "count": len(open_ended),
+            "recorded": sum(r["outcome"] == "recorded" for r in open_ended),
+            "outcomes": dict(Counter(r["outcome"] for r in open_ended)),
+            "categories": sorted({r["category"] for r in open_ended}),
+        }
     return {
         "count": len(rows),
         "total": len(rows),

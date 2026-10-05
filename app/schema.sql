@@ -99,6 +99,83 @@ CREATE TABLE IF NOT EXISTS usecase_suites (
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
+-- Blind A/B studies: pairwise comparison of two runs of one suite (docs/design-ab-studies.md).
+-- Studies copy everything they show, so they outlive the runs they compare.
+CREATE TABLE IF NOT EXISTS ab_studies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    run_a INTEGER,                        -- informational; the run may be deleted later
+    run_b INTEGER,
+    label_a TEXT NOT NULL,
+    label_b TEXT NOT NULL,
+    suite_name TEXT NOT NULL,
+    scope TEXT NOT NULL,                  -- open_ended | all
+    status TEXT NOT NULL DEFAULT 'open',  -- open | closed
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ab_pairs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    study_id INTEGER NOT NULL REFERENCES ab_studies(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    question_id TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    category TEXT NOT NULL,
+    family TEXT NOT NULL,
+    prompt TEXT NOT NULL,                 -- packed
+    system_prompt TEXT,                   -- packed
+    criteria_json TEXT,
+    reference TEXT,                       -- packed
+    answer_a TEXT NOT NULL,               -- packed, reasoning removed
+    answer_b TEXT NOT NULL,
+    outcome_a TEXT,
+    outcome_b TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ab_pairs_study ON ab_pairs(study_id, position);
+
+CREATE TABLE IF NOT EXISTS ab_judges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    study_id INTEGER NOT NULL REFERENCES ab_studies(id) ON DELETE CASCADE,
+    model_id INTEGER,                     -- the judge's models row; may be deleted later
+    model_name TEXT NOT NULL,
+    model_identifier TEXT NOT NULL,
+    revision TEXT NOT NULL,
+    status TEXT NOT NULL,                 -- running | completed | failed | cancelled | interrupted
+    done INTEGER NOT NULL DEFAULT 0,
+    total INTEGER NOT NULL DEFAULT 0,
+    errors INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    started_at TIMESTAMP,
+    finished_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ab_judgments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    judge_id INTEGER NOT NULL REFERENCES ab_judges(id) ON DELETE CASCADE,
+    pair_id INTEGER NOT NULL REFERENCES ab_pairs(id) ON DELETE CASCADE,
+    first TEXT,                           -- a | b | tie: verdict with A shown first
+    second TEXT,                          -- verdict with B shown first
+    verdict TEXT,                         -- a | b | tie, NULL on judge_error
+    consistent INTEGER,
+    reason_first TEXT,
+    reason_second TEXT,
+    error TEXT,
+    UNIQUE (judge_id, pair_id)
+);
+
+CREATE TABLE IF NOT EXISTS ab_votes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pair_id INTEGER NOT NULL REFERENCES ab_pairs(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- votes of deleted users stay anonymous
+    verdict TEXT NOT NULL,                -- a | b | tie | both_bad
+    shown_left TEXT NOT NULL,             -- a | b
+    comment TEXT,
+    created_at TIMESTAMP,
+    UNIQUE (pair_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ab_votes_pair ON ab_votes(pair_id);
+
 -- Test Results
 CREATE TABLE IF NOT EXISTS test_results (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

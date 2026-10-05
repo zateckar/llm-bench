@@ -59,6 +59,17 @@ Application teams' golden examples can be uploaded as **use-case suites** under 
 
 Every changed upload becomes a new immutable version; uploading the same questions again is rejected. Runs pin `usecase:<slug>@<version>`, so a run, its edits, clones and reruns keep using the version they were submitted with, even after newer uploads or archiving. All versions of a suite share the report suite name `usecase:<slug>`, so runs on different versions compare on the questions that are identical in both. Use-case suites are never paired with built-in suites. Archiving hides a suite from the run form but keeps its versions and runs.
 
+### Blind A/B studies and LLM judges
+
+Most everyday use has no answer key: emails, summaries, explanations, advice, rewrites. Questions with `evaluator: open_ended` and `expected: {criteria: [...], reference?: ...}` are run as usual, but the answer gets the outcome `recorded` and is never scored. It is excluded from achievement, passes and paired comparisons, and the quality summary lists it separately. The built-in **assistant-open-v1** suite ([open_suite.py](app/benchmarking/open_suite.py)) has 30 workplace requests in English, Czech and German across writing, summarising, explaining, advising, transforming data and reviewing. Use-case suites may contain open-ended questions too.
+
+A **blind A/B study** (**Blind A/B** in the navigation; admins create one from two completed runs of the same suite, also from the compare page) pairs the two runs' answers by question fingerprint. Answers with failed requests are left out, and a study holds at most 1,000 pairs. The study copies the prompts, criteria and answers, without reasoning blocks.
+
+- **People** vote blind: model names are hidden, sides are shuffled, and the least-voted pairs come first. Votes are left, right, tie or both bad, with an optional anonymous comment; each person votes once per pair, and votes cannot be changed.
+- **LLM judges** (`pairwise-judge-v1`; any configured model) judge every pair in both orders at temperature 0, and the two verdicts are combined to cancel position bias. Judging runs in the background and can be resumed.
+
+Results (`ab-stats-v1`) give the preference for B with a family bootstrap interval and an exact sign test, plus a per-category breakdown. For each judge they add position consistency, length bias, and agreement with people (Cohen's κ). The pair browser shows judge reasons, and the study can be downloaded as JSON. Design: [docs/design-ab-studies.md](docs/design-ab-studies.md).
+
 ## Performance
 
 One workload uses a **1,024-token reference input** and asks for integers 1 through 80 with a **256-token output limit**. Each request has a unique leading identifier to reduce prefix reuse. Input tokenization happens before timing. Temperature and reasoning effort use the submitted model settings; model seed is 0.
@@ -147,7 +158,7 @@ uv run python selftest_run_queue.py
 uv run python selftest_calibration.py
 uv run python selftest_sweep.py
 uv run python selftest_reconstruction.py
-uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance selftest_usecase_suites selftest_load_test
+uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance selftest_usecase_suites selftest_load_test selftest_ab_studies
 uv run --frozen ruff check .
 ```
 

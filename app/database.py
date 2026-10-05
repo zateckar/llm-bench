@@ -164,6 +164,14 @@ async def init_db():
                 tuple(interrupted_ids),
             )
 
+        # Judge threads die with the process too; their saved judgments stay and
+        # starting the judge again resumes the missing pairs.
+        await db.execute(
+            """UPDATE ab_judges SET status = 'interrupted', finished_at = ?
+                WHERE status = 'running'""",
+            (datetime.now(timezone.utc).isoformat(),),
+        )
+
         # Older databases could contain progress rows left behind by a run that
         # was deleted before foreign-key enforcement was enabled.
         await db.execute(

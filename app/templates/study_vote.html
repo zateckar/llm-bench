@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Vote - {{ study.name }} - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex flex-wrap justify-between items-start gap-2">
+        <div>
+            <a href="/studies" class="text-sm text-zinc-400 hover:text-zinc-200">← Blind A/B studies</a>
+            <h1 class="text-xl font-bold text-white mt-1">Which answer is better?</h1>
+            <p class="text-sm text-zinc-400">Judge the answers as the person who asked. Model names are hidden and the sides are shuffled for every pair.</p>
+        </div>
+        <p class="text-sm text-zinc-400">You have voted on {{ voted }} of {{ total }} pairs.</p>
+    </div>
+    {% if error %}<div class="p-3 rounded-md bg-red-900/30 border border-red-800 text-sm text-red-300">{{ error }}</div>{% endif %}
+
+    {% if study.status != 'open' %}
+    <div class="card p-6 text-center text-zinc-400">This study is closed for voting. <a class="text-blue-400" href="/studies/{{ study.id }}">See the results</a>.</div>
+    {% elif not pair %}
+    <div class="card p-6 text-center text-zinc-300">Thank you — you have voted on every pair. <a class="text-blue-400" href="/studies/{{ study.id }}">See the results</a>.</div>
+    {% else %}
+    <div class="card p-4 space-y-2">
+        {% if pair.system_prompt %}<details><summary class="text-sm text-zinc-400 cursor-pointer">Assistant instructions</summary><pre class="whitespace-pre-wrap font-sans text-sm text-zinc-300 mt-1">{{ pair.system_prompt }}</pre></details>{% endif %}
+        <h2 class="text-sm font-semibold text-zinc-300">Request <span class="text-xs font-normal text-zinc-500">· {{ pair.category }}</span></h2>
+        <pre class="whitespace-pre-wrap font-sans text-sm text-zinc-200">{{ pair.prompt }}</pre>
+        {% if pair.criteria %}<h2 class="text-sm font-semibold text-zinc-300">A good answer</h2><ul class="list-disc pl-5 text-sm text-zinc-300">{% for c in pair.criteria %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    <div class="grid lg:grid-cols-2 gap-4">
+        <div class="card p-4"><h2 class="font-semibold text-white">Left answer</h2><pre class="whitespace-pre-wrap font-sans text-sm text-zinc-200 mt-2">{{ left }}</pre></div>
+        <div class="card p-4"><h2 class="font-semibold text-white">Right answer</h2><pre class="whitespace-pre-wrap font-sans text-sm text-zinc-200 mt-2">{{ right }}</pre></div>
+    </div>
+    <form method="POST" action="/studies/{{ study.id }}/vote" class="card p-4 space-y-3">
+        <input type="hidden" name="pair_id" value="{{ pair.id }}">
+        <input type="hidden" name="shown_left" value="{{ shown_left }}">
+        <div><label class="block text-sm text-zinc-300 mb-1">Comment <span class="text-zinc-500">(optional, shown anonymously with the results)</span></label>
+            <textarea name="comment" rows="2" maxlength="{{ comment_limit }}" class="input-field text-sm"></textarea></div>
+        <div class="flex flex-wrap gap-2">
+            <button class="btn-primary" name="choice" value="left">Left is better</button>
+            <button class="btn-primary" name="choice" value="right">Right is better</button>
+            <button class="btn-ghost" name="choice" value="tie">About the same</button>
+            <button class="btn-ghost" name="choice" value="both_bad">Both are bad</button>
+            <a class="btn-ghost ml-auto" href="/studies/{{ study.id }}/vote?skip={{ pair.id }}">Skip</a>
+        </div>
+        <p class="text-xs text-zinc-500">Votes cannot be changed afterwards.</p>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

@@ -87,7 +87,8 @@
     </script>
 
     {% if selected_runs|length >= 2 %}
-    <div class="flex justify-end">
+    <div class="flex justify-end gap-2">
+        {% if selected_runs|length == 2 and has_quality_results and user and user.role == 'admin' %}<a class="btn-ghost" href="/studies?run_a={{ selected_runs[0].id }}&amp;run_b={{ selected_runs[1].id }}">Create blind A/B study</a>{% endif %}
         <a class="btn-primary" href="/compare/report.html?{% for run in selected_runs %}runs={{ run.id }}{% if not loop.last %}&amp;{% endif %}{% endfor %}" download>Download comparison HTML</a>
     </div>
     <div class="view-tabs" role="group" aria-label="Comparison sections">

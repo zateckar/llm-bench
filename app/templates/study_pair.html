@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "study_macros.html" import verdict_chip %}
+{% block title %}{{ pair.question_id }} - {{ study.name }} - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div>
+        <a href="/studies/{{ study.id }}" class="text-sm text-zinc-400 hover:text-zinc-200">← {{ study.name }}</a>
+        <h1 class="text-xl font-bold text-white mt-1 font-mono">{{ pair.question_id }}</h1>
+        <p class="text-sm text-zinc-400">{{ pair.category }} · outcomes A {{ pair.outcome_a|replace('_', ' ') }}, B {{ pair.outcome_b|replace('_', ' ') }}</p>
+    </div>
+    <div class="card p-4 space-y-2">
+        {% if pair.system_prompt %}<details><summary class="text-sm text-zinc-400 cursor-pointer">Assistant instructions</summary><pre class="whitespace-pre-wrap font-sans text-sm text-zinc-300 mt-1">{{ pair.system_prompt }}</pre></details>{% endif %}
+        <h2 class="text-sm font-semibold text-zinc-300">Request</h2>
+        <pre class="whitespace-pre-wrap font-sans text-sm text-zinc-200">{{ pair.prompt }}</pre>
+        {% if pair.criteria %}<h2 class="text-sm font-semibold text-zinc-300">Criteria</h2><ul class="list-disc pl-5 text-sm text-zinc-300">{% for c in pair.criteria %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}
+        {% if pair.reference %}<details><summary class="text-sm text-zinc-400 cursor-pointer">Reference answer</summary><pre class="whitespace-pre-wrap font-sans text-sm text-zinc-300 mt-1">{{ pair.reference }}</pre></details>{% endif %}
+    </div>
+    <div class="grid lg:grid-cols-2 gap-4">
+        {% for side, label, answer, color in [('A', study.label_a, pair.answer_a, 'text-sky-400'), ('B', study.label_b, pair.answer_b, 'text-violet-400')] %}
+        <div class="card p-4"><h2 class="font-semibold {{ color }}">{{ side }} · <span class="text-zinc-300 font-normal">{{ label }}</span></h2>
+            <pre class="whitespace-pre-wrap font-sans text-sm text-zinc-200 mt-2">{{ answer }}</pre></div>
+        {% endfor %}
+    </div>
+    <div class="card p-4 space-y-2">
+        <h2 class="text-lg font-semibold text-white">Verdicts</h2>
+        <p class="text-sm text-zinc-300">People: {% if votes %}{% for v in votes %}{{ verdict_chip(v.verdict) }}{% if not loop.last %} · {% endif %}{% endfor %}{% else %}<span class="text-zinc-500">no votes yet</span>{% endif %}</p>
+        {% for v in votes if v.comment %}<p class="text-sm text-zinc-400 border-l-2 border-zinc-700 pl-2">{{ verdict_chip(v.verdict) }} {{ v.comment }}</p>{% endfor %}
+        {% for j in summary.judges %}{% set r = j.by_pair.get(pair.id) %}
+        <div class="text-sm border-t border-zinc-800 pt-2">
+            <p class="text-zinc-300">{{ j.model_name }}: {% if r and r.verdict %}{{ verdict_chip(r.verdict) }}{% if not r.consistent %} <span class="text-amber-400">(orders disagree)</span>{% endif %}{% elif r %}<span class="text-amber-400">{{ r.error }}</span>{% else %}<span class="text-zinc-500">not judged</span>{% endif %}</p>
+            {% if r and r.first %}<p class="text-zinc-400">A shown first → {{ verdict_chip(r.first) }}: {{ r.reason_first }}</p>{% endif %}
+            {% if r and r.second %}<p class="text-zinc-400">B shown first → {{ verdict_chip(r.second) }}: {{ r.reason_second }}</p>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

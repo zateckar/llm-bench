@@ -59,7 +59,25 @@ def _tool_conformance():
     )
 
 
-_FACTORIES = {"rigorous": _rigorous, "tool-conformance": _tool_conformance}
+def _assistant_open():
+    from app.benchmarking import open_suite
+    from app.benchmarking.quality_protocol import protocol
+
+    return SuiteDef(
+        name="assistant-open",
+        label="Open-ended assistant requests",
+        description="Everyday workplace requests (en/cs/de) without an answer key; "
+                    "answers are compared in blind A/B studies.",
+        revision=lambda: open_suite.REVISION,
+        load=open_suite.load_questions,
+        provenance=open_suite.provenance,
+        execution=protocol,
+        client_extra=dict,
+    )
+
+
+_FACTORIES = {"rigorous": _rigorous, "tool-conformance": _tool_conformance,
+              "assistant-open": _assistant_open}
 SUITE_NAMES = tuple(_FACTORIES)
 
 

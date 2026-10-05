@@ -228,6 +228,10 @@ def score_response(q, response, tokens, metrics, cached=False):
         )
         result.evaluation = _availability_evaluation(q, result.outcome, result.detail)
         return result
+    if q.evaluator == "open_ended":
+        # No answer key: the answer is kept for pairwise A/B studies, never scored.
+        result.outcome, result.detail = "recorded", "Open-ended answer recorded for pairwise comparison"
+        return result
     diagnostic_sink: dict = {}
     try:
         result.score, result.detail = EVALUATORS[q.evaluator](

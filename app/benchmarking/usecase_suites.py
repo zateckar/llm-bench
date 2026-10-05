@@ -17,7 +17,7 @@ import re
 import sqlite3
 
 from app.benchmarking.models import Question
-from app.benchmarking.quality_suite import MAX_OUTPUT_TOKENS, suite_hash
+from app.benchmarking.quality_suite import MAX_OUTPUT_TOKENS, question_scope, suite_hash
 from app.benchmarking.schema_subset import unsupported_keywords, validate
 from app.benchmarking.suite_checks import Report, validate_question
 from app.benchmarking.test_loader import SuiteError, UniqueKeyLoader, _parse_question
@@ -29,7 +29,7 @@ MAX_QUESTIONS = 2000
 ALLOWED_EVALUATORS = frozenset({
     "exact_match", "mcq", "numeric_match", "numeric_set", "contains_keywords", "regex_all",
     "json_match", "set_match", "format_check", "ordered_labels", "refusal_calibration",
-    "admits_uncertainty",
+    "admits_uncertainty", "open_ended",
 })
 SLUG = re.compile(r"[a-z0-9][a-z0-9-]{1,47}")
 KEY = re.compile(r"usecase:([a-z0-9][a-z0-9-]{1,47})@([1-9][0-9]{0,5})")
@@ -193,7 +193,7 @@ def parse_suite(text) -> ParsedSuite:
             q,
             max_tokens=q.max_tokens or MAX_OUTPUT_TOKENS,
             metadata={**q.metadata, "family": q.metadata.get("family", q.id),
-                      "scope": "capability", "cohort": f"{PREFIX}{slug}"},
+                      "scope": question_scope(q), "cohort": f"{PREFIX}{slug}"},
         )
         if response_format is not None:
             before = len(problems)

@@ -76,6 +76,14 @@ def main() -> int:
     if not args.quiet:
         print(f"Validated {len(native)} tool-conformance questions ({tool_suite.REVISION}).")
 
+    from app.benchmarking import open_suite
+
+    open_questions = open_suite.load_questions()
+    for q in open_questions:
+        validate_question(report, q)
+    if not args.quiet:
+        print(f"Validated {len(open_questions)} open-ended questions ({open_suite.REVISION}).")
+
     by_category = Counter(q.category for q in questions)
     by_evaluator = Counter(q.evaluator for q in questions)
     by_difficulty = Counter(q.difficulty for q in questions)

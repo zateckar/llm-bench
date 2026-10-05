@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% from "study_macros.html" import preference_card, pct, verdict_chip, verdict_text %}
+{% block title %}{{ study.name }} - Blind A/B - LLM Bench{% endblock %}
+{% block head %}{% if running %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
+
+{% block content %}
+{% set people = summary.people %}
+<div class="space-y-4">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+            <a href="/studies" class="text-sm text-zinc-400 hover:text-zinc-200">← Blind A/B studies</a>
+            <h1 class="text-xl font-bold text-white mt-1">{{ study.name }}</h1>
+            <p class="text-sm text-zinc-400 mt-1"><span class="text-sky-400 font-medium">A</span> {{ study.label_a }} · <span class="text-violet-400 font-medium">B</span> {{ study.label_b }} · <span class="font-mono text-xs">{{ study.suite_name }}</span> · {{ scopes[study.scope] }} · {{ summary.pairs }} pairs{% if study.status != 'open' %} · <span class="text-amber-400">closed</span>{% endif %}</p>
+        </div>
+        <div class="flex gap-2 items-center">
+            <a class="btn-ghost" href="/studies/{{ study.id }}/export.json">Download JSON</a>
+            {% if study.status == 'open' %}<a class="btn-primary" href="/studies/{{ study.id }}/vote">{% if voted < total %}Vote ({{ voted }}/{{ total }} done){% else %}All pairs voted{% endif %}</a>{% endif %}
+        </div>
+    </div>
+    {% if error %}<div class="p-3 rounded-md bg-red-900/30 border border-red-800 text-sm text-red-300">{{ error }}</div>{% endif %}
+
+    <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {% call preference_card('People', people.votes ~ ' votes', people, study) %}
+        <p class="text-xs text-zinc-500">{{ people.both_bad }} “both bad” vote{{ 's' if people.both_bad != 1 }} (counted as ties) · {{ people.comments }} comment{{ 's' if people.comments != 1 }}. Several votes on one pair are averaged first.</p>
+        {% endcall %}
+        {% for j in summary.judges %}
+        {% call preference_card('Judge: ' ~ j.model_name, j.status ~ ' · ' ~ j.done ~ '/' ~ j.total, j.preference, study) %}
+        <p class="text-xs text-zinc-400">Position-consistent {{ pct(j.diagnostics.position_consistency) }} · longer answer wins {{ pct(j.diagnostics.longer_answer_win_rate) }} of {{ j.diagnostics.decisive_with_length_difference }} decisive verdicts{% if j.agreement.pairs %} · agrees with people on {{ pct(j.agreement.agreement) }} of {{ j.agreement.pairs }} pairs (κ {{ '%.2f'|format(j.agreement.kappa) if j.agreement.kappa is not none else 'n/a' }}){% endif %}</p>
+        {% if j.error %}<p class="text-xs text-amber-400">{{ j.error }}</p>{% elif j.errors %}<p class="text-xs text-amber-400">{{ j.errors }} judge error{{ 's' if j.errors != 1 }}.</p>{% endif %}
+        {% if is_admin %}<div class="flex gap-2">
+            {% if j.status == 'running' %}<form method="POST" action="/studies/{{ study.id }}/judges/{{ j.id }}/cancel"><button class="btn-ghost text-xs">Cancel</button></form>
+            {% elif j.model_id and j.done < j.total %}<form method="POST" action="/studies/{{ study.id }}/judges"><input type="hidden" name="model_id" value="{{ j.model_id }}"><button class="btn-ghost text-xs">Resume ({{ j.total - j.done }} left)</button></form>{% endif %}
+        </div>{% endif %}
+        {% endcall %}
+        {% endfor %}
+    </div>
+    <p class="text-xs text-zinc-500">A verdict needs the 95% interval (family bootstrap within categories, equal category weight) to exclude 50% and an exact sign test over decisive pairs with p &lt; 0.05. Judges see both orders of every pair; a pair is position-consistent when both orders agree. Agreement with people uses the majority vote per pair (ties and splits count as a tie); κ corrects for chance.</p>
+
+    {% set categories = people.categories.keys()|list %}
+    {% for j in summary.judges %}{% for c in j.preference.categories %}{% if c not in categories %}{% set _ = categories.append(c) %}{% endif %}{% endfor %}{% endfor %}
+    {% if categories %}
+    <div class="card p-4 overflow-x-auto">
+        <h2 class="text-lg font-semibold text-white mb-2">By category <span class="text-sm font-normal text-zinc-400">— preference for B</span></h2>
+        <table class="w-full text-sm">
+            <thead><tr><th class="text-left">Category</th><th class="text-left">People</th>{% for j in summary.judges %}<th class="text-left">{{ j.model_name }}</th>{% endfor %}</tr></thead>
+            <tbody>{% for c in categories|sort %}<tr>
+                <td>{{ c }}</td>
+                {% set pc = people.categories.get(c) %}<td>{% if pc %}{{ pct(pc.preference_b) }} <span class="text-xs text-zinc-500">({{ pc.a }}/{{ pc.tie }}/{{ pc.b }})</span>{% else %}<span class="text-zinc-600">—</span>{% endif %}</td>
+                {% for j in summary.judges %}{% set jc = j.preference.categories.get(c) %}<td>{% if jc %}{{ pct(jc.preference_b) }} <span class="text-xs text-zinc-500">({{ jc.a }}/{{ jc.tie }}/{{ jc.b }})</span>{% else %}<span class="text-zinc-600">—</span>{% endif %}</td>{% endfor %}
+            </tr>{% endfor %}</tbody>
+        </table>
+        <p class="text-xs text-zinc-500 mt-1">Counts are A wins / ties / B wins.</p>
+    </div>
+    {% endif %}
+
+    {% if is_admin %}
+    <div class="card p-4 space-y-3">
+        <h2 class="text-lg font-semibold text-white">Manage</h2>
+        <form method="POST" action="/studies/{{ study.id }}/judges" class="flex flex-wrap items-end gap-2" x-data="{ model: '', selfJudge: {{ self_judge|tojson }} }">
+            <div><label class="block text-sm text-zinc-300 mb-1">LLM judge ({{ judge_revision }})</label>
+                <select name="model_id" class="input-field" x-model="model" required>
+                    <option value="">Choose a model…</option>
+                    {% for m in models %}<option value="{{ m.id }}">{{ m.name }} ({{ m.model_id }})</option>{% endfor %}
+                </select></div>
+            <button class="btn-primary" type="submit">Start or resume judge</button>
+            <p class="w-full text-xs text-amber-400" x-show="selfJudge.includes(Number(model))" x-cloak>This model wrote one of the answers. Judges tend to prefer their own output; prefer an independent judge.</p>
+            <p class="w-full text-xs text-zinc-500">Two requests per pair (both orders), four at a time, temperature 0. Judging uses the judge's endpoint while it runs; avoid judging on a deployment that is being performance-tested.</p>
+        </form>
+        <div class="flex gap-2">
+            <form method="POST" action="/studies/{{ study.id }}/status"><input type="hidden" name="status" value="{{ 'closed' if study.status == 'open' else 'open' }}"><button class="btn-ghost">{{ 'Close voting' if study.status == 'open' else 'Reopen voting' }}</button></form>
+            <form method="POST" action="/studies/{{ study.id }}/delete" onsubmit="return confirm('Delete this study with all votes and judgments?')"><button class="btn-ghost text-red-400">Delete study</button></form>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card p-4 overflow-x-auto">
+        <h2 class="text-lg font-semibold text-white mb-1">Pairs</h2>
+        <p class="text-xs text-zinc-500 mb-2">Unblinded. If you plan to vote, vote before browsing the pairs.</p>
+        <table class="w-full text-sm">
+            <thead><tr><th class="text-left">Question</th><th class="text-left">Category</th><th class="text-left">People</th>{% for j in summary.judges %}<th class="text-left">{{ j.model_name }}</th>{% endfor %}</tr></thead>
+            <tbody>{% for p in pairs %}{% set h = summary.human_by_pair.get(p.id) %}<tr>
+                <td><a class="text-blue-400 font-mono text-xs" href="/studies/{{ study.id }}/pairs/{{ p.id }}">{{ p.question_id }}</a></td>
+                <td class="text-zinc-400">{{ p.category }}</td>
+                <td>{% if h %}{{ verdict_chip(h.label) }} <span class="text-xs text-zinc-500">{{ h.votes }} vote{{ 's' if h.votes != 1 }}{% if h.votes > 1 %}, {{ pct(h.value) }} for B{% endif %}</span>{% else %}<span class="text-zinc-600">—</span>{% endif %}</td>
+                {% for j in summary.judges %}{% set r = j.by_pair.get(p.id) %}<td>{% if r and r.verdict %}{{ verdict_chip(r.verdict) }}{% if not r.consistent %} <span class="text-xs text-amber-400" title="The two orders disagreed">±</span>{% endif %}{% elif r %}<span class="text-xs text-amber-400">error</span>{% else %}<span class="text-zinc-600">—</span>{% endif %}</td>{% endfor %}
+            </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

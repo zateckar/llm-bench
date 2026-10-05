@@ -689,3 +689,43 @@ Runs pin `usecase:<slug>@<version>`. The runner re-parses the stored document an
 The full design is in [docs/design-open-loop-load.md](docs/design-open-loop-load.md). The new `load` run mode (`open-loop-v1`, performance report schema 5, kind `open_loop`) complements the closed-loop modes, which are unchanged. Arrivals follow a seeded Poisson or gamma schedule derived from the seed, step index, rate and duration, so runs with equal settings receive identical traffic. Workloads are weighted request classes with input/output length histograms, a shared system prefix and per-class SLOs. Prompts have exact cl100k_base reference lengths, and output length is enforced through `max_tokens` on a counting prompt.
 
 The dispatcher never waits for completions. Arrivals beyond the in-flight cap are dropped and scored as misses. Dispatch lag is added to user-visible TTFT and latency to avoid coordinated omission. A step passes only when attainment meets the target overall and per class and the client kept up. A failing step bounds capacity only if dispatch kept up and the requests actually sent still missed the target; otherwise the sustainable rate is reported as a lower bound. Drift needs at least 20 arrivals in each compared third, and a latency rise counts only once it uses half of the tightest first-token SLO. The capacity revision is now `serving-capacity-v3`, with an `arrival` block for open-loop runs; closed-loop scenarios are unchanged. `selftest_load_test.py` covers validation, schedule statistics, exact prompt lengths, open-loop dispatch against a slow fake server, cap drops, SLO rules including lag, pass and conclusiveness rules, ladder stopping, cancellation, drift, sample thinning, submission round trips, runner persistence with URL sanitisation, run/offline/capacity pages and comparison compatibility. These tests use fake servers; they establish the protocol and accounting, not the capacity of any real deployment.
+
+## 2026-10-05 open-ended questions, blind A/B studies and LLM judges
+
+The full design is in [docs/design-ab-studies.md](docs/design-ab-studies.md).
+
+**Open-ended questions.** `open_ended` is a question kind, not a scoring evaluator. The name is registered so loaders and validators accept it, but it is deliberately absent from `EVALUATOR_VERSIONS`, so no protocol identity changes. Execution is the unchanged `bounded-quality-v1` protocol. A completed answer gets the outcome `recorded` and the scope `open_ended`. `Result.is_scored` is false for every open-ended question, including truncated or empty answers, so achievement, passes, missing-outcome bounds and paired comparisons never include it. Summaries add an `open_ended` block only when such questions exist. A run with only open-ended questions completes normally.
+
+**Built-in suite.** `assistant-open-v1` has 30 tasks, hash `0a7491b1367eba4c`. The rigorous suite (323 tasks, hash `7909c6325d1abd7b`) is unchanged.
+
+**Studies.** A study pairs two completed runs of one suite name by fingerprint, so versions of a use-case suite pair as well. Excluded from pairs:
+- answers lost to endpoint errors, cancellation or missing final answers
+- multi-turn tasks
+
+Truncated answers stay in, because users would see them. More than 1,000 pairs are reduced by a deterministic hash sample. Studies copy everything they display, and votes of deleted users are kept with a null user.
+
+**Judge (`pairwise-judge-v1`).**
+- Each answer is limited to 24,000 characters, with a truncation note to the judge.
+- Output is strict JSON with a `winner` of "1", "2" or "tie", parsed after reasoning removal.
+- Both orders are judged, and the mean of A=1 / tie=½ / B=0 decides.
+- After eight consecutive judge errors the judge stops.
+- Saved judgments make a resumed judge redo only missing or failed pairs.
+- Judges still running at startup are marked *interrupted*.
+
+**Statistics (`ab-stats-v1`).**
+- The preference for B averages multiple human votes on a pair first.
+- Categories weigh equally and families form clusters.
+- The interval is a 2,000-draw percentile bootstrap with a fixed seed; the test is an exact two-sided sign test on decisive pairs.
+- A preference needs the interval to exclude ½ and p < 0.05.
+- Judge diagnostics are position consistency and the longer answer's share of decisive wins.
+- Agreement with people uses the majority human label per pair (both-bad and splits count as ties) and Cohen's κ over {A, B, tie}.
+
+`selftest_ab_studies.py` covers:
+- **Open-ended handling:** outcomes and summaries, use-case validation, and the built-in suite hash.
+- **Runs and studies:** open-ended-only runs through the real runner, pairing, the cap and creation rules.
+- **Voting:** blind voting with fewest-votes assignment, side mapping, finality, closed studies and anonymised deleted users.
+- **Judging:** prompts, parsing and combination, background judging with errors, resume, cancel, the consecutive-error stop and startup interruption.
+- **Statistics:** checked against hand-computed values.
+- **Pages and access:** results, voting and pair pages, export, the compare-page entry point, admin-only actions and login redirects.
+
+As with the other suites, these tests use fake models; they validate the procedure, not the preferences of any real users or judges.

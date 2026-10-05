@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Blind A/B studies - LLM Bench{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div>
+        <h1 class="text-xl font-bold text-white">Blind A/B studies</h1>
+        <p class="text-zinc-400 mt-1">Pairwise comparisons of two runs' answers to the same questions. Colleagues vote blind: they never see which model wrote an answer. LLM judges compare the same pairs in both orders, so the judges can be checked against people.</p>
+    </div>
+
+    {% if studies %}
+    <div class="card overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead><tr><th class="text-left">Study</th><th class="text-left">A</th><th class="text-left">B</th><th class="text-left">Suite</th><th class="text-left">Pairs</th><th class="text-left">Votes</th><th class="text-left">Judges</th><th class="text-left"></th></tr></thead>
+            <tbody>
+            {% for s in studies %}
+            <tr class="{% if s.status != 'open' %}opacity-70{% endif %}">
+                <td><a class="text-blue-400" href="/studies/{{ s.id }}">{{ s.name }}</a><p class="text-xs text-zinc-500">{{ scopes[s.scope] }}{% if s.status != 'open' %} · closed{% endif %}</p></td>
+                <td class="text-zinc-300">{{ s.label_a }}</td>
+                <td class="text-zinc-300">{{ s.label_b }}</td>
+                <td class="font-mono text-xs text-zinc-400">{{ s.suite_name }}</td>
+                <td>{{ s.pairs }}</td>
+                <td>{{ s.votes }}</td>
+                <td>{{ s.judges }}</td>
+                <td>{% if s.status == 'open' %}<a class="btn-primary text-xs" href="/studies/{{ s.id }}/vote">Vote</a>{% endif %}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card p-6 text-center text-zinc-500">No studies yet.{% if is_admin %} Run the “Open-ended assistant requests” suite (or a use-case suite with open-ended questions) on two models, then create a study below.{% endif %}</div>
+    {% endif %}
+
+    {% if is_admin %}
+    <div class="card p-4 space-y-3">
+        <h2 class="text-lg font-semibold text-white">Create a study</h2>
+        <p class="text-sm text-zinc-400">Choose two completed runs of the same suite. Pairs are questions both runs answered; at most {{ max_pairs }} pairs, sampled deterministically. Answers are copied into the study, without reasoning blocks.</p>
+        {% if error %}<div class="p-3 rounded-md bg-red-900/30 border border-red-800 text-sm text-red-300">{{ error }}</div>{% endif %}
+        {% if runs|length < 2 %}
+        <p class="text-sm text-zinc-500">At least two completed runs with quality answers are needed.</p>
+        {% else %}
+        <form method="POST" action="/studies" class="grid md:grid-cols-2 gap-3">
+            {% for side in ['a', 'b'] %}
+            <div><label class="block text-sm text-zinc-300 mb-1">Run {{ side|upper }}</label>
+                <select name="run_{{ side }}" class="input-field" required>
+                    <option value="">Choose a run…</option>
+                    {% for r in runs %}<option value="{{ r.id }}" {% if form['run_' ~ side] == r.id %}selected{% endif %}>{{ r.label }} · {{ r.suite }} · {{ r.answers }} answers{% if r.recorded %} ({{ r.recorded }} open-ended){% endif %}</option>{% endfor %}
+                </select></div>
+            {% endfor %}
+            <div><label class="block text-sm text-zinc-300 mb-1">Questions</label>
+                <select name="scope" class="input-field">{% for key, label in scopes.items() %}<option value="{{ key }}" {% if form.scope == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+                <p class="text-xs text-zinc-500 mt-1">“All paired questions” also includes single-turn questions with answer keys; their keys are not shown to voters or judges.</p></div>
+            <div><label class="block text-sm text-zinc-300 mb-1">Name <span class="text-zinc-500">(optional)</span></label>
+                <input name="name" class="input-field" maxlength="120" value="{{ form.name or '' }}" placeholder="e.g. Llama 70B FP8 vs BF16 — workplace requests"></div>
+            <div class="md:col-span-2"><button class="btn-primary" type="submit">Create study</button></div>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -18,6 +18,9 @@ QUALITY_WORKERS = 4
 
 
 def question_scope(q):
+    if q.evaluator == "open_ended":
+        # No answer key: recorded for pairwise A/B studies, never scored.
+        return "open_ended"
     return "compliance" if q.category == "Creative Writing" else "capability"
 
 

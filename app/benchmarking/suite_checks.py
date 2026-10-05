@@ -563,7 +563,21 @@ def check_refusal(report: Report, where: str, expected: object) -> None:
         check_regex(report, where, pattern, f"forbidden #{i}")
 
 
+def check_open_ended(report: Report, where: str, expected: object) -> None:
+    if not isinstance(expected, dict) or set(expected) - {"criteria", "reference"}:
+        report.error(where, "open_ended expects a mapping with `criteria` and optional `reference`")
+        return
+    criteria = expected.get("criteria")
+    if (not isinstance(criteria, list) or not 1 <= len(criteria) <= 12
+            or any(not isinstance(c, str) or not c.strip() or len(c) > 500 for c in criteria)):
+        report.error(where, "open_ended `criteria` must list 1-12 non-empty statements of at most 500 characters")
+    reference = expected.get("reference")
+    if reference is not None and (not isinstance(reference, str) or not reference.strip() or len(reference) > 20_000):
+        report.error(where, "open_ended `reference` must be non-empty text of at most 20,000 characters")
+
+
 VALIDATORS = {
+    "open_ended": check_open_ended,
     "contains_keywords": check_contains_keywords,
     "format_check": check_format_check,
     "code_exec": check_code_exec,

@@ -1,0 +1,23 @@
+{% macro pct(value) %}{{ '%.0f%%'|format(value * 100) if value is not none else 'n/a' }}{% endmacro %}
+
+{% macro verdict_text(p, study) %}{% if p.verdict == 'b' %}<span class="text-emerald-300">{{ study.label_b }} preferred</span>{% elif p.verdict == 'a' %}<span class="text-emerald-300">{{ study.label_a }} preferred</span>{% elif p.verdict == 'no_data' %}<span class="text-zinc-500">No verdicts yet</span>{% else %}<span class="text-zinc-300">No clear preference</span>{% endif %}{% endmacro %}
+
+{% macro split_bar(p) %}{% set n = p.a + p.b + p.tie %}{% if n %}
+<div class="flex h-2 rounded overflow-hidden bg-zinc-800" title="A {{ p.a }} · tie {{ p.tie }} · B {{ p.b }}">
+  <div class="bg-sky-500" style="width: {{ 100 * p.a / n }}%"></div>
+  <div class="bg-zinc-500" style="width: {{ 100 * p.tie / n }}%"></div>
+  <div class="bg-violet-500" style="width: {{ 100 * p.b / n }}%"></div>
+</div>{% endif %}{% endmacro %}
+
+{% macro preference_card(title, subtitle, p, study) %}
+<div class="card p-4 space-y-2">
+  <div class="flex justify-between gap-2"><h3 class="font-semibold text-white">{{ title }}</h3><span class="text-xs text-zinc-500">{{ subtitle }}</span></div>
+  <p class="text-lg font-semibold">{{ verdict_text(p, study) }}</p>
+  <p class="text-sm text-zinc-300">Preference for B: <strong>{{ pct(p.preference_b) }}</strong>{% if p.ci95 %} <span class="text-zinc-400">(95% interval {{ pct(p.ci95[0]) }}–{{ pct(p.ci95[1]) }})</span>{% endif %}{% if p.p_value is not none %} · sign test p = {{ '%.3g'|format(p.p_value) }}{% endif %}</p>
+  {{ split_bar(p) }}
+  <p class="text-xs text-zinc-400"><span class="text-sky-400">A {{ p.a }}</span> · ties {{ p.tie }} · <span class="text-violet-400">B {{ p.b }}</span> over {{ p.pairs }} pair{{ 's' if p.pairs != 1 }}</p>
+  {{ caller() if caller is defined else '' }}
+</div>
+{% endmacro %}
+
+{% macro verdict_chip(v) %}{% if v == 'a' %}<span class="text-sky-400">A</span>{% elif v == 'b' %}<span class="text-violet-400">B</span>{% elif v == 'tie' %}<span class="text-zinc-300">tie</span>{% elif v == 'both_bad' %}<span class="text-amber-400">both bad</span>{% else %}<span class="text-zinc-600">—</span>{% endif %}{% endmacro %}

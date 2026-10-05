@@ -16,6 +16,7 @@
 <p class="text-sm text-zinc-300">{% for name, count in qs.outcomes.items() %}{{ name|replace('_',' ') }}: {{ count }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
 <p class="text-xs text-zinc-500">{{ qs.confidence_method }} Output-limit and repetition failures stay scored failures.</p>
 {% if qs.interactive.tasks %}<p class="text-sm text-zinc-300">Interactive tasks: {{ qs.interactive.successes }}/{{ qs.interactive.tasks }} succeeded · {{ qs.interactive.calls }} calls · {{ qs.interactive.unnecessary_calls }} excess calls · {{ qs.interactive.violations }} authorization violations.</p>{% endif %}
+{% if qs.open_ended %}<p class="text-sm text-zinc-300">Open-ended: {{ qs.open_ended.recorded }}/{{ qs.open_ended.count }} answers recorded for <a class="text-blue-400" href="/studies">blind A/B studies</a>. They have no answer key and are not part of the scores above.</p>{% endif %}
 {% if qs.native %}{% from "quality_macros.html" import native_diagnostics %}<div class="text-zinc-300">{{ native_diagnostics(qs.native) }}</div>{% endif %}
 {% if qs.context_quality %}<table class="w-full text-sm"><thead><tr><th>Reference input tokens</th><th>Evaluated</th><th>Criterion achievement</th><th>Unsupported</th></tr></thead><tbody>
 {% for point in qs.context_quality %}<tr><td>{{ point.reference_tokens }}</td><td>{{ point.scored }}/{{ point.count }}</td><td>{{ '%.1f%%'|format(point.accuracy*100) if point.accuracy is not none else 'n/a' }}</td><td>{{ point.unsupported }}</td></tr>{% endfor %}</tbody></table>{% endif %}

@@ -287,11 +287,15 @@ class Result:
     def is_scored(self) -> bool:
         # A request field rejected by the deployment (for example tool_choice
         # without a tool parser) is a measured capability failure, not an outage.
+        # Open-ended answers have no key: they are recorded for A/B studies only.
+        if self.question.evaluator == "open_ended":
+            return False
         return (self.metrics.ok or self.outcome == "feature_rejected") and self.outcome not in {
             "endpoint_error",
             "unsupported_context",
             "evaluator_error",
             "cancelled",
+            "recorded",
         }
 
     @property

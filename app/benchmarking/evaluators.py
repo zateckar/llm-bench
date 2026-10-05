@@ -2194,7 +2194,17 @@ def eval_regex_all(response: str, expected: Any, **_) -> tuple[float, str]:
     return score, f"Missing {len(missed)}/{len(patterns)}: " + ", ".join(m[:40] for m in missed[:4])
 
 
+def eval_open_ended(response: str, expected, **_kwargs) -> tuple[float, str]:
+    """Open-ended answers have no key: runs record them for pairwise A/B studies.
+
+    score_response handles them before evaluators run; this entry only lets the
+    loaders recognise the name. It is deliberately absent from EVALUATOR_VERSIONS,
+    so adding it changes no protocol identity."""
+    return 0.0, "Open-ended answer recorded for pairwise comparison"
+
+
 EVALUATORS: dict[str, Callable] = {
+    "open_ended": eval_open_ended,
     "exact_match": eval_exact_match,
     "mcq": eval_mcq,
     "contains_keywords": eval_contains_keywords,

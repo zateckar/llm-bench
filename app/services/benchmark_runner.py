@@ -439,7 +439,7 @@ def _run_benchmark_impl(run_id, model, mode, max_concurrency, suite=None, load=N
         )
         if not _run_is_active(run_id):
             return
-        if not any(r.is_scored for r in results):
+        if not any(r.is_scored or r.outcome == "recorded" for r in results):
             message = message or f"No questions could be scored ({len(results)} outcomes)."
             if results:
                 message += " " + results[0].detail
