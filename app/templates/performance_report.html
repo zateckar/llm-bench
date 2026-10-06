@@ -2,8 +2,8 @@
 <style>{% include "performance_styles.css" %}</style>
 <section class="measurement-view performance-page" aria-label="Performance results">
     <header class="perf-page-heading">
-        <div><p class="perf-eyebrow">MEASURED PERFORMANCE</p><h2>Latency, context &amp; capacity</h2>
-        <p class="perf-intro">The standard performance test runs three stages in order: latency at increasing concurrency, latency as the input grows to the usable context, and sustainable arrival rate under SLOs.</p></div>
+        <div><p class="perf-eyebrow">MEASURED PERFORMANCE</p><h2>Latency, limits &amp; users</h2>
+        <p class="perf-intro">The standard performance test runs three stages in order: latency at increasing concurrency, limits by input context and concurrency, and the number of simulated chat and agent users served within their SLO. Earlier runs also measured the sustainable arrival rate in a capacity stage, shown when present.</p></div>
         {% if performance_json_url %}<a class="btn-ghost perf-download" href="{{ performance_json_url }}" download>Download JSON <span aria-hidden="true">↓</span></a>{% endif %}
     </header>
 
@@ -23,6 +23,6 @@
 
     {% with capacity_views = performance.capacity_views %}{% include "capacity_report.html" %}{% endwith %}
     {% else %}
-    <div class="perf-empty"><h3>No performance measurements</h3><p>Run a benchmark that measures performance to see latency, context and capacity results.</p></div>
+    <div class="perf-empty"><h3>No performance measurements</h3><p>Run a benchmark that measures performance to see latency, context and users results.</p></div>
     {% endif %}
 </section>

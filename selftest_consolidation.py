@@ -16,7 +16,7 @@ from fastapi import FastAPI
 
 from app import config as app_config, database
 from app.benchmarking import (load_test, load_workload, open_suite, perf_sweep, quality_suite, safety_suite,
-                              staged_performance as staged, standard_suite, tool_suite)
+                              session_load, session_workload, staged_performance as staged, standard_suite, tool_suite)
 from app.benchmarking.models import Question
 from app.benchmarking.quality_report import area_summary
 from app.benchmarking.suites import DEFAULT_SUITE, RETIRED_SUITES, SUITE_NAMES, get_suite
@@ -27,7 +27,8 @@ from app.storage import DETECT_TYPES
 from app.templates_config import templates
 from selftest_benchmark_runner import FakeClient as QualityClient
 from selftest_capacity import run as latency_run
-from selftest_load_test import FakeServer, workload
+from selftest_load_test import CONFIG as LOAD_CONFIG, FakeServer, workload
+from selftest_sessions import TEST_MODEL, FakeServer as SessionServer
 from selftest_sweep import FakeClient as SweepClient
 
 ROOT = Path(__file__).parent
@@ -158,6 +159,15 @@ def latency_result(ok=True):
                            telemetry=None, to_dict=lambda: perf)
 
 
+def load_test_report():
+    """An open-loop report, as the capacity stage of standard runs before v4 stored it."""
+    with patch.object(load_workload, "MIN_STEP_SECONDS", 1):
+        settings = load_workload.parse_settings(
+            {"preset": "custom", "workload": workload(ttft=400), "rates": [2], "step_seconds": 1})
+        return load_test.run_load_test(LOAD_CONFIG, settings, 4,
+                                       client_factory=FakeServer(slots=2, service=0.05)).to_dict()
+
+
 class StagedRunnerTests(DatabaseCase):
     def setUp(self):
         super().setUp()
@@ -168,13 +178,19 @@ class StagedRunnerTests(DatabaseCase):
             patch("app.services.url_guard.validate_endpoint"),
             patch("app.services.monitoring.capture_for_run", side_effect=self.snapshot),
             patch.object(perf_sweep, "SweepClient", SweepClient),
-            patch.object(load_test, "ChatClient", FakeServer(slots=2, service=0.05)),
-            patch.object(load_workload, "MIN_STEP_SECONDS", 1),
             patch("app.benchmarking.llm_client.ChatClient", QualityClient),
+            patch.object(session_load, "ChatClient", SessionServer),
+            patch.object(session_workload, "MIN_WARMUP_SECONDS", 1),
+            patch.object(session_workload, "MIN_MEASURE_SECONDS", 1),
         ):
             self.stack.enter_context(patcher)
-        self.load = load_workload.parse_settings(
-            {"preset": "custom", "workload": workload(ttft=400), "rates": [2], "step_seconds": 1}).model_dump()
+        SessionServer.reset()
+        # The capacity stage is no longer run.
+        self.open_loop = self.stack.enter_context(patch.object(load_test, "run_load_test"))
+        self.addCleanup(lambda: self.open_loop.assert_not_called())
+        # One short level of two users at a 2k cap keeps the users stage quick.
+        self.users = {"preset": "custom", "model": TEST_MODEL, "context_caps": [2048], "start_users": 2,
+                      "max_users": 2, "warmup_seconds": 1, "measure_seconds": 1, "saturation": False}
         self.declared = 32768
 
     def snapshot(self, run_id, model):
@@ -191,40 +207,53 @@ class StagedRunnerTests(DatabaseCase):
         return self.sql("SELECT * FROM test_runs WHERE id=?", (run_id,))[0]
 
     def options(self, **kwargs):
-        return run_submission.make_run_options(**{"mode": "performance", "load": self.load, **kwargs})
+        return run_submission.make_run_options(**{"mode": "performance", "users": self.users, **kwargs})
 
     def test_three_stages_into_one_report(self):
         with patch.object(runner, "run_perf_suite", return_value=latency_result()) as latency:
-            run = self.start(self.options(max_concurrency=4))
+            run = self.start(self.options(max_concurrency=4, context_concurrency=4, target_ttft_ms=1500))
         self.assertEqual(latency.call_args.args[1].max_concurrency, 4)
         self.assertEqual(run["status"], "completed", run["error_message"])
         perf = json.loads(run["perf_json"])
         self.assertEqual((perf["schema_version"], perf["kind"], perf["revision"]), (6, "staged", staged.REVISION))
-        self.assertEqual(list(perf["stages"]), ["latency", "context", "capacity"])
+        self.assertEqual(list(perf["stages"]), ["latency", "context", "users"])
+        self.assertNotIn("capacity", perf["protocol"])
         self.assertTrue(perf["finished"])
+        users = perf["stages"]["users"]
+        self.assertEqual((users["schema_version"], users["kind"], users["protocol"]["context_caps"]),
+                         (7, "sessions", [2048]))
+        self.assertEqual(users["summary"]["headline"]["users"], 2)
+        self.assertEqual(perf["protocol"]["users"]["context_caps"], [2048])
         self.assertIsNone(perf["running_stage"])
         # The context ladder ends at the declared limit minus output and framing headroom.
         context = perf["protocol"]["context"]
         self.assertEqual((context["limit"], context["limit_source"], context["contexts"], context["effort"]),
                          (28160, "declared", [256, 8192, 28160], "default"))
+        self.assertEqual((context["concurrencies"], context["targets"]["ttft_p95_ms"]), ([1, 2, 4], 1500))
         sweep = perf["stages"]["context"]
-        self.assertEqual((sweep["protocol"]["contexts"], sweep["protocol"]["candidate_efforts"]),
-                         ([256, 8192, 28160], ["default"]))
-        cells = self.sql("SELECT context_tokens, concurrency FROM performance_cells ORDER BY context_tokens")
-        self.assertEqual([(c["context_tokens"], c["concurrency"]) for c in cells], [(256, 1), (8192, 1), (28160, 1)])
-        self.assertGreater(perf["stages"]["capacity"]["steps"][0]["completed"], 0)
-        self.assertEqual(perf["protocol"]["capacity"]["in_flight_cap"], 256)
-        # A context-limit override wins over the declared limit.
+        self.assertEqual((sweep["protocol"]["contexts"], sweep["protocol"]["candidate_efforts"],
+                          sweep["protocol"]["revision"]), ([256, 8192, 28160], ["default"], "context-limits-v1"))
+        cells = self.sql("SELECT context_tokens, concurrency FROM performance_cells ORDER BY context_tokens, concurrency")
+        self.assertEqual([(c["context_tokens"], c["concurrency"]) for c in cells],
+                         [(n, c) for n in (256, 8192, 28160) for c in (1, 2, 4)])
+        # A context-limit override wins over the declared limit. A queued run from before v4 still
+        # carries capacity settings; they are ignored.
         self.sql("DELETE FROM performance_cells")
         with patch.object(runner, "run_perf_suite", return_value=latency_result()):
-            run = self.start(self.options(context_max=8192), run_id=2)
+            run = self.start({**self.options(context_max=8192, context_concurrency=2),
+                              "load": load_workload.default_settings(), "in_flight_cap": 64}, run_id=2)
         self.assertEqual(json.loads(run["perf_json"])["protocol"]["context"]["contexts"], [256, 8192])
+        self.assertEqual(list(json.loads(run["perf_json"])["stages"]), ["latency", "context", "users"])
 
-        # One staged run is latency, context and capacity evidence on the scorecard.
+        # One staged run is latency, context and users evidence on the scorecard.
         evidence_ = scorecard.model_evidence(scorecard.collect(), 1)
         self.assertEqual((evidence_["latency"]["run_id"], evidence_["context"]["run_id"]), (2, 2))
         self.assertEqual(evidence_["context"]["tokens"], 8192)
-        self.assertEqual(list(evidence_["capacity"]), ["custom:" + perf["stages"]["capacity"]["protocol"]["workload_hash"]])
+        self.assertEqual(evidence_["capacity"], {})
+        users_key = "custom:" + users["protocol"]["user_model_hash"]
+        self.assertEqual(list(evidence_["users"]), [users_key])
+        self.assertEqual(evidence_["users"][users_key]["results"][0]["context_cap"], 2048)
+        self.assertEqual(evidence_["users"][users_key]["run_id"], 2)
 
     def test_failing_stage_does_not_stop_the_next(self):
         with patch.object(runner, "run_perf_suite", return_value=latency_result()), \
@@ -234,7 +263,7 @@ class StagedRunnerTests(DatabaseCase):
         perf = json.loads(run["perf_json"])
         self.assertEqual(run["status"], "failed")
         self.assertEqual(run["error_message"], "Context stage: sweep broke")
-        self.assertEqual(list(perf["stages"]), ["latency", "capacity"])
+        self.assertEqual(list(perf["stages"]), ["latency", "users"])
         self.assertEqual(perf["stage_errors"], {"context": "Context stage: sweep broke"})
         self.assertFalse(perf["finished"])
 
@@ -257,7 +286,7 @@ class StagedRunnerTests(DatabaseCase):
         standard_suite._provenance.cache_clear()
         with patch.object(standard_suite, "load_questions", return_value=questions), \
                 patch.object(runner, "run_perf_suite", return_value=latency_result()):
-            run = self.start(run_submission.make_run_options(mode="both", load=self.load))
+            run = self.start(run_submission.make_run_options(mode="both", users=self.users))
         self.assertEqual((run["status"], run["scored_questions"]), ("completed", 4), run["error_message"])
         self.assertEqual(json.loads(run["quality_config_json"])["revision"], "standard-v1")
         quality = json.loads(run["quality_json"])
@@ -266,8 +295,10 @@ class StagedRunnerTests(DatabaseCase):
         self.assertEqual(json.loads(run["perf_json"])["kind"], "staged")
         # The downloadable report shows the areas and all three stages of the same run.
         html = html_reports.render_report([asyncio.run(html_reports.load_run(1))])
-        for text in ("Area · Reasoning &amp; knowledge", "Area · Safety &amp; language", "STAGE 3 OF 3"):
+        for text in ("Area · Reasoning &amp; knowledge", "Area · Safety &amp; language", "STAGE 3 OF 3",
+                     "Users at SLO by context cap"):
             self.assertIn(text, html)
+        self.assertNotIn('id="perf-stage-capacity"', html)
 
 
 class ViewTests(DatabaseCase):
@@ -290,10 +321,11 @@ class ViewTests(DatabaseCase):
     def test_stage_views_align_staged_and_historical_runs(self):
         historical = {**latency_run(), "id": 2, "label": "#2 fixed"}
         view = html_reports.staged_view([self.staged_run(), historical], offline=True)
-        latency, context, capacity = view["stages"]
+        # The retired capacity stage appears only when a run measured it.
+        latency, context, users = view["stages"]
+        self.assertEqual((users["key"], users["view"]), ("users", None))
         self.assertEqual((latency["key"], latency["runs"], latency["missing"]), ("latency", ["#1 staged", "#2 fixed"], []))
         self.assertEqual((context["runs"], context["missing"]), (["#1 staged"], ["#2 fixed"]))
-        self.assertIsNone(capacity["view"])
         self.assertEqual(len(latency["view"]["load_views"]), 2)
         self.assertEqual(latency["view"]["capacity_views"], [])  # computed once per run instead
         self.assertEqual([c["label"] for c in view["capacity_views"]], ["#1 staged", "#2 fixed"])
@@ -302,6 +334,10 @@ class ViewTests(DatabaseCase):
         for text in ("STAGE 1 OF 3", "Latency by concurrency", "STAGE 3 OF 3", "None of these runs measured this stage",
                      "Serving capacity", "Not measured in #2 fixed"):
             self.assertIn(text, html)
+        old = self.staged_run()
+        old["perf"]["stages"]["capacity"] = load_test_report()
+        keys = [s["key"] for s in html_reports.staged_view([old, historical], offline=True)["stages"]]
+        self.assertEqual(keys, ["latency", "context", "capacity", "users"])
         self.assertNotIn("New context sweep", html)
         empty = templates.get_template("performance_report.html").render(
             performance=html_reports.staged_view([{"label": "q", "perf": {}}]), offline=True)

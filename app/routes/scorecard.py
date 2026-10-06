@@ -41,9 +41,10 @@ async def _profile(profile_id):
 
 
 def _editor_options(collected):
-    """Choices for the gate editor: scored suites, workloads and categories with evidence."""
+    """Choices for the gate editor: scored suites, workloads, user models and categories with evidence."""
     from app.benchmarking import usecase_suites
     from app.benchmarking.load_workload import PRESET_LABELS, PRESETS
+    from app.benchmarking.session_workload import PRESET_LABELS as USER_PRESET_LABELS, PRESETS as USER_PRESETS
     from app.benchmarking.suites import SUITE_NAMES
 
     suites = {key: scorecard.suite_label(key) for key in SUITE_NAMES}
@@ -53,6 +54,8 @@ def _editor_options(collected):
     suites.update({s["key"]: s["label"] for s in collected["suites"]})
     workloads = {key: PRESET_LABELS[key] for key in PRESETS}
     workloads.update({w["key"]: w["label"] for w in collected["workloads"]})
+    user_models = {key: USER_PRESET_LABELS[key] for key in USER_PRESETS}
+    user_models.update({u["key"]: u["label"] for u in collected.get("user_models", [])})
     categories = {}
     for model in collected["models"]:
         for key, item in model["quality"].items():
@@ -60,6 +63,7 @@ def _editor_options(collected):
     return {
         "suites": [{"key": k, "label": v} for k, v in suites.items()],
         "workloads": [{"key": k, "label": v} for k, v in workloads.items()],
+        "user_models": [{"key": k, "label": v} for k, v in user_models.items()],
         "categories": {k: sorted(v) for k, v in categories.items()},
         "latency_metrics": [{"key": k, "label": v[0], "unit": v[1], "lower": v[2]}
                             for k, v in decision_gates.LATENCY_METRICS.items()],

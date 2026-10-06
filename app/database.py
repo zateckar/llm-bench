@@ -24,6 +24,7 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("models", "temperature", "REAL NOT NULL DEFAULT 0"),
     ("models", "reasoning_effort", "TEXT"),
     ("models", "b300_metrics_model", "TEXT"),
+    ("models", "b300_gpus", "TEXT"),
     ("test_runs", "metrics_config_json", "TEXT"),
     ("test_runs", "decoding_config_json", "TEXT"),
     ("test_runs", "quality_config_json", "TEXT"),

@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS models (
     temperature REAL NOT NULL DEFAULT 0,
     reasoning_effort TEXT,
     b300_metrics_model TEXT,
+    b300_gpus TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

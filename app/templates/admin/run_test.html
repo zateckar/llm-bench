@@ -27,46 +27,41 @@
             const r = JSON.parse(JSON.stringify(src));
             // Specs of former performance tests map to the standard test.
             if (r.mode === 'sweep' || r.mode === 'load') r.mode = 'performance';
-            delete r.performance; delete r.sweep_rounds; delete r.sweep_output_tokens;
+            // The capacity stage was dropped; its settings in older specs are ignored.
+            delete r.performance; delete r.sweep_rounds; delete r.sweep_output_tokens; delete r.load; delete r.in_flight_cap;
             r.suite ??= 'standard';
             r.max_concurrency ??= 8;
-            r.in_flight_cap ??= this.loadForm.default_in_flight;
+            r.context_concurrency ??= this.stages.default_context_concurrency;
+            r.target_ttft_ms ??= this.stages.default_target_ttft_ms;
+            r.target_output_rate ??= this.stages.default_target_output_rate;
             r._contextOverride = r.context_max != null;
             r.context_max ??= this.stages.default_context;
             r.repeats ??= 1;
             r.model_id ??= '';
-            r.load ??= JSON.parse(JSON.stringify(this.loadForm.defaults));
-            r._ratesText = r.load.rates.join(', ');
-            r._workloadText = this.workloadJson(r.load.workload);
+            r.users ??= JSON.parse(JSON.stringify(this.usersForm.defaults));
+            r._capsText = (r.users.context_caps || []).join(', ');
+            r._userModelText = this.workloadJson(r.users.model);
             r._advanced = false;
             r._key = this.nextKey++;
             return r;
         },
-        loadForm: {{ load_form | tojson | forceescape }},
+        usersForm: {{ users_form | tojson | forceescape }},
+        setUserPreset(run) {
+            const preset = this.usersForm.presets[run.users.preset];
+            if (preset) { run.users.model = JSON.parse(JSON.stringify(preset.model)); run._userModelText = this.workloadJson(preset.model); }
+        },
+        usersSpec(run) {
+            const users = {...run.users, context_caps: String(run._capsText).split(/[\s,;]+/).filter(Boolean).map(Number)};
+            if (users.preset === 'custom') {
+                try { users.model = JSON.parse(run._userModelText); } catch (e) { users.model = run._userModelText; }
+            } else { delete users.model; }
+            return users;
+        },
+        usersSize(run) {
+            const level = (Number(run.users.warmup_seconds) || 0) + (Number(run.users.measure_seconds) || 0);
+            return 'Each level takes about ' + Math.round(level / 60 * 10) / 10 + ' min plus the time for every user’s first answer and the last answers to finish. A search usually needs 5–8 levels for the first cap and 1–3 for each larger cap.';
+        },
         workloadJson(workload) { return JSON.stringify(workload, null, 2).replace(/\[\s+([-\d.]+),\s+([-\d.]+),\s+([-\d.]+)\s+\]/g, '[$1, $2, $3]'); },
-        setPreset(run) {
-            const preset = this.loadForm.presets[run.load.preset];
-            if (preset) { run.load.workload = JSON.parse(JSON.stringify(preset.workload)); run._workloadText = this.workloadJson(preset.workload); }
-        },
-        setLoadShape(run, shape) {
-            if (shape === 'soak') { const rates = this.parseRates(run); run._ratesText = String(rates.length ? rates[rates.length - 1] : 1); run.load.step_seconds = 3600; }
-            else { run._ratesText = this.loadForm.defaults.rates.join(', '); run.load.step_seconds = this.loadForm.defaults.step_seconds; }
-        },
-        parseRates(run) { return String(run._ratesText).split(/[\s,;]+/).filter(Boolean).map(Number); },
-        loadSize(run) {
-            const rates = this.parseRates(run), step = Number(run.load.step_seconds) || 0;
-            if (!rates.length || rates.some(r => !(r > 0))) return 'Enter increasing arrival rates in requests per second, e.g. 0.5, 1, 2, 4.';
-            const arrivals = Math.round(rates.reduce((a, b) => a + b, 0) * step), minutes = rates.length * step / 60;
-            return rates.length + ' step' + (rates.length > 1 ? 's' : '') + ' × ' + step.toLocaleString() + ' s ≈ ' + minutes.toLocaleString(undefined, {maximumFractionDigits: 1}) +
-                   ' min of arrivals plus drain time, about ' + arrivals.toLocaleString() + ' requests if no step stops the ladder early.';
-        },
-        loadSpec(run) {
-            const load = {...run.load, rates: this.parseRates(run)};
-            if (load.preset === 'custom') {
-                try { load.workload = JSON.parse(run._workloadText); } catch (e) { load.workload = run._workloadText; }
-            } else { delete load.workload; }
-            return load;
-        },
         setModel(run, el) {
             const v = el.value;
             run.model_id = v === '' ? null : parseInt(v, 10);
@@ -108,8 +103,10 @@
             const spec = {model_id: run.model_id, mode: run.mode, max_concurrency: run.max_concurrency};
             if (this.usesQuality(run)) spec.suite = run.suite;
             if (this.usesPerf(run)) {
-                spec.in_flight_cap = run.in_flight_cap;
-                spec.load = this.loadSpec(run);
+                spec.context_concurrency = run.context_concurrency;
+                spec.target_ttft_ms = run.target_ttft_ms;
+                spec.target_output_rate = run.target_output_rate;
+                spec.users = this.usersSpec(run);
                 if (run._contextOverride) spec.context_max = run.context_max;
             }
             if (Number(run.repeats) > 1) spec.repeats = Number(run.repeats);
@@ -121,7 +118,7 @@
         <p class="text-zinc-400 mt-1">Select a model and start now, or choose a start time. Add runs to compare several models. Runs execute one at a time, in the order listed.</p>
     </div>
 
-    <p class="text-sm text-zinc-400">Every run uses the same standard settings, so results compare across models. <strong class="text-zinc-300">Quality</strong> runs the standard suite of {{ question_count }} tasks ({% for area in standard_areas %}{{ area.label|lower }} {{ area.questions }}{% if not loop.last %}, {% endif %}{% endfor %}) or a <a class="text-blue-400" href="/admin/suites">use-case suite</a> uploaded by an application team. <strong class="text-zinc-300">Performance</strong> runs one test in three stages: {% for stage in stages.stages %}{{ stage.label|lower }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+    <p class="text-sm text-zinc-400">Every run uses the same standard settings, so results compare across models. <strong class="text-zinc-300">Quality</strong> runs the standard suite of {{ question_count }} tasks ({% for area in standard_areas %}{{ area.label|lower }} {{ area.questions }}{% if not loop.last %}, {% endif %}{% endfor %}) or a <a class="text-blue-400" href="/admin/suites">use-case suite</a> uploaded by an application team. <strong class="text-zinc-300">Performance</strong> runs one test in {{ stages.stages|length }} stages: {% for stage in stages.stages %}{{ stage.label|lower }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>
     {% if suite_error %}<p class="text-red-400">{{ suite_error }}</p>{% endif %}
 
     {% if not models %}
@@ -174,7 +171,7 @@
                     <div><label class="block text-xs text-zinc-400">Repeats</label><input type="number" min="1" max="{{ max_repeats }}" x-model.number="run.repeats" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1" x-show="run.repeats > 1">Runs this configuration <span x-text="run.repeats"></span> times with model seeds 0–<span x-text="run.repeats - 1"></span> to measure run-to-run variability. Quality mode is usually enough for repeats.</p></div>
                     <div x-show="usesQuality(run) && run.suite === 'standard'" class="sm:col-span-2 text-xs text-zinc-400"><span class="text-zinc-300">Areas:</span> {% for area in standard_areas %}{{ area.label }} · {{ area.questions }}{% if not area.scored %} (recorded for blind A/B studies, not scored){% endif %}{% if not loop.last %} &nbsp;|&nbsp; {% endif %}{% endfor %}. The headline score weights every category equally; each area is also reported on its own.</div>
                     <div x-show="usesPerf(run)" class="sm:col-span-2 rounded-md border border-violet-900 bg-violet-950/20 p-3 text-xs text-zinc-300 space-y-1">
-                        <p class="text-zinc-200 font-medium">Performance · three stages, one report · about 20–40 minutes</p>
+                        <p class="text-zinc-200 font-medium">Performance · {{ stages.stages|length }} stages, one report · usually 1.5–3 hours, depending on where the limits are</p>
                         <template x-for="(stage, n) in stages.stages" :key="stage.key"><p><span class="text-zinc-200" x-text="(n + 1) + '. ' + stage.label"></span> · <span x-text="stage.description"></span></p></template>
                         <p class="text-zinc-400">Context stage: <span x-text="contextLadder(run)"></span>. Each stage is saved when it finishes; a failing stage does not stop the next one unless the endpoint is down.</p>
                     </div>
@@ -182,20 +179,20 @@
                         <span x-show="!run._advanced" class="text-xs text-zinc-500"> · standard defaults keep runs comparable across models</span></div>
                     <div x-show="run._advanced" class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 border-l-2 border-zinc-700 pl-3">
                         <div><label class="block text-xs text-zinc-400">Maximum concurrency</label><input type="number" min="1" max="{{ max_concurrency }}" x-model.number="run.max_concurrency" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1">Latency stage levels 1, 2, 4, … up to this value; quality uses at most four workers.</p></div>
-                        <div x-show="usesPerf(run)"><label class="block text-xs text-zinc-400">In-flight cap · capacity stage</label><input type="number" min="1" :max="loadForm.max_in_flight" x-model.number="run.in_flight_cap" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1">Arrivals that find this many requests in flight are dropped and count as SLO misses; they are never delayed.</p></div>
                         <div x-show="usesPerf(run)"><label class="inline-flex items-center gap-2 text-xs text-zinc-400"><input type="checkbox" x-model="run._contextOverride"> Override the context limit · context stage</label><input type="number" min="{{ stages.min_context }}" max="{{ stages.max_context }}" x-model.number="run.context_max" :disabled="!run._contextOverride" class="bg-zinc-800 rounded px-3 py-2 w-full mt-1 disabled:opacity-50" required><p class="text-xs text-zinc-500 mt-1">Reference tokens. Default: the deployment's declared limit minus {{ '{:,}'.format(stages.context_output_tokens) }} output tokens and framing.</p></div>
+                        <div x-show="usesPerf(run)"><label class="block text-xs text-zinc-400">Maximum concurrency · context stage</label><input type="number" min="1" :max="stages.max_context_concurrency" x-model.number="run.context_concurrency" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1">Each context climbs 1, 2, 4, 8, 16, 24, 32, 48, … up to this value and stops at the limit.</p></div>
+                        <div x-show="usesPerf(run)" class="grid grid-cols-2 gap-2"><div><label class="block text-xs text-zinc-400">Target first token p95 · ms</label><input type="number" min="100" max="600000" x-model.number="run.target_ttft_ms" class="bg-zinc-800 rounded px-3 py-2 w-full" required></div><div><label class="block text-xs text-zinc-400">Target output p95 · tok/s</label><input type="number" min="1" max="1000" x-model.number="run.target_output_rate" class="bg-zinc-800 rounded px-3 py-2 w-full" required></div><p class="col-span-2 text-xs text-zinc-500">Per request. The report shows the load within these targets; measuring stops 10× beyond them.</p></div>
                     <template x-if="usesPerf(run)"><div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <p class="sm:col-span-2 text-xs text-zinc-300 font-medium pt-1">Capacity stage workload</p>
-                        <div><label class="block text-xs text-zinc-400">Workload</label><select x-model="run.load.preset" @change="setPreset(run)" class="bg-zinc-800 rounded px-3 py-2 w-full"><template x-for="(preset, key) in loadForm.presets" :key="key"><option :value="key" x-text="preset.label" :selected="run.load.preset === key"></option></template><option value="custom">Custom · JSON request classes</option></select></div>
-                        <div><label class="block text-xs text-zinc-400">Shape</label><div class="flex gap-2"><button type="button" class="btn-ghost text-xs" @click="setLoadShape(run, 'ladder')">Rate ladder</button><button type="button" class="btn-ghost text-xs" @click="setLoadShape(run, 'soak')">Soak · one rate, 60 min</button></div></div>
-                        <div><label class="block text-xs text-zinc-400">Offered arrival rates · requests/s</label><input type="text" x-model="run._ratesText" class="bg-zinc-800 rounded px-3 py-2 w-full" required><p class="text-xs text-zinc-500 mt-1">Increasing values; the ladder stops after consecutive SLO failures.</p></div>
-                        <div><label class="block text-xs text-zinc-400">Seconds per rate</label><input type="number" min="10" max="14400" x-model.number="run.load.step_seconds" class="bg-zinc-800 rounded px-3 py-2 w-full" required></div>
-                        <div><label class="block text-xs text-zinc-400">Arrivals</label><select x-model="run.load.arrival" class="bg-zinc-800 rounded px-3 py-2 w-full"><option value="poisson">Poisson · independent users</option><option value="gamma">Bursty · gamma gaps</option></select></div>
-                        <div x-show="run.load.arrival === 'gamma'"><label class="block text-xs text-zinc-400">Burstiness · gap coefficient of variation</label><input type="number" min="1" max="10" step="0.1" x-model.number="run.load.burstiness" class="bg-zinc-800 rounded px-3 py-2 w-full"></div>
-                        <div><label class="block text-xs text-zinc-400">SLO attainment target</label><input type="number" min="0.5" max="0.999" step="0.001" x-model.number="run.load.attainment" class="bg-zinc-800 rounded px-3 py-2 w-full"><p class="text-xs text-zinc-500 mt-1">0.95 = 95% of arrivals in every class meet their SLO.</p></div>
-                        <div><label class="block text-xs text-zinc-400">Schedule seed</label><input type="number" min="0" x-model.number="run.load.seed" class="bg-zinc-800 rounded px-3 py-2 w-full"><p class="text-xs text-zinc-500 mt-1">Same seed and settings = identical traffic for every model.</p></div>
-                        <div class="sm:col-span-2" x-show="run.load.preset === 'custom'"><label class="block text-xs text-zinc-400">Request classes (JSON)</label><textarea rows="12" x-model="run._workloadText" class="bg-zinc-800 rounded px-3 py-2 w-full font-mono text-xs" spellcheck="false"></textarea><p class="text-xs text-zinc-500 mt-1">Up to 6 classes: name, weight, input and output histograms as [min, max, weight] buckets in reference tokens, shared_prefix tokens and slo {ttft_ms, tpot_ms, e2e_ms}. Export bucket counts from gateway logs to mirror production traffic.</p></div>
-                        <div class="sm:col-span-2 rounded-md border border-blue-900 bg-blue-950/20 p-3 space-y-2 text-xs text-zinc-300"><p x-text="loadSize(run)"></p><p>Requests are sent on a seeded schedule regardless of earlier responses. Each class has its own SLO; a step passes when the attainment target is met overall and per class, no arrival was dropped and the client kept up. The highest passing rate is reported as the sustainable arrival rate and feeds the capacity report.</p></div>
+                        <p class="sm:col-span-2 text-xs text-zinc-300 font-medium pt-1">Users stage</p>
+                        <div><label class="block text-xs text-zinc-400">User model</label><select x-model="run.users.preset" @change="setUserPreset(run)" class="bg-zinc-800 rounded px-3 py-2 w-full"><template x-for="(preset, key) in usersForm.presets" :key="key"><option :value="key" x-text="preset.label" :selected="run.users.preset === key"></option></template><option value="custom">Custom · JSON user classes</option></select></div>
+                        <div><label class="block text-xs text-zinc-400">Context caps · tokens</label><input type="text" x-model="run._capsText" placeholder="automatic" class="bg-zinc-800 rounded px-3 py-2 w-full"><p class="text-xs text-zinc-500 mt-1">The longest a session may grow. Empty: 32k, 128k and the usable context limit.</p></div>
+                        <div class="grid grid-cols-2 gap-2"><div><label class="block text-xs text-zinc-400">Start users</label><input type="number" min="1" :max="usersForm.max_users" x-model.number="run.users.start_users" class="bg-zinc-800 rounded px-3 py-2 w-full" required></div><div><label class="block text-xs text-zinc-400">Maximum users</label><input type="number" min="1" :max="usersForm.max_users" x-model.number="run.users.max_users" class="bg-zinc-800 rounded px-3 py-2 w-full" required></div></div>
+                        <div class="grid grid-cols-2 gap-2"><div><label class="block text-xs text-zinc-400">Warmup · s</label><input type="number" min="10" max="3600" x-model.number="run.users.warmup_seconds" class="bg-zinc-800 rounded px-3 py-2 w-full" required></div><div><label class="block text-xs text-zinc-400">Measured · s</label><input type="number" min="30" max="3600" x-model.number="run.users.measure_seconds" class="bg-zinc-800 rounded px-3 py-2 w-full" required></div></div>
+                        <div><label class="block text-xs text-zinc-400">SLO attainment target</label><input type="number" min="0.5" max="0.999" step="0.001" x-model.number="run.users.attainment" class="bg-zinc-800 rounded px-3 py-2 w-full"></div>
+                        <div><label class="block text-xs text-zinc-400">Session seed</label><input type="number" min="0" x-model.number="run.users.seed" class="bg-zinc-800 rounded px-3 py-2 w-full"></div>
+                        <div class="sm:col-span-2"><label class="inline-flex items-center gap-2 text-xs text-zinc-400"><input type="checkbox" x-model="run.users.saturation"> Saturation search · keep doubling users until the deployment is exhausted, up to</label><input type="number" min="1" :max="usersForm.max_users" x-model.number="run.users.saturation_max_users" :disabled="!run.users.saturation" class="bg-zinc-800 rounded px-3 py-2 w-full mt-1 disabled:opacity-50"><p class="text-xs text-zinc-500 mt-1">After the SLO search, each cap continues until a level is beyond a hard limit (over 10% failures, first token or output speed 10× off target, or throughput no longer growing). Failing and exhausted levels name the limiting resource from vLLM and GPU telemetry. Usually 1–3 extra levels per cap.</p></div>
+                        <div class="sm:col-span-2" x-show="run.users.preset === 'custom'"><label class="block text-xs text-zinc-400">User classes (JSON)</label><textarea rows="12" x-model="run._userModelText" class="bg-zinc-800 rounded px-3 py-2 w-full font-mono text-xs" spellcheck="false"></textarea><p class="text-xs text-zinc-500 mt-1">Up to 4 classes: name, weight (share of users), system_tokens, first_input, turn_input and output histograms as [min, max, weight] buckets in reference tokens, think_seconds and turns histograms, and slo {ttft_ms, output_tokens_per_sec}. Fit them to session traces when you have them.</p></div>
+                        <div class="sm:col-span-2 rounded-md border border-blue-900 bg-blue-950/20 p-3 space-y-2 text-xs text-zinc-300"><p x-text="usersSize(run)"></p><p>Each simulated user runs chat or agent sessions whose history grows turn by turn, thinking or running tools between turns. The user count doubles while every class meets its SLO, then bisects between the last pass and the first failure; a clearly failing level stops early. Larger caps start at the smaller cap's result and never retry counts that already failed. With the saturation search, users keep doubling past the SLO limit until the deployment is exhausted.</p></div>
                     </div></template>
                     </div>
                 </div>

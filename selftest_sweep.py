@@ -21,6 +21,7 @@ from app.benchmarking.llm_client import ClientConfig
 from app.benchmarking.models import RequestMetrics, TokenUsage
 from app.routes import runs
 from app.services import benchmark_runner as runner, html_reports, run_submission
+from app.services.sweep_views import sweep_view
 from selftest_reports import AssetParser, fixture_database
 
 CONFIG = ClientConfig("http://controlled.invalid/v1", "unused", "fixture", timeout=1)
@@ -375,6 +376,125 @@ class SweepProtocolTests(unittest.TestCase):
             [c["status"] for c in report.cells],
             ["measured", "unsupported_context", "measured", "unsupported_context"],
         )
+
+
+def synthetic(context, concurrency, ttft_ms=500, token_ms=10, aggregate=None, errors=0):
+    return {"context_tokens": context, "concurrency": concurrency, "status": "measured",
+            "requests": concurrency, "completed": concurrency - errors, "errors": errors, "incomplete": 0,
+            "ttft": {"p50_ms": ttft_ms, "p95_ms": ttft_ms},
+            "output_token_time": {"p50_ms": token_ms, "p95_ms": token_ms},
+            "aggregate_tokens_per_sec": 100 * concurrency if aggregate is None else aggregate, "error": ""}
+
+
+class LimitSearchTests(unittest.TestCase):
+    def setUp(self):
+        FakeClient.instances = []
+        FakeClient.handler = None
+
+    def test_ladder_and_targets(self):
+        config = sweep.SweepConfig(1024, 100, targets=sweep.Targets())
+        self.assertEqual(config.concurrencies, (1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 100))
+        self.assertEqual(sweep.SweepConfig(1024, 256, targets=sweep.Targets()).concurrencies, sweep.LIMIT_LADDER)
+        self.assertEqual(sweep.Targets().output_token_time_ms, 25)
+        for kwargs in ({"ttft_ms": 99}, {"output_tokens_per_sec": 0}, {"ttft_ms": 2000.5}):
+            with self.assertRaises(ValueError):
+                sweep.Targets(**kwargs)
+        with self.assertRaises(ValueError):
+            sweep.SweepConfig(targets={"ttft_ms": 2000})
+
+    def test_judge_targets_and_limits(self):
+        targets = sweep.Targets(2000, 40)
+        self.assertEqual(sweep.judge(synthetic(256, 8), None, targets), (True, ""))
+        # Missing a target is not yet the limit.
+        self.assertEqual(sweep.judge(synthetic(256, 8, ttft_ms=5000), None, targets), (False, ""))
+        self.assertEqual(sweep.judge(synthetic(256, 8, token_ms=30), None, targets), (False, ""))
+        within, limit = sweep.judge(synthetic(256, 8, ttft_ms=20001), None, targets)
+        self.assertEqual((within, limit), (False, "first token p95 20.0 s is over 10× the 2.0 s target"))
+        within, limit = sweep.judge(synthetic(256, 8, token_ms=251), None, targets)
+        self.assertIn("median output speed 4.0 tok/s is under 1/10 of the 40 tok/s target", limit)
+        self.assertEqual(sweep.judge(synthetic(256, 20, errors=2), None, targets), (False, ""))
+        self.assertEqual(sweep.judge(synthetic(256, 20, errors=3), None, targets)[1],
+                         "3 of 20 requests failed or were incomplete")
+        self.assertEqual(sweep.judge(synthetic(256, 100, errors=1), None, targets), (True, ""))
+        # Unmeasurable delivery leaves the targets unknown.
+        blind = {**synthetic(256, 4), "output_token_time": {}}
+        self.assertEqual(sweep.judge(blind, None, targets), (None, ""))
+        # Saturation: no more output while requests wait longer.
+        before = synthetic(256, 16, ttft_ms=400, aggregate=1000)
+        within, limit = sweep.judge(synthetic(256, 24, ttft_ms=700, aggregate=1050), before, targets)
+        self.assertTrue(within)
+        self.assertIn("aggregate output changed +5% from 16 concurrent requests", limit)
+        self.assertEqual(sweep.judge(synthetic(256, 24, ttft_ms=500, aggregate=1050), before, targets)[1], "")
+        self.assertEqual(sweep.judge(synthetic(256, 24, ttft_ms=700, aggregate=1200), before, targets)[1], "")
+
+    def limit_sweep(self, slow, contexts=(256, 65536, 131072, 262144), maximum=64):
+        measured = []
+
+        def measure(clients, concurrency, bank, config, cancelled, *cache_args):
+            if not cache_args:
+                measured.append((bank.context_tokens, concurrency))
+            return synthetic(bank.context_tokens, concurrency,
+                             ttft_ms=30_000 if slow(bank.context_tokens, concurrency) else 500)
+
+        with (patch.object(sweep, "SweepClient", FakeClient),
+              patch.object(sweep, "EFFORTS", ("default",)),
+              patch.object(sweep, "measure_cell", measure)):
+            report = sweep.run_sweep(CONFIG, sweep.SweepConfig(max(contexts), maximum, context_lengths=contexts,
+                                                               targets=sweep.Targets()))
+        return report, measured
+
+    def test_limit_skips_every_larger_load_and_context(self):
+        # Huge latency at 32 requests and 64k: 48 requests and 128k are never tried.
+        report, measured = self.limit_sweep(lambda context, c: context >= 65536 and c >= 32)
+        self.assertTrue(report.finished)
+        self.assertEqual(report.protocol["revision"], "context-limits-v1")
+        by_row = {}
+        for context, concurrency in measured:
+            by_row.setdefault(context, []).append(concurrency)
+        self.assertEqual(by_row, {256: [1, 2, 4, 8, 16, 24, 32, 48, 64], 65536: [1, 2, 4, 8, 16, 24, 32],
+                                  131072: [1, 2, 4, 8, 16, 24], 262144: [1, 2, 4, 8, 16, 24]})
+        cells = {(c["context_tokens"], c["concurrency"]): c for c in report.cells}
+        self.assertEqual(len(cells), 4 * 9)
+        limit = cells[(65536, 32)]
+        self.assertIn("first token p95 30.0 s", limit["limit"])
+        self.assertFalse(limit["within_targets"])
+        self.assertNotIn("cache_reuse", limit)
+        self.assertIn("cache_reuse", cells[(65536, 24)])
+        for key in ((65536, 48), (131072, 32), (262144, 64)):
+            self.assertEqual(cells[key]["status"], "skipped_limit")
+            self.assertIn("the limit was reached at 32 concurrent requests and 65,536 tokens", cells[key]["error"])
+        self.assertEqual(report.efforts[0]["limits"]["frontier"],
+                         [{"context_tokens": 65536, "concurrency": 32, "reason": limit["limit"]}])
+
+    def test_slow_single_request_still_verifies_larger_contexts(self):
+        report, measured = self.limit_sweep(lambda context, c: context >= 131072)
+        self.assertEqual([m for m in measured if m[0] >= 131072], [(131072, 1), (262144, 1)])
+        cells = {(c["context_tokens"], c["concurrency"]): c for c in report.cells}
+        self.assertEqual(cells[(262144, 2)]["status"], "skipped_limit")
+        self.assertEqual([f["context_tokens"] for f in report.efforts[0]["limits"]["frontier"]], [131072, 262144])
+
+    def test_limit_rows_report_load_within_targets(self):
+        from app.services.sweep_views import limit_rows
+
+        report, _ = self.limit_sweep(lambda context, c: context >= 65536 and c >= 32)
+        view = sweep_view_of(report)
+        rows = {row["context"]: row for row in limit_rows(view["data"])}
+        self.assertEqual((rows[256]["within"], rows[256]["limit"], rows[256]["highest"]), (64, None, 64))
+        self.assertEqual((rows[65536]["within"], rows[65536]["limit"], rows[65536]["highest"]), (24, 32, 32))
+        self.assertEqual((rows[131072]["within"], rows[131072]["limit"]), (24, None))
+        self.assertEqual(view["limits"], limit_rows(view["data"]))
+        from app.templates_config import templates
+
+        offline = sweep_view({"label": "#1", "perf": report.to_dict()}, offline=True)
+        html = templates.get_template("performance_sweep.html").render(
+            performance={"sweep_views": [offline]}, offline=True)
+        for text in ("Limits by input context", "first token p95 ≤ 2.0 s", "output speed p95 ≥ 40 tok/s",
+                     "<td>24 concurrent</td>", "<td>32 concurrent</td>", "not reached", "skipped_limit"):
+            self.assertIn(text, html)
+
+
+def sweep_view_of(report):
+    return sweep_view({"label": "#1", "perf": report.to_dict()})
 
 
 class SweepHTTPTests(unittest.TestCase):

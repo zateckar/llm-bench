@@ -12,7 +12,7 @@ import time
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.benchmarking import load_test, load_workload
@@ -387,33 +387,23 @@ class SubmissionAndReportTests(unittest.TestCase):
     def test_options_round_trip_and_validation(self):
         from app.services.run_submission import make_run_options, spec_from_run
 
-        default = make_run_options(mode="load", max_concurrency=256)
-        self.assertEqual(default["load"]["preset"], "mixed")
+        # The standard test no longer runs open-loop load (standard-performance-v4): the legacy mode
+        # "load" maps to it and its load settings are accepted and ignored.
+        self.assertEqual(make_run_options(mode="load", max_concurrency=256), make_run_options(mode="performance"))
         load = {"preset": "chat", "rates": [0.5, 1], "step_seconds": 60, "arrival": "gamma", "burstiness": 3}
-        posted = self.submit({"model_id": 1, "mode": "load", "max_concurrency": 128, "load": load})
+        posted = self.submit({"model_id": 1, "mode": "load", "max_concurrency": 128, "load": load,
+                              "in_flight_cap": 64})
         self.assertEqual(posted.status_code, 302)
         options = json.loads(self.sql("SELECT run_options_json FROM test_runs")[0]["run_options_json"])
-        # The legacy mode "load" maps to the standard test; its concurrency was the in-flight cap.
-        self.assertEqual((options["mode"], options["performance"], options["in_flight_cap"], options["max_concurrency"]),
-                         ("performance", "standard", 128, 8))
-        self.assertEqual(options["load"]["workload"]["classes"][0]["name"], "chat")
-        self.assertEqual(options["load"]["arrival"], "gamma")
+        self.assertEqual((options["mode"], options["performance"], options["max_concurrency"],
+                          "load" in options, "in_flight_cap" in options),
+                         ("performance", "standard", 8, False, False))
         spec = spec_from_run({"model_id": 1, "run_options_json": json.dumps(options)})
-        self.assertEqual(spec["load"], options["load"])
-        self.assertIn("burstiness&#34;: 3.0", self.client.get("/admin/plans/1/edit").text)
-        for bad, needle in (
-            ({"model_id": 1, "mode": "load", "max_concurrency": 2000}, "in-flight cap"),
-            ({"model_id": 1, "mode": "load", "max_concurrency": 8, "load": {**load, "rates": [2, 1]}}, "strictly increasing"),
-            ({"model_id": 1, "mode": "load", "max_concurrency": 8, "load": {"preset": "custom", "workload": "{", "rates": [1]}}, "workload"),
-            ({"model_id": 1, "mode": "quality", "max_concurrency": 8, "load": load}, "require a performance run"),
-            ({"model_id": 1, "mode": "performance", "in_flight_cap": 0}, "in-flight cap"),
-        ):
-            response = self.submit(bad)
-            self.assertEqual(response.status_code, 422, bad)
-            self.assertIn(needle, response.text)
-        with self.assertRaises(HTTPException):
-            make_run_options(mode="load", max_concurrency=8, load={"preset": "chat", "rates": []})
-        self.assertIn("Capacity stage workload", self.client.get("/admin/run").text)
+        self.assertNotIn("load", spec)
+        response = self.submit({"model_id": 1, "mode": "quality", "max_concurrency": 8, "load": load})
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("require a performance run", response.text)
+        self.assertNotIn("Capacity stage workload", self.client.get("/admin/run").text)
 
     def run_load(self, run_id, rates=(2, 60), ttft=400):
         load = {"preset": "custom", "workload": workload(ttft=ttft), "rates": list(rates), "step_seconds": 2}

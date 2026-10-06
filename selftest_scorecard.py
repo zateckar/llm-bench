@@ -127,6 +127,40 @@ class GateTests(unittest.TestCase):
         self.assertEqual((status("pass"), status("pass", "stale"), status("missing", "fail"), status()),
                          ("meets", "incomplete", "fails", "incomplete"))
 
+    def test_users_gate(self):
+        gate = decision_gates.validate([{"type": "users", "user_model": "mixed", "context": "131072", "threshold": 50}],
+                                       suite_exists=lambda s: False, presets=PRESETS, user_presets={"mixed"})[0]
+        self.assertEqual(gate, {"type": "users", "user_model": "mixed", "context": 131072, "threshold": 50})
+        self.assertEqual(decision_gates.describe(gate, user_labels={"mixed": "Mixed"}),
+                         "Users at SLO on Mixed with sessions up to 131,072 tokens ≥ 50")
+        for raw, needle in (({"user_model": "bogus"}, "user-model"), ({"threshold": 1.5}, "whole"),
+                            ({"context": 0}, "between")):
+            with self.subTest(needle), self.assertRaisesRegex(GateError, needle):
+                decision_gates.validate([{**gate, **raw}], suite_exists=lambda s: False, presets=PRESETS,
+                                        user_presets={"mixed"})
+        results = [{"context_cap": 32768, "users": 90, "status": "established"},
+                   {"context_cap": 131072, "users": 60, "status": "established"},
+                   {"context_cap": 262144, "users": 40, "status": "lower_bound"}]
+        evidence = {"users": {"mixed": {"results": results, "freshness": "current", "run_id": 7}}}
+
+        def one(context, threshold, item=evidence):
+            return decision_gates.evaluate([{**gate, "context": context, "threshold": threshold}], item)["results"][0]
+
+        # The smallest measured cap that holds the required sessions decides.
+        self.assertEqual([(r["status"], r["value"]) for r in (one(100_000, 50), one(100_000, 70), one(32768, 70))],
+                         [("pass", 60), ("fail", 60), ("pass", 90)])
+        bound = one(200_000, 50)
+        self.assertEqual((bound["status"], bound["uncertain"], bound["run_id"]), ("fail", True, 7))
+        self.assertEqual(one(500_000, 1)["status"], "missing")
+        self.assertEqual(one(1, 1, {})["status"], "missing")
+        not_met = {"users": {"mixed": {"results": [{"context_cap": 8192, "users": 0, "status": "not_met"}]}}}
+        self.assertEqual((one(8192, 1, not_met)["status"], one(8192, 1, not_met)["value"]), ("fail", 0))
+
+    def test_verdicts(self):
+        status = lambda *s: decision_gates.verdict([{"status": x} for x in s])  # noqa: E731
+        self.assertEqual((status("pass"), status("pass", "stale"), status("missing", "fail"), status()),
+                         ("meets", "incomplete", "fails", "incomplete"))
+
 
 class DatabaseCase(unittest.TestCase):
     def setUp(self):
@@ -381,6 +415,13 @@ class PageTests(DatabaseCase):
         self.add_run(2, report(half))
         self.add_run(1, perf=closed_loop(), options={"mode": "performance"})
         self.add_run(1, perf=open_loop(), options={"mode": "load"})
+        self.add_run(1, perf={"schema_version": 7, "kind": "sessions",
+                              "protocol": {"preset": "mixed", "user_model_hash": "cd" * 8, "attainment_target": 0.95},
+                              "summary": {"results": [
+                                  {"context_cap": 131072, "users": 60, "status": "established", "first_failed": 66,
+                                   "limiting": {"label": "KV cache full: session histories no longer fit"}},
+                                  {"context_cap": 262144, "users": None, "status": "not_measured"}]}},
+                     options={"mode": "performance"})
         page = self.client.get("/scorecard").text
         for text in ("Standard quality suite", "Chat", "100.0%", "50.0%", "400 ms", "Create one", "unverified"):
             self.assertIn(text, page)
@@ -403,8 +444,11 @@ class PageTests(DatabaseCase):
         self.assertEqual(decided.headers["location"], "/scorecard/profiles/1#decisions")
         self.assertIn("Best fit", self.client.get("/scorecard/profiles/1").text)
         model_page = self.client.get("/scorecard/models/1").text
-        for text in ("Coding agents", "Best fit", "Latency", "Chat", "No studies involve this model"):
+        for text in ("Coding agents", "Best fit", "Latency", "Chat", "No studies involve this model",
+                     "Mixed · 40% chat, 60% agents", "131,072 tokens:", "60", "KV cache full"):
             self.assertIn(text, model_page)
+        self.assertNotIn("262,144 tokens:", model_page)
+        self.assertIn("user_models", self.client.get("/scorecard/profiles").text)  # gate editor options
         self.assertEqual(self.client.get("/scorecard/models/99").status_code, 404)
         exported = self.client.get("/scorecard.json").json()
         self.assertEqual(exported["profiles"][0]["models"][0]["evaluation"]["verdict"], "meets")

@@ -6,7 +6,9 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from app.benchmarking.vllm_telemetry import Settings, VllmTelemetry, metrics_model, metrics_scope, queries
+from app.benchmarking.vllm_telemetry import (
+    Settings, VllmTelemetry, gpu_indices, gpu_text, metrics_model, metrics_scope, queries,
+)
 from app.services.telemetry_views import telemetry_view
 from app.services.html_reports import staged_view
 from app.templates_config import templates
@@ -52,7 +54,15 @@ class CollectorTests(unittest.TestCase):
     def test_exact_b300_scope_and_escaped_model_labels(self):
         definitions, selector = queries({**SCOPE, "model_name": 'model"},job="dcgm-exporter'})
         self.assertIn('model_name="model\\\"},job=\\\"dcgm-exporter"', selector)
-        self.assertTrue(all('Hostname="smbea02n01",job="vllm"' in d["query"] for d in definitions))
+        vllm = [d for d in definitions if d.get("group") != "gpu"]
+        self.assertEqual(len(vllm), 13)
+        self.assertTrue(all('Hostname="smbea02n01",job="vllm"' in d["query"] for d in vllm))
+        # GPU metrics come from DCGM on the same host, limited to the deployment's GPUs when configured.
+        gpu = [d for d in definitions if d.get("group") == "gpu"]
+        self.assertTrue(gpu and all(d["optional"] and 'Hostname="smbea02n01"' in d["query"] for d in gpu))
+        self.assertTrue(all("gpu=~" not in d["query"] for d in gpu))
+        limited, _ = queries({**SCOPE, "gpus": [4, 5]})
+        self.assertTrue(all('gpu=~"4|5"' in d["query"] for d in limited if d.get("group") == "gpu"))
         with self.assertRaises(ValueError):
             queries({**SCOPE, "hardware": "MI300A"})
         for value in (True, 1, "bad\nname", "x"*513):
@@ -61,6 +71,19 @@ class CollectorTests(unittest.TestCase):
         self.assertIsNone(metrics_scope({}))
         with patch.dict("os.environ", {"PROMETHEUS_B300_HOST": "smbea02n01", "PROMETHEUS_TIMESTAMP_SHIFT_SECONDS": ""}):
             self.assertEqual(metrics_scope({"b300_metrics_model": " test/model "}), SCOPE)
+            self.assertEqual(metrics_scope({"b300_metrics_model": "test/model", "b300_gpus": "0-3"}),
+                             {**SCOPE, "gpus": [0, 1, 2, 3]})
+
+    def test_gpu_indices(self):
+        self.assertEqual(gpu_indices("0-3"), [0, 1, 2, 3])
+        self.assertEqual(gpu_indices(" 4, 6,5 "), [4, 5, 6])
+        self.assertEqual(gpu_indices("1,0-1"), [0, 1])
+        self.assertIsNone(gpu_indices(""))
+        self.assertIsNone(gpu_indices(None))
+        self.assertEqual(gpu_text(gpu_indices("3,0-1")), "0,1,3")
+        for bad in ("a", "3-1", "64", "-1", "0-", "1;2", 3):
+            with self.subTest(bad), self.assertRaises(ValueError):
+                gpu_indices(bad)
 
     def test_authorization_bounded_history_and_missing_values(self):
         session = fake_session()
@@ -68,7 +91,11 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(data["status"], "collected")
         self.assertEqual(data["window"], {"start": 880, "end": 1060, "measurement_start": 1000, "step_seconds": 5, "baseline_seconds": 120})
         self.assertIsNone(data["metrics"][0]["series"][0]["values"][1][1])
-        self.assertEqual(len(data["metrics"]), 12)
+        self.assertEqual(len(data["metrics"]), 20)
+        # vLLM's cache config is matched by the instances found at setup; only known labels are kept.
+        self.assertEqual(data["cache_config"], [{"instance": "server:8009"}])
+        query = session.get.call_args_list[-1].kwargs["params"]["query"]
+        self.assertEqual(query, 'vllm:cache_config_info{Hostname="smbea02n01",job="vllm",instance=~"server:8009"}')
         for call in session.get.call_args_list:
             kwargs = call.kwargs
             self.assertEqual(kwargs["headers"]["Authorization"], "Basic authorization-secret")
@@ -86,6 +113,16 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(status["kv_cache"], "missing")
         self.assertEqual(status["decode"], "error")
         self.assertNotIn("subscription-secret", json.dumps(data))
+
+    def test_missing_optional_metrics_keep_the_collection_complete(self):
+        data = capture(fake_session(missing="DCGM_", failure="inter_token_latency"))
+        self.assertEqual(data["status"], "collected")
+        status = {m["id"]: m["status"] for m in data["metrics"]}
+        self.assertEqual((status["sm_active"], status["tpot"]), ("missing", "error"))
+        warnings = " ".join(data["warnings"])
+        self.assertIn("Optional metrics unavailable: Server time per output token", warnings)
+        self.assertIn("every GPU on the host", warnings)
+        self.assertNotIn("historical data unavailable", warnings)
 
     def test_setup_failure_and_cancellation_close_without_retry(self):
         session = Mock()
@@ -208,6 +245,19 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(view["phase_count"], 2)
         self.assertTrue(view["rows"][0]["label"].startswith("Cold"))
         self.assertTrue(view["rows"][1]["label"].startswith("Warm"))
+
+    def test_session_levels_are_phases_over_their_measured_window(self):
+        run = self.run_data()
+        run["perf"] = {"schema_version": 7, "kind": "sessions", "telemetry": run["perf"]["telemetry"], "caps": [
+            {"context_cap": 2048, "levels": [
+                {"users": 4, "phase": "saturation", "started_at": 990, "ended_at": 1030, "window_started_at": 1000,
+                 "window_ended_at": 1020, "output_tokens_per_sec": 5, "ttft": {"p95_ms": 100}}]}]}
+        view = telemetry_view(run)
+        self.assertEqual(view["rows"][0]["label"], "Users · 4 · 2,048-token cap · saturation")
+        self.assertEqual(view["rows"][0]["samples"], 3)
+        titles = [c["title"] for c in view["charts"]]
+        self.assertIn("GPU activity and memory", titles)
+        self.assertIn("Server prompt and generation", titles)
 
     def test_sweep_collector_is_persisted_without_changing_measured_duration(self):
         from app.services import benchmark_runner as runner

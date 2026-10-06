@@ -61,7 +61,7 @@
             {% else %}<p class="text-sm text-zinc-500">No closed-loop performance run.</p>{% endif %}
         </div>
         <div class="card p-4 overflow-x-auto space-y-3">
-            <h2 class="text-lg font-semibold text-white">Capacity and context</h2>
+            <h2 class="text-lg font-semibold text-white">Capacity, users and context</h2>
             {% if e.capacity %}
             <table class="w-full text-sm">
                 <thead><tr><th class="text-left">Workload</th><th class="text-left">Sustainable rate</th><th class="text-left">Goodput</th><th class="text-left">Evidence</th></tr></thead>
@@ -73,6 +73,19 @@
                 </tr>{% endfor %}</tbody>
             </table>
             {% else %}<p class="text-sm text-zinc-500">No open-loop load test.</p>{% endif %}
+            {% if e.users %}
+            <table class="w-full text-sm">
+                <thead><tr><th class="text-left">User model</th><th class="text-left">Users at SLO by context cap</th><th class="text-left">Evidence</th></tr></thead>
+                <tbody>{% for key, u in e.users.items() %}<tr class="align-top">
+                    <td class="text-zinc-200">{{ u.label }}{% if u.attainment_target %}<p class="text-xs text-zinc-500">{{ "%.0f"|format(u.attainment_target * 100) }}% of requests in every class within SLO</p>{% endif %}</td>
+                    <td><ul class="space-y-0.5">{% for r in u.results if r.status != 'not_measured' %}<li><span class="text-zinc-400">{{ "{:,}".format(r.context_cap) }} tokens:</span>
+                        {% if r.status == 'established' %}{{ r.users }}{% elif r.status == 'lower_bound' %}≥ {{ r.users }}{% elif r.status == 'not_met' %}<span class="text-red-300">none met the SLO</span>{% else %}<span class="text-zinc-500">inconclusive</span>{% endif %}
+                        {% if r.exhausted %}<span class="text-xs text-zinc-400">· exhausted at {{ r.exhausted }}</span>{% endif %}
+                        {% if r.limiting %}<span class="text-xs text-zinc-500">· {{ r.limiting }}</span>{% endif %}</li>{% endfor %}</ul></td>
+                    <td class="text-xs"><a class="text-blue-400" href="/runs/{{ u.run_id }}">run #{{ u.run_id }}</a><div class="mt-0.5">{{ fresh(u, old_days) }}</div></td>
+                </tr>{% endfor %}</tbody>
+            </table>
+            {% endif %}
             <p class="text-sm text-zinc-300">Context:
                 {% if e.context %}{{ "{:,}".format(e.context.tokens) }} tokens measured by <a class="text-blue-400" href="/runs/{{ e.context.run_id }}">sweep #{{ e.context.run_id }}</a> {{ fresh(e.context, old_days) }}{% endif %}
                 {% if e.declared_context %}{% if e.context %} · {% endif %}{{ "{:,}".format(e.declared_context.tokens) }} tokens declared by the deployment{% endif %}

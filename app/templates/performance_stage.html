@@ -4,6 +4,8 @@
 
     {% include "performance_load.html" %}
 
+    {% include "performance_sessions.html" %}
+
     {% include "performance_comparison.html" %}
 
     {% include "performance_telemetry.html" %}
@@ -47,9 +49,9 @@
         </details>
         {% if performance.distributions %}<details class="perf-details"><summary>Latency request distributions <span>Completion time, first delivery &amp; output length</span></summary><div class="perf-chart-grid">{% for chart in performance.distributions %}{{ chart_panel(chart) }}{% endfor %}</div></details>{% endif %}
         <details class="perf-details"><summary>How to read these measurements <span>Protocol &amp; interpretation</span></summary><div class="perf-method">
-            <p>This is a bounded, closed-loop concurrency test with warmed connections. It measures delivered output and client-observed timing, rather than model-side prefill or decoding speed. Arrival-rate capacity comes from the capacity stage.</p>
+            <p>This is a bounded, closed-loop concurrency test with warmed connections. It measures delivered output and client-observed timing, rather than model-side prefill or decoding speed. How many users a deployment serves comes from the users stage.</p>
             {% for view in performance.load_views %}<p><strong>{{ view.label }}</strong> · {{ view.protocol.attempts }} attempt(s) per timed request · {{ view.protocol.input }} reference input tokens · {{ view.protocol.output }} output token limit · {{ view.protocol.revision }}.</p>{% endfor %}
             <p>p50 is the median; p95 is the time within which 95% of measured successful requests finished. Tail percentiles come from small samples. Compare common load levels, matching protocols and output lengths, and repeat runs to assess variability.</p>
         </div></details>
     </section>
-    {% elif not performance.sweep_views and not performance.open_loop %}<div class="perf-empty"><h3>No measurements in this stage</h3><p>The stage did not record any measurement.</p></div>{% endif %}
+    {% elif not performance.sweep_views and not performance.open_loop and not performance.session_views %}<div class="perf-empty"><h3>No measurements in this stage</h3><p>The stage did not record any measurement.</p></div>{% endif %}

@@ -17,16 +17,91 @@ from app.benchmarking.evaluators import strip_think_blocks
 from app.benchmarking.cache_metrics import cache_metrics
 
 REVISION = "context-sweep-v3"
+LIMIT_REVISION = "context-limits-v1"
 MAX_CONTEXT = 1_048_576
 CONTEXT_STEP = 65_536
 CONCURRENCY_STEP = 16
 FAILURE_STREAK = 3
 MAX_CONCURRENCY = 256
 EFFORTS = ("default", "none", "minimal", "low", "medium", "high", "xhigh", "max")
+# Limit search: about 1.5× steps once batching gains flatten out.
+LIMIT_LADDER = (1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 192, 256)
+# A cell reaches the limit at 10× the first-token target, a tenth of the
+# output-speed target, or more than 10% failed or incomplete requests.
+LIMIT_FACTOR = 10
+LIMIT_FAILURE_RATE = 0.10
+# Within targets allows at most 1% failed or incomplete requests.
+TARGET_FAILURE_RATE = 0.01
+# Saturation: aggregate output grew less than 10% while median TTFT rose 1.5×.
+PLATEAU_GAIN = 1.10
+PLATEAU_TTFT = 1.5
 
 
 def grid(baseline, step, maximum):
     return tuple(sorted({baseline, maximum, *range(step, maximum + 1, step)}))
+
+
+@dataclass(frozen=True)
+class Targets:
+    """Per-request service targets; LIMIT_FACTOR beyond them, measuring stops."""
+    ttft_ms: int = 2000
+    output_tokens_per_sec: int = 40
+
+    def __post_init__(self):
+        for name, value, low, high in (("First-token target", self.ttft_ms, 100, 600_000),
+                                       ("Output speed target", self.output_tokens_per_sec, 1, 1000)):
+            if type(value) is not int or not low <= value <= high:
+                raise ValueError(f"{name} must be an integer between {low} and {high:,}")
+
+    @property
+    def output_token_time_ms(self):
+        return 1000 / self.output_tokens_per_sec
+
+    def to_dict(self):
+        return {"ttft_p95_ms": self.ttft_ms, "output_tokens_per_sec_p95": self.output_tokens_per_sec,
+                "max_failure_rate": TARGET_FAILURE_RATE, "limit_factor": LIMIT_FACTOR,
+                "limit_failure_rate": LIMIT_FAILURE_RATE, "plateau_gain": PLATEAU_GAIN,
+                "plateau_ttft": PLATEAU_TTFT}
+
+
+def _seconds(ms):
+    return f"{ms / 1000:,.1f} s"
+
+
+def judge(cell, previous, targets):
+    """``(within_targets, limit)`` of a measured cell.
+
+    ``within_targets`` is None when a target could not be measured (no streaming
+    or burst delivery). ``limit`` names why measuring further is pointless, or is
+    empty. ``previous`` is the last measured cell of the same row, if any."""
+    requests = cell.get("requests") or 0
+    if not requests:
+        return None, ""
+    failed = (cell.get("errors") or 0) + (cell.get("incomplete") or 0)
+    ttft = cell.get("ttft") or {}
+    token_time = cell.get("output_token_time") or {}
+    ttft_p95, token_p95, token_p50 = ttft.get("p95_ms"), token_time.get("p95_ms"), token_time.get("p50_ms")
+    checks = [failed / requests <= TARGET_FAILURE_RATE,
+              None if ttft_p95 is None else ttft_p95 <= targets.ttft_ms,
+              None if token_p95 is None else token_p95 <= targets.output_token_time_ms]
+    within = False if False in checks else None if None in checks else True
+    if failed / requests > LIMIT_FAILURE_RATE:
+        return within, f"{failed} of {requests} requests failed or were incomplete"
+    if ttft_p95 is not None and ttft_p95 > LIMIT_FACTOR * targets.ttft_ms:
+        return within, (f"first token p95 {_seconds(ttft_p95)} is over {LIMIT_FACTOR}× "
+                        f"the {_seconds(targets.ttft_ms)} target")
+    if token_p50 is not None and token_p50 > LIMIT_FACTOR * targets.output_token_time_ms:
+        return within, (f"median output speed {1000 / token_p50:,.1f} tok/s is under 1/{LIMIT_FACTOR} "
+                        f"of the {targets.output_tokens_per_sec} tok/s target")
+    if previous and previous.get("concurrency", 0) < cell.get("concurrency", 0):
+        before, after = previous.get("aggregate_tokens_per_sec"), cell.get("aggregate_tokens_per_sec")
+        waited, waits = (previous.get("ttft") or {}).get("p50_ms"), ttft.get("p50_ms")
+        if (before and after is not None and waited and waits
+                and after < PLATEAU_GAIN * before and waits >= PLATEAU_TTFT * waited):
+            return within, (f"aggregate output changed {after / before - 1:+.0%} from {previous['concurrency']} "
+                            f"concurrent requests while the median first token grew {waits / waited:.1f}×; "
+                            "requests are queueing")
+    return within, ""
 
 
 @dataclass(frozen=True)
@@ -39,6 +114,10 @@ class SweepConfig:
     context_lengths: tuple = ()
     # Reasoning efforts to probe and measure, in order; empty means every effort.
     effort_list: tuple = ()
+    # Limit search: the LIMIT_LADDER concurrencies, judged against these
+    # targets, skipping every cell with at least the load and context of a
+    # cell that reached the limit. None keeps the full grid.
+    targets: Targets | None = None
 
     def __post_init__(self):
         for name, value, low, high in (
@@ -53,6 +132,8 @@ class SweepConfig:
             raise ValueError(f"Context lengths must be integers between 256 and {MAX_CONTEXT}")
         if any(effort not in EFFORTS for effort in self.effort_list):
             raise ValueError("Unknown reasoning effort")
+        if self.targets is not None and not isinstance(self.targets, Targets):
+            raise ValueError("Targets must be a Targets value")
 
     @property
     def efforts(self):
@@ -69,6 +150,8 @@ class SweepConfig:
 
     @property
     def concurrencies(self):
+        if self.targets:
+            return tuple(sorted({*(c for c in LIMIT_LADDER if c <= self.max_concurrency), self.max_concurrency}))
         return grid(1, CONCURRENCY_STEP, self.max_concurrency)
 
     @property
@@ -351,6 +434,21 @@ def run_sweep(
             "cell_order": "Reasoning effort, increasing context, increasing concurrency; warmed first worker and reused connections.",
         },
     )
+    if config.targets:
+        report.protocol.update(
+            revision=LIMIT_REVISION,
+            targets=config.targets.to_dict(),
+            limit_policy=(
+                "Within targets: first token p95 and per-request output speed p95 meet the targets, with at most "
+                f"{TARGET_FAILURE_RATE:.0%} failed or incomplete requests. A cell reaches the limit when more than "
+                f"{LIMIT_FAILURE_RATE:.0%} of requests fail or are incomplete, first token p95 exceeds "
+                f"{LIMIT_FACTOR}× its target, median output speed falls under 1/{LIMIT_FACTOR} of its target, or "
+                f"aggregate output grows less than {PLATEAU_GAIN - 1:.0%} over the previous load while the median "
+                f"first token grows {PLATEAU_TTFT}×. Every cell with at least that load and context is then "
+                "skipped. Single requests are still measured at every context to verify it, unless they fail; "
+                "limit cells get no cached-prefix pair."
+            ),
+        )
     total = len(config.efforts) * len(config.contexts) * len(config.concurrencies)
     baseline = PromptBank(256)
 
@@ -472,7 +570,10 @@ def run_sweep(
             context_failures = []
             load_ceiling = None
             load_reason = ""
-            report.efforts[-1]["limits"] = {}
+            report.efforts[-1]["limits"] = {"frontier": []} if config.targets else {}
+            # Lowest load that reached the limit at this or a smaller context.
+            frontier = None
+            frontier_reason = ""
             warmed = 1
             for context in config.contexts:
                 if cancelled() or report.stop_error:
@@ -483,6 +584,7 @@ def run_sweep(
                 warm_index = 1
                 failed_load = None
                 load_failures = []
+                previous = None
                 for concurrency in config.concurrencies:
                     if cancelled() or report.stop_error:
                         break
@@ -508,6 +610,17 @@ def run_sweep(
                             "incomplete": 0,
                             "error": (f"Not measured: no complete single-worker answer at {context:,} tokens. Larger contexts still start at concurrency 1."
                                       if failed_load is not None else load_reason),
+                        }
+                    elif frontier is not None and concurrency >= frontier and concurrency > 1:
+                        cell = {
+                            "context_tokens": context,
+                            "concurrency": concurrency,
+                            "status": "skipped_limit",
+                            "requests": 0,
+                            "completed": 0,
+                            "errors": 0,
+                            "incomplete": 0,
+                            "error": frontier_reason,
                         }
                     else:
                         if concurrency > warmed:
@@ -573,7 +686,22 @@ def run_sweep(
                                     "kind": "inferred", "failed_loads": list(load_failures),
                                     "reason": load_reason,
                                 }
-                        if cell.get("completed") and not cancelled():
+                            if config.targets and cell["requests"]:
+                                within, limit = judge(cell, previous, config.targets)
+                                cell["within_targets"] = within
+                                # A failed single request keeps the failure rules above:
+                                # larger contexts still start at one request.
+                                if limit and not (concurrency == 1 and unsuccessful):
+                                    cell["limit"] = limit
+                                    report.efforts[-1]["limits"]["frontier"].append(
+                                        {"context_tokens": context, "concurrency": concurrency, "reason": limit})
+                                    if frontier is None or concurrency < frontier:
+                                        frontier = concurrency
+                                        frontier_reason = (
+                                            f"Not measured: the limit was reached at {concurrency} concurrent "
+                                            f"request{'s' if concurrency > 1 else ''} and {context:,} tokens ({limit}).")
+                                previous = cell
+                        if cell.get("completed") and not cancelled() and not cell.get("limit"):
                             if not cache_primed:
                                 _, cache_prime = call(warm, bank.prompt(0, "warm"), config.sweep_output_tokens)
                                 cache_primed = True

@@ -12,7 +12,7 @@ from app.templates_config import templates
 from app.services import run_submission
 from app.services.run_modes import describe
 from app.services.model_settings import decoding_settings
-from app.benchmarking.vllm_telemetry import metrics_model
+from app.benchmarking.vllm_telemetry import gpu_indices, gpu_text, metrics_model
 from fastapi import HTTPException
 
 router = APIRouter()
@@ -29,6 +29,13 @@ def _admin_required(request: Request):
 def _metrics_model(value):
     try:
         return metrics_model(value)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+def _gpus(value):
+    try:
+        return gpu_text(gpu_indices(value))
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -187,6 +194,7 @@ async def admin_create_model(
     temperature: str = Form("0"),
     reasoning_effort: str = Form(""),
     b300_metrics_model: str = Form(""),
+    b300_gpus: str = Form(""),
 ):
     user = _admin_required(request)
     if isinstance(user, RedirectResponse):
@@ -194,6 +202,7 @@ async def admin_create_model(
 
     settings = decoding_settings(temperature, reasoning_effort)
     metric_name = _metrics_model(b300_metrics_model)
+    gpus = _gpus(b300_gpus)
     from app.services.url_guard import validate_endpoint, UnsafeURLError
 
     try:
@@ -209,9 +218,11 @@ async def admin_create_model(
 
     await execute(
         """INSERT INTO models
-           (name, base_url, api_key, model_id, description, temperature, reasoning_effort, b300_metrics_model)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (name, base_url, api_key, model_id, description, settings["temperature"], settings["reasoning_effort"], metric_name),
+           (name, base_url, api_key, model_id, description, temperature, reasoning_effort, b300_metrics_model,
+            b300_gpus)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (name, base_url, api_key, model_id, description, settings["temperature"], settings["reasoning_effort"],
+         metric_name, gpus),
     )
     return RedirectResponse(url="/admin/models", status_code=302)
 
@@ -239,6 +250,7 @@ async def admin_edit_model(
     temperature: str | None = Form(None),
     reasoning_effort: str | None = Form(None),
     b300_metrics_model: str | None = Form(None),
+    b300_gpus: str | None = Form(None),
 ):
     user = _admin_required(request)
     if isinstance(user, RedirectResponse):
@@ -250,6 +262,7 @@ async def admin_edit_model(
 
     posted = await request.form()
     metric_name = _metrics_model(posted.get("b300_metrics_model", model.get("b300_metrics_model")))
+    gpus = _gpus(posted.get("b300_gpus", model.get("b300_gpus")))
     settings = decoding_settings(
         posted.get("temperature", model["temperature"]),
         posted.get("reasoning_effort", model["reasoning_effort"]),
@@ -270,6 +283,7 @@ async def admin_edit_model(
                     model_id=model_id_str,
                     description=description,
                     b300_metrics_model=metric_name,
+                    b300_gpus=gpus,
                     **settings,
                 ),
                 "error": f"Invalid base URL: {e}",
@@ -283,10 +297,10 @@ async def admin_edit_model(
     new_model_id = model_id_str or model["model_id"]
     await execute(
         """UPDATE models SET name = ?, base_url = ?, api_key = ?, model_id = ?, description = ?,
-                            temperature = ?, reasoning_effort = ?, b300_metrics_model = ?
+                            temperature = ?, reasoning_effort = ?, b300_metrics_model = ?, b300_gpus = ?
            WHERE id = ?""",
         (name, base_url, new_key, new_model_id, description,
-         settings["temperature"], settings["reasoning_effort"], metric_name, model_id),
+         settings["temperature"], settings["reasoning_effort"], metric_name, gpus, model_id),
     )
     return RedirectResponse(url="/admin/models", status_code=302)
 

@@ -29,22 +29,22 @@ MODEL = {
 
 
 def slim(options):
-    """Stored options without the capacity stage's (default) workload settings."""
-    return {key: value for key, value in options.items() if key != "load"}
+    """Stored options without the users stage's (default) user model."""
+    return {key: value for key, value in options.items() if key != "users"}
 
 
 # The standard performance test's stored settings (docs/design-consolidation.md).
-PERF = {"performance": "standard", "in_flight_cap": 256}
+PERF = {"performance": "standard", "context_concurrency": 256, "target_ttft_ms": 2000, "target_output_rate": 40}
 
 
 class OptionsTests(unittest.TestCase):
     def test_only_two_benchmark_settings(self):
         options = run_submission.make_run_options()
         self.assertEqual(slim(options), {"mode": "both", "max_concurrency": 8, "suite": "standard", **PERF})
-        self.assertEqual(options["load"]["preset"], "mixed")
+        self.assertEqual(options["users"]["preset"], "mixed")
         self.assertEqual(
             set(run_submission.spec_defaults()),
-            {"model_id", "mode", "max_concurrency", "suite", "performance", "in_flight_cap", "load"},
+            {"model_id", "mode", "max_concurrency", "suite", "users", *PERF},
         )
         for mode, maximum in [
             ("v6", 8),
@@ -268,6 +268,17 @@ class SubmissionTests(unittest.TestCase):
             self.assertEqual(self.sql("SELECT b300_metrics_model FROM models WHERE id=1")[0]["b300_metrics_model"], "test/model")
             self.client.post("/admin/models/1/edit", data={**form, "b300_metrics_model": ""}, follow_redirects=False)
             self.assertIsNone(self.sql("SELECT b300_metrics_model FROM models WHERE id=1")[0]["b300_metrics_model"])
+            # GPU indices are normalised, validated and kept when a form omits them.
+            self.client.post("/admin/models/1/edit", data={**form, "b300_gpus": " 3, 0-1 "}, follow_redirects=False)
+            self.assertEqual(self.sql("SELECT b300_gpus FROM models WHERE id=1")[0]["b300_gpus"], "0,1,3")
+            self.assertEqual(self.client.post("/admin/models/1/edit", data={**form, "b300_gpus": "0-99"},
+                                              follow_redirects=False).status_code, 422)
+            self.client.post("/admin/models/1/edit", data=form, follow_redirects=False)
+            self.assertEqual(self.sql("SELECT b300_gpus FROM models WHERE id=1")[0]["b300_gpus"], "0,1,3")
+            with patch.dict("os.environ", {"PROMETHEUS_B300_HOST": "smbea02n01", "PROMETHEUS_TIMESTAMP_SHIFT_SECONDS": ""}):
+                self.assertEqual(self.post(scheduled="2099-10-03T05:00").status_code, 302)
+            scope = json.loads(self.sql("SELECT metrics_config_json FROM test_runs")[0]["metrics_config_json"])
+            self.assertEqual(scope["gpus"], [0, 1, 3])
 
     def test_immediate_and_scheduler_dispatch_identical_options(self):
         # Use the real dispatcher. Spawning is still a synchronous local fake.

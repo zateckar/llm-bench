@@ -1,0 +1,69 @@
+{% from "measurement_macros.html" import metrics, chart_panel %}
+{% set sessions = performance.session_views %}
+{% if sessions %}
+{% for view in sessions.views %}
+<section class="perf-section" aria-label="Users at SLO">
+    <div class="perf-section-heading"><div><h3>Users at SLO{% if sessions.views|length > 1 %} · {{ view.label }}{% endif %}</h3>
+        <p class="perf-caption">Simulated people and agents run multi-turn sessions whose history grows up to a context cap. The result is the largest number of simultaneous users for which every class met its SLO.</p></div>
+        <span class="perf-tag">{{ view.protocol.revision }}</span></div>
+    {% if view.cancelled %}<div class="perf-notices" role="note"><p>The test was stopped; the last level is partial and excluded from the result.</p></div>{% endif %}
+    {% if view.stop_reason %}<div class="perf-notices" role="note"><p>{{ view.stop_reason }}</p></div>{% endif %}
+    {% for note in view.notes %}<div class="perf-notices" role="note"><p>{{ note }}</p></div>{% endfor %}
+    {{ metrics([
+        {"label": "Users at SLO · " ~ view.headline.cap ~ " cap", "value": view.headline.users, "detail": view.headline.status ~ (" · " ~ view.headline.limiting if view.headline.limiting else "")},
+        {"label": "Exhausted at · " ~ view.headline.cap ~ " cap", "value": view.exhaustion.users if view.exhaustion else "—", "detail": (view.exhaustion.status ~ (" · " ~ view.exhaustion.constraint if view.exhaustion.constraint else "")) if view.exhaustion else "saturation search off"},
+        {"label": "User model", "value": view.protocol.preset, "detail": view.protocol.hash},
+        {"label": "Per level", "value": view.protocol.warmup ~ " s + " ~ view.protocol.measure ~ " s", "detail": "warmup + measured window · target " ~ view.protocol.target},
+    ]) }}
+    <div class="perf-protocol"><span>Context caps {{ view.protocol.caps }}</span><span>Users {{ view.protocol.start }} → at most {{ view.protocol.max }}, resolution {{ view.protocol.resolution }}</span>{% if view.saturation_search %}<span>Saturation search up to {{ view.protocol.saturation_max }} users</span>{% endif %}<span>Seed {{ view.protocol.seed }}</span></div>
+
+    <div class="perf-table-wrap"><table class="perf-table"><caption>Users at SLO by context cap <span>Larger caps let sessions grow longer and cannot serve more users, so each cap starts at the previous result and never retries a count that already failed. “Exhausted at” is the first count beyond a hard limit in the saturation search.</span></caption>
+        <thead><tr><th scope="col">Context cap</th><th scope="col">Users at SLO</th><th scope="col">Result</th><th scope="col">First failing count</th><th scope="col">Limited by</th><th scope="col">Exhausted at</th><th scope="col">Peak output</th><th scope="col">Context p50 / p95 at result</th><th scope="col">Output at result</th><th scope="col">Levels</th></tr></thead>
+        <tbody>{% for row in view.results %}<tr {% if row.status_key == 'established' %}class="perf-peak"{% endif %}><th scope="row">{{ row.cap }}</th><td><strong>{{ row.users }}</strong></td><td>{{ row.status }}</td><td>{{ row.first_failed }}{% if row.inherited %} <small>(smaller cap)</small>{% endif %}</td><td>{{ row.limiting }}{% if row.detail %}<small> · {{ row.detail }}</small>{% endif %}</td><td><strong>{{ row.saturation }}</strong>{% if row.saturation_status %}<small> · {{ row.saturation_status }}{% if row.saturation_reason %} · {{ row.saturation_reason }}{% endif %}</small>{% endif %}</td><td>{{ row.peak }}</td><td>{{ row.context }}</td><td>{{ row.output }}</td><td>{{ row.levels }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+
+    {% if view.diagnoses %}
+    <div class="perf-table-wrap"><table class="perf-table"><caption>What limits this deployment <span>The constraint at the first failing count and at exhaustion, the signals that name it and changes that address it. Other signals present are listed as “also”.</span></caption>
+        <thead><tr><th scope="col">Context cap</th><th scope="col">Where</th><th scope="col">Constraint</th><th scope="col">Evidence</th><th scope="col">What to try</th></tr></thead>
+        <tbody>{% for d in view.diagnoses %}{% for item in d['items'] %}<tr><th scope="row">{{ d.cap }}</th><td>{{ item.where }}<small><br>{{ item.basis }}</small></td>
+            <td><strong>{{ item.label }}</strong><small><br>{{ item.summary }}{% if item.also %}<br>Also: {{ item.also|join(', ') }}{% endif %}</small></td>
+            <td><small>{% for line in item.evidence %}{{ line }}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</small></td>
+            <td><small>{% for r in item.remedies %}<strong>{{ r.title }}</strong>: {{ r.detail }}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</small></td></tr>{% endfor %}{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+
+    {% if view.chart or view.output_chart %}<div class="perf-chart-grid">{% if view.chart %}{{ chart_panel(view.chart) }}{% endif %}{% if view.output_chart %}{{ chart_panel(view.output_chart) }}{% endif %}</div>{% endif %}
+
+    <div class="perf-table-wrap"><table class="perf-table"><caption>Measured levels <span>Per class: SLO attainment · first token p95 (lag included) · slowest 5% output speed. Context is the reference size of each request, history included. Server signals cover the measured window.</span></caption>
+        <thead><tr><th scope="col">Cap</th><th scope="col">Users</th><th scope="col">Search</th><th scope="col">Result</th><th scope="col">All classes</th>{% for name in view.names %}<th scope="col">{{ name }}</th>{% endfor %}<th scope="col">Context p50 / p95</th><th scope="col">Requests</th><th scope="col">Output</th><th scope="col">Server</th><th scope="col">Note</th></tr></thead>
+        <tbody>{% for row in view.levels %}<tr><th scope="row">{{ row.cap }}</th><td>{{ row.users }}</td><td>{{ row.phase }}</td><td class="{{ '' if row.passed else 'perf-warning' }}">{{ row.result }}{% if row.hard_limit %}<small><br>beyond a hard limit</small>{% endif %}</td><td>{{ row.attainment }}</td>
+            {% for cell in row.classes %}<td>{% if cell %}<span class="{{ '' if cell.meets else 'perf-warning' }}">{{ cell.attainment }}</span><small> · <span class="{{ 'perf-warning' if cell.ttft_over else '' }}">{{ cell.ttft }}</span> · <span class="{{ 'perf-warning' if cell.speed_under else '' }}">{{ cell.speed }}</span> · {{ cell.users }} users, {{ cell.requests }} req{% if cell.thin %} (few){% endif %}</small>{% else %}—{% endif %}</td>{% endfor %}
+            <td>{{ row.context }}</td><td>{{ row.requests }}</td><td>{{ row.output }}</td><td>{{ row.server }}</td><td>{% if row.constraint %}<strong>{{ row.constraint }}</strong> · {% endif %}{{ row.note }}{% if row.detail and row.detail != row.note %}<small> · {{ row.detail }}</small>{% endif %}{% if row.hard_limit and row.hard_limit != row.note %}<small> · {{ row.hard_limit }}</small>{% endif %}{% if not row.warmup_complete %}<small> · not every user had a first answer after the warmup</small>{% endif %}</td></tr>{% endfor %}</tbody>
+    </table></div>
+
+    <div class="perf-table-wrap"><table class="perf-table"><caption>User model <span>Means of the histograms. Users of a class share its system prompt; each session's history is its own.</span></caption>
+        <thead><tr><th scope="col">Class</th><th scope="col">Share of users</th><th scope="col">System prompt</th><th scope="col">First message</th><th scope="col">Later messages</th><th scope="col">Answer</th><th scope="col">Think / tool time</th><th scope="col">Turns</th><th scope="col">SLO</th></tr></thead>
+        <tbody>{% for c in view.classes %}<tr><th scope="row">{{ c.name }}</th><td>{{ c.share }}</td><td>{{ c.system }}</td><td>{{ c.first }}</td><td>{{ c.turn }}</td><td>{{ c.output }}</td><td>{{ c.think }}</td><td>{{ c.turns }}</td><td>{{ c.slo }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+
+    <details class="perf-details"><summary>Errors <span>Examples from each level</span></summary>
+        <div class="perf-table-wrap"><table class="perf-table"><thead><tr><th scope="col">Cap</th><th scope="col">Users</th><th scope="col">Warmup used</th><th scope="col">Error examples</th></tr></thead>
+            <tbody>{% for row in view.levels %}<tr><th scope="row">{{ row.cap }}</th><td>{{ row.users }}</td><td>{{ row.warmup }}</td><td>{{ row.errors or '—' }}</td></tr>{% endfor %}</tbody></table></div>
+    </details>
+    <details class="perf-details"><summary>How to read this test <span>Protocol &amp; interpretation</span></summary><div class="perf-method">
+        {% for text in view.protocol.definitions %}<p>{{ text }}</p>{% endfor %}
+        <p>“Limited by” comes from the misses of the classes below target. The constraint is diagnosed from those misses and, with B300 telemetry, from vLLM and GPU signals over each level's measured window: KV cache occupancy and preemptions, prefix-cache hits against the reuse the session histories allow, waiting and running requests, prompt against generated tokens, and GPU activity. Telemetry covers all traffic of the deployment, not only this benchmark. The user model is an estimate until it is fitted to session traces; the result applies to this model, these SLOs and this deployment state.</p>
+    </div></details>
+</section>
+{% endfor %}
+{% if sessions.comparison %}{% set cmp = sessions.comparison %}
+<section class="perf-section" aria-label="Users at SLO comparison">
+    <div class="perf-section-heading"><div><h3>Users at SLO comparison</h3><p class="perf-caption">Runs with the same user model, windows, target and seed.</p></div></div>
+    {% if cmp.excluded %}<p class="perf-footnote">Not comparable with these runs: {{ cmp.excluded|join(', ') }}.</p>{% endif %}
+    <div class="perf-table-wrap"><table class="perf-table perf-comparison-table">
+        <thead><tr><th scope="col">Context cap</th>{% for run in cmp.runs %}<th scope="col">{{ run }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for row in cmp.rows %}<tr><th scope="row">{{ row.cap }}</th>{% for cell in row.cells %}<td>{% if cell %}{{ cell.users }}<small> · {{ cell.status }}{% if cell.saturation %} · exhausted at {{ cell.saturation }}{% endif %}{% if cell.constraint %} · {{ cell.constraint }}{% endif %}</small>{% else %}—{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+    </table></div>
+</section>
+{% endif %}
+{% endif %}

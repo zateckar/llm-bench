@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app import config as app_config
-from app.benchmarking import load_test, load_workload
+from app.benchmarking import load_test, load_workload, session_workload
 from app.benchmarking.models import Question
 from app.benchmarking.quality_suite import provenance
 from app.services import benchmark_runner as runner
@@ -51,8 +51,16 @@ class ModeTests(unittest.TestCase):
         self.assertEqual(run_modes.label({"mode": "both", "performance": "load"}, "Rigorous"),
                          "Quality · Rigorous + Open-loop load")
         self.assertEqual(run_modes.label({"mode": "sweep"}), "Context & reasoning sweep")
-        self.assertEqual(run_modes.label({"mode": "both", "performance": "standard"}, "Standard quality suite"),
-                         "Quality · Standard quality suite + Performance · latency, context, capacity")
+        self.assertEqual(run_modes.label({"mode": "both", "performance": "standard", "users": {}},
+                                         "Standard quality suite"),
+                         "Quality · Standard quality suite + Performance · latency, context, users")
+        self.assertEqual(run_modes.label(run_submission.make_run_options(mode="performance")),
+                         "Performance · latency, context, users")
+        # Standard runs before v4 also measured capacity.
+        self.assertEqual(run_modes.label({"mode": "performance", "performance": "standard", "load": {}}),
+                         "Performance · latency, context, capacity")
+        self.assertEqual(run_modes.label({"mode": "performance", "performance": "standard", "load": {}, "users": {}}),
+                         "Performance · latency, context, capacity, users")
         self.assertEqual(run_modes.normalise("performance", "standard"), (False, "standard"))
         # Runs of retired suites keep their labels.
         self.assertEqual(run_modes.describe('{"mode": "quality", "suite": "safety-language"}'),
@@ -63,32 +71,47 @@ class ModeTests(unittest.TestCase):
 
     def test_options(self):
         make = run_submission.make_run_options
-        default_load = load_workload.parse_settings(load_workload.default_settings()).model_dump()
         # New runs store the suite and the standard performance test with its stage settings.
+        default_users = session_workload.parse_settings(session_workload.default_settings()).model_dump()
+        limits = {"context_concurrency": 256, "target_ttft_ms": 2000, "target_output_rate": 40}
         self.assertEqual(make(), {"mode": "both", "max_concurrency": 8, "suite": "standard",
-                                  "performance": "standard", "in_flight_cap": 256, "load": default_load})
+                                  "performance": "standard", **limits, "users": default_users})
         self.assertEqual(make(mode="quality", max_concurrency=3), {"mode": "quality", "max_concurrency": 3,
                                                                    "suite": "standard"})
-        self.assertEqual(make(mode="performance", context_max=65536, in_flight_cap=64),
+        # The dropped capacity stage's settings are accepted and ignored.
+        self.assertEqual(make(mode="performance", context_max=65536, in_flight_cap=64,
+                              load={"preset": "chat", "rates": [1, 2]}),
                          {"mode": "performance", "max_concurrency": 8, "performance": "standard",
-                          "in_flight_cap": 64, "context_max": 65536, "load": default_load})
+                          "context_max": 65536, **limits, "users": default_users})
+        # Users-stage settings: presets, explicit caps (checked against the user model) and limits.
+        users = make(mode="performance", users={"preset": "agent", "context_caps": [32768, 131072],
+                                                "max_users": 128})["users"]
+        self.assertEqual((users["preset"], users["context_caps"], users["max_users"], users["model"]["classes"][0]["name"]),
+                         ("agent", [32768, 131072], 128, "agent"))
+        for bad in ({"context_caps": [4096]}, {"max_users": 5000}, {"preset": "bogus"}, {"measure_seconds": 5},
+                    "mixed"):
+            with self.subTest(users=bad), self.assertRaises(HTTPException):
+                make(mode="performance", users=bad)
+        self.assertEqual({key: make(mode="performance", context_concurrency=64, target_ttft_ms=1500,
+                                    target_output_rate=25)[key] for key in limits},
+                         {"context_concurrency": 64, "target_ttft_ms": 1500, "target_output_rate": 25})
         # Former tests map to the standard test, keeping compatible settings.
         self.assertEqual(make(mode="both", performance="fixed"), make())
         self.assertEqual(make(mode="sweep", max_concurrency=256), make(mode="performance"))
         sweep = make(mode="both", performance="sweep", max_concurrency=16, context_max=65536)
         self.assertEqual((sweep["performance"], sweep["max_concurrency"], sweep["context_max"]), ("standard", 16, 65536))
-        load = make(mode="load", max_concurrency=300, load={"preset": "chat", "rates": [1, 2]})
-        self.assertEqual((load["mode"], load["performance"], load["in_flight_cap"], load["max_concurrency"],
-                          load["load"]["preset"], load["load"]["rates"]),
-                         ("performance", "standard", 300, 8, "chat", [1.0, 2.0]))
+        self.assertEqual(make(mode="load", max_concurrency=300, load={"preset": "chat", "rates": [1, 2]}),
+                         make(mode="performance"))
         for kwargs in ({"mode": "quality", "performance": "sweep"}, {"mode": "sweep", "performance": "load"},
                        {"mode": "both", "performance": "bogus"},
                        {"mode": "performance", "suite": "usecase:hr@1"},
                        {"mode": "quality", "suite": "tool-conformance"},
                        {"mode": "both", "max_concurrency": 33},
-                       {"mode": "both", "in_flight_cap": 2000},
                        {"mode": "both", "context_max": 100},
-                       {"mode": "both", "performance": "load", "max_concurrency": 2000}):
+                       {"mode": "both", "context_concurrency": 257},
+                       {"mode": "both", "target_ttft_ms": 50},
+                       {"mode": "both", "target_output_rate": 0},
+                       {"mode": "both", "target_output_rate": "fast"}):
             with self.subTest(kwargs), self.assertRaises(HTTPException):
                 make(**kwargs)
 
@@ -96,8 +119,12 @@ class ModeTests(unittest.TestCase):
         legacy_load = load_workload.parse_settings({"preset": "chat", "rates": [1, 2]}).model_dump()
         legacy = {"mode": "load", "max_concurrency": 128, "load": legacy_load}
         spec = run_submission.spec_from_run({"model_id": 1, "run_options_json": json.dumps(legacy)})
-        self.assertEqual((spec["mode"], spec["performance"], spec["in_flight_cap"], spec["load"]),
-                         ("performance", "standard", 128, legacy_load))
+        self.assertEqual((spec["mode"], spec["performance"], "load" in spec, "in_flight_cap" in spec),
+                         ("performance", "standard", False, False))
+        # A standard run from before v4 reruns without its capacity stage.
+        v3 = {**run_submission.make_run_options(mode="performance"), "load": legacy_load, "in_flight_cap": 64}
+        spec = run_submission.spec_from_run({"model_id": 1, "run_options_json": json.dumps(v3)})
+        self.assertEqual(spec, {"model_id": 1, **run_submission.make_run_options(mode="performance")})
         # A run of a retired suite reruns the standard suite.
         old = {"mode": "both", "performance": "sweep", "max_concurrency": 32, "context_max": 65536,
                "sweep_rounds": 1, "sweep_output_tokens": 8192, "suite": "tool-conformance"}
@@ -159,13 +186,15 @@ class SubmissionTests(DatabaseCase):
         (_, config, options, repeats), = self.validate(
             [{"model_id": 1, "mode": "both", "max_concurrency": 32, "context_max": 65536, "in_flight_cap": 64,
               "load": {"preset": "chat", "rates": [1, 2]}, "repeats": 2}])
-        self.assertEqual((options["performance"], options["context_max"], options["in_flight_cap"], options["suite"],
-                          options["load"]["rates"], repeats), ("standard", 65536, 64, "standard", [1.0, 2.0], 2))
+        # Saved plans may still carry the dropped capacity stage's settings; they are ignored.
+        self.assertEqual((options["performance"], options["context_max"], options["suite"], repeats,
+                          "load" in options, "in_flight_cap" in options),
+                         ("standard", 65536, "standard", 2, False, False))
         self.assertEqual((config["name"], config["revision"]), ("standard", "standard-v1"))
         # Saved plans and API callers may still name a former performance test.
         (_, _, options, _), = self.validate([{"model_id": 1, "mode": "both", "performance": "load",
                                               "max_concurrency": 64, "load": {"preset": "chat", "rates": [1, 2]}}])
-        self.assertEqual((options["mode"], options["performance"], options["in_flight_cap"]), ("both", "standard", 64))
+        self.assertEqual((options["mode"], options["performance"], options["max_concurrency"]), ("both", "standard", 8))
         for bad in ({"mode": "quality", "context_max": 65536},
                     {"mode": "quality", "load": {"preset": "chat", "rates": [1]}},
                     {"mode": "quality", "in_flight_cap": 8},
@@ -297,9 +326,12 @@ class PageTests(DatabaseCase):
             self.assertIn('"mode": "performance"', form)
             self.assertIn('"performance": "standard"', form)
             for text in ("> Quality</label>", "> Performance</label>", "Advanced settings", "Quality runs first",
-                         "In-flight cap · capacity stage", "Override the context limit"):
+                         "Override the context limit", "Users stage", "3 stages, one report",
+                         "Maximum concurrency · context stage", "x-model.number=\"run.target_ttft_ms\"",
+                         '"context_concurrency": 256'):
                 self.assertIn(text, form)
-            for text in ('x-model="run.performance"', '<option value="sweep">', '<option value="load">'):
+            for text in ('x-model="run.performance"', '<option value="sweep">', '<option value="load">',
+                         "In-flight cap", "Capacity stage workload", "loadForm"):
                 self.assertNotIn(text, form)
 
 

@@ -420,7 +420,7 @@ def _create_run(db, canary):
     from app.services.model_settings import decoding_settings
     from app.services.run_submission import make_run_options, quality_config_for
 
-    model = _one(db, "SELECT temperature, reasoning_effort, b300_metrics_model FROM models WHERE id = ?",
+    model = _one(db, "SELECT temperature, reasoning_effort, b300_metrics_model, b300_gpus FROM models WHERE id = ?",
                  (canary["model_id"],))
     options = make_run_options(mode="quality", max_concurrency=canary["max_concurrency"], suite=canary["suite"])
     return db.execute(

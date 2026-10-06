@@ -12,7 +12,7 @@
 
 {% macro decision_chip(decision, label) %}<span class="inline-flex px-1.5 py-0.5 rounded text-xs font-medium {{ 'text-emerald-300 bg-emerald-900/40' if decision == 'approved' else 'text-sky-300 bg-sky-900/40' if decision == 'conditional' else 'text-red-300 bg-red-900/40' }}">{{ label }}</span>{% endmacro %}
 
-{% macro gate_value(r) %}{% if r.value is none %}<span class="text-zinc-600">—</span>{% elif r.unit == '%' %}{{ "%.1f%%"|format(r.value * 100) }}{% elif r.unit == 'ms' %}{{ ms(r.value) }}{% elif r.unit == 'tokens' %}{{ "{:,}".format(r.value) }} tokens{% elif r.unit == 'req/s' %}{{ "%.2f"|format(r.value) }} req/s{% elif r.unit == 'tok/s' %}{{ "%.1f"|format(r.value) }} tok/s{% else %}{{ r.value }}{% endif %}{% endmacro %}
+{% macro gate_value(r) %}{% if r.value is none %}<span class="text-zinc-600">—</span>{% elif r.unit == '%' %}{{ "%.1f%%"|format(r.value * 100) }}{% elif r.unit == 'ms' %}{{ ms(r.value) }}{% elif r.unit == 'tokens' %}{{ "{:,}".format(r.value) }} tokens{% elif r.unit == 'req/s' %}{{ "%.2f"|format(r.value) }} req/s{% elif r.unit == 'tok/s' %}{{ "%.1f"|format(r.value) }} tok/s{% elif r.unit == 'users' %}{{ "{:,}".format(r.value) }} users{% else %}{{ r.value }}{% endif %}{% endmacro %}
 
 {% macro gate_cell(r, old_days=90) %}
 <div class="space-y-0.5">
@@ -38,7 +38,7 @@
         <div><label class="block text-xs text-zinc-400 mb-1">Gate</label>
           <select class="input-field" x-model="g.type">
             <option value="quality">Quality</option><option value="capacity">Capacity under SLO</option>
-            <option value="latency">Latency</option><option value="context">Context</option>
+            <option value="users">Users at SLO</option><option value="latency">Latency</option><option value="context">Context</option>
             <option value="operations">Operations</option>
           </select></div>
         <template x-if="g.type === 'quality'"><div class="flex flex-wrap items-end gap-2">
@@ -50,6 +50,11 @@
         <template x-if="g.type === 'capacity'"><div class="flex flex-wrap items-end gap-2">
           <div><label class="block text-xs text-zinc-400 mb-1">Workload</label><select class="input-field" x-model="g.workload"><template x-for="w in options.workloads" :key="w.key"><option :value="w.key" x-text="w.label" :selected="w.key === g.workload"></option></template></select></div>
           <div><label class="block text-xs text-zinc-400 mb-1">At least (req/s)</label><input class="input-field w-24" type="number" min="0.001" step="any" x-model="g.threshold"></div>
+        </div></template>
+        <template x-if="g.type === 'users'"><div class="flex flex-wrap items-end gap-2">
+          <div><label class="block text-xs text-zinc-400 mb-1">User model</label><select class="input-field" x-model="g.user_model"><template x-for="u in options.user_models" :key="u.key"><option :value="u.key" x-text="u.label" :selected="u.key === g.user_model"></option></template></select></div>
+          <div><label class="block text-xs text-zinc-400 mb-1">Sessions up to (tokens)</label><input class="input-field w-32" type="number" min="1" step="1" x-model="g.context"></div>
+          <div><label class="block text-xs text-zinc-400 mb-1">At least (users)</label><input class="input-field w-24" type="number" min="1" step="1" x-model="g.threshold"></div>
         </div></template>
         <template x-if="g.type === 'latency'"><div class="flex flex-wrap items-end gap-2">
           <div><label class="block text-xs text-zinc-400 mb-1">Metric</label><select class="input-field" x-model="g.metric"><template x-for="m in options.latency_metrics" :key="m.key"><option :value="m.key" x-text="m.label + (m.lower ? ' (at most, ' : ' (at least, ') + m.unit + ')'" :selected="m.key === g.metric"></option></template></select></div>
@@ -72,6 +77,7 @@ function gateEditor(initial, options) {
     let uid = 0;
     const defaults = () => ({uid: ++uid, type: 'quality', suite: (options.suites[0] || {}).key || 'standard', metric: 'score',
                               category: '', pct: 70, workload: (options.workloads[0] || {}).key || 'chat',
+                              user_model: (options.user_models[0] || {}).key || 'mixed', context: 131072,
                               threshold: '', concurrency: 1});
     return {
         options,
@@ -87,6 +93,8 @@ function gateEditor(initial, options) {
                 if (g.type === 'quality') return {type: g.type, suite: g.suite, metric: g.metric === 'full_pass' ? 'full_pass' : 'score',
                                                   category: g.category || null, threshold: Number(g.pct) / 100};
                 if (g.type === 'capacity') return {type: g.type, workload: g.workload, threshold: Number(g.threshold)};
+                if (g.type === 'users') return {type: g.type, user_model: g.user_model, context: Number(g.context),
+                                                threshold: Number(g.threshold)};
                 if (g.type === 'latency') return {type: g.type, metric: ['ttft_p95', 'latency_p95', 'request_output'].includes(g.metric) ? g.metric : 'ttft_p95',
                                                   concurrency: Number(g.concurrency), threshold: Number(g.threshold)};
                 if (g.type === 'context') return {type: g.type, threshold: Number(g.threshold)};

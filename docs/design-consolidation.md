@@ -2,6 +2,12 @@
 
 Status: accepted, 2026-10-05. It supersedes the selectable parts of the separate suite and performance-test designs.
 
+Update 2026-10-06 (`standard-performance-v2`): the context stage is now a **limit search** over context × concurrency (`context-limits-v1`). Concurrency climbs 1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 192, 256 up to a run setting (default 256). Each cell is judged against per-request targets (run settings, defaults 2 s first token p95 and 40 tok/s output p95). A cell reaches the limit at 10× beyond a target, more than 10% failed requests, or saturation; every cell with at least that load and context is then skipped. One request per context is still measured to verify the declared context. The README's context-stage section has the exact rules.
+
+Update 2026-10-06 (`standard-performance-v3`): a fourth stage, **Users** (`sessions-v1`, schema 7, kind "sessions"), measures how many simultaneous simulated users in multi-turn sessions meet their SLO at each context cap; see [design-session-capacity.md](design-session-capacity.md). Its settings are stored as the run option `users`. The scorecard keeps users evidence per user model, and decision profiles gain a `users` gate.
+
+Update 2026-10-06 (`standard-performance-v4`): the **capacity stage is dropped**. The users stage answers the capacity question in user counts and context caps, and the open-loop stage added 10–40 minutes per run. The test is now latency, context and users. The stage stays registered (`RETIRED_STAGES`), so v1–v3 reports still show it and still supply scorecard capacity evidence; the view shows it only when a run measured it. New runs no longer store `load` or `in_flight_cap`; specs that send them are accepted and the settings ignored, and queued standard runs carrying them skip the stage. Queued runs of the former standalone `load` test still run it.
+
 ## Problem
 
 A person evaluating a model had to choose between four built-in quality suites and three performance tests. These suites were:

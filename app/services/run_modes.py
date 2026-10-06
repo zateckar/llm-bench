@@ -11,7 +11,7 @@ MODES = ("quality", "performance", "both")
 LEGACY_KINDS = ("fixed", "sweep", "load")
 PERFORMANCE_KINDS = ("standard", *LEGACY_KINDS)
 LEGACY_MODES = ("sweep", "load")
-PERFORMANCE_LABELS = {"standard": "Performance · latency, context, capacity", "fixed": "Fixed workload",
+PERFORMANCE_LABELS = {"standard": "Performance · latency, context, users", "fixed": "Fixed workload",
                       "sweep": "Context & reasoning sweep", "load": "Open-loop load"}
 
 
@@ -67,6 +67,10 @@ def label(options, suite_label=None):
     items = []
     if quality:
         items.append(f"Quality · {suite_label}" if suite_label else "Quality")
-    if kind:
+    if kind == "standard" and ("load" in options or "users" not in options):
+        # Runs before standard-performance-v4 also measured open-loop capacity.
+        stages = ["latency", "context", "capacity", *(["users"] if "users" in options else [])]
+        items.append(f"Performance · {', '.join(stages)}")
+    elif kind:
         items.append(PERFORMANCE_LABELS[kind])
     return " + ".join(items)

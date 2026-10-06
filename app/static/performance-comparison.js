@@ -24,7 +24,7 @@ function performanceComparison(data) {
             if (!point) return 'Not measured for this workload';
             return ({measured: 'Measured', failed: 'Failed', incomplete: 'Incomplete answer',
                 unsupported_context: 'Context rejected', skipped_context: 'Context skipped',
-                skipped_failure: 'Load skipped', priming_failed: 'Cache priming failed'})[point.status] || point.status;
+                skipped_failure: 'Load skipped', skipped_limit: 'Beyond the limit', priming_failed: 'Cache priming failed'})[point.status] || point.status;
         },
         problem(point) { return point && (point.errors > 0 || point.incomplete > 0 || point.status !== 'measured'); },
         title(point) { return [this.status(point), point?.samples, point?.failures, point?.error].filter(Boolean).join(' · '); }

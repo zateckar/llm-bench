@@ -3,3 +3,8 @@
     <input type="text" name="b300_metrics_model" maxlength="512" value="{{ model.b300_metrics_model if model is defined and model.b300_metrics_model else '' }}" placeholder="Exact Prometheus model_name for this B300 deployment" class="input-field">
     <p class="text-xs text-zinc-500 mt-1">Enter the model_name label to collect B300 vLLM timelines during performance tests. Leave blank to disable. Host and credentials come from server configuration.</p>
 </div>
+<div class="md:col-span-2">
+    <label class="block text-sm font-medium text-zinc-300 mb-1">B300 GPU indices (optional)</label>
+    <input type="text" name="b300_gpus" maxlength="200" value="{{ model.b300_gpus if model is defined and model.b300_gpus else '' }}" placeholder="e.g. 0-3 or 4,5,6,7" class="input-field">
+    <p class="text-xs text-zinc-500 mt-1">GPUs this deployment runs on, for GPU activity and memory metrics (DCGM <code>gpu</code> label). Leave blank to use every GPU on the host.</p>
+</div>

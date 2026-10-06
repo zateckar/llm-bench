@@ -155,6 +155,29 @@ def _open_loop(perf):
             "cancelled": bool(perf.get("cancelled"))}
 
 
+def _exhausted(saturation):
+    """Users at which the saturation search exhausted the deployment, as display text."""
+    status, users = (saturation or {}).get("status"), (saturation or {}).get("users")
+    if not users:
+        return None
+    if status == "reached":
+        return str(users)
+    return f"≤ {users}" if status == "inherited" else f"> {users}" if status in ("not_reached", "client_limited") else None
+
+
+def _sessions(perf):
+    protocol, summary = perf.get("protocol") or {}, perf.get("summary") or {}
+    preset, model_hash = protocol.get("preset") or "custom", protocol.get("user_model_hash") or ""
+    key = preset if preset != "custom" else f"custom:{model_hash}"
+    return {"kind": "users", "user_model": key, "label": user_model_label(key), "user_model_hash": model_hash,
+            "results": [{k: r.get(k) for k in ("context_cap", "users", "status", "first_failed")}
+                        | {"limiting": ((r.get("constraint") or {}).get("label")
+                                       or (r.get("limiting") or {}).get("label")),
+                           "exhausted": _exhausted(r.get("saturation"))}
+                        for r in summary.get("results") or []],
+            "attainment_target": protocol.get("attainment_target"), "cancelled": bool(perf.get("cancelled"))}
+
+
 def _sweep(db, run_id):
     tokens = None
     for row in db.execute("SELECT context_tokens, result_json FROM performance_cells WHERE run_id = ?", (run_id,)):
@@ -164,7 +187,7 @@ def _sweep(db, run_id):
 
 
 def _perf_extracts(db, run_id):
-    """Latency, context and capacity evidence of one run; a staged run can provide all three."""
+    """Latency, context, capacity and users evidence of one run; a staged run can provide all four."""
     from app.benchmarking.staged_performance import stages_of
 
     row = _one(db, "SELECT perf_json FROM test_runs WHERE id = ?", (run_id,))
@@ -179,6 +202,8 @@ def _perf_extracts(db, run_id):
         out.append(_sweep(db, run_id))
     if "capacity" in stages:
         out.append(_open_loop(stages["capacity"]))
+    if "users" in stages:
+        out.append(_sessions(stages["users"]))
     return out
 
 
@@ -214,6 +239,14 @@ def workload_label(key):
 
     if key.startswith("custom:"):
         return f"Custom workload {key[7:15]}"
+    return PRESET_LABELS.get(key, key)
+
+
+def user_model_label(key):
+    from app.benchmarking.session_workload import PRESET_LABELS
+
+    if key.startswith("custom:"):
+        return f"Custom user model {key[7:15]}"
     return PRESET_LABELS.get(key, key)
 
 
@@ -307,7 +340,7 @@ def _operations(db, models):
 
 
 def collect(now=None):
-    """Evidence for every model: ``{"models": [...], "suites": [...], "workloads": [...]}``."""
+    """Evidence for every model: ``{"models": [...], "suites": [...], "workloads": [...], "user_models": [...]}``."""
     now = now or _now()
     db = _connect()
     try:
@@ -341,12 +374,12 @@ def collect(now=None):
         for run in runs:
             by_model.setdefault(run["model_id"], []).append(run)
         operations = _operations(db, models)
-        suites, workloads = set(), {}
+        suites, workloads, user_models = set(), {}, {}
         out = []
         for model in models:
             evidence = {"model": model, "fingerprint": current.get(model["id"]),
                         "last_check_at": checked.get(model["id"]), "declared_context": declared.get(model["id"]),
-                        "quality": {}, "capacity": {}, "latency": None, "context": None,
+                        "quality": {}, "capacity": {}, "users": {}, "latency": None, "context": None,
                         "operations": {**operations[model["id"]], "fingerprint": current.get(model["id"])}}
             mine = by_model.get(model["id"], [])
             seen_groups = set()
@@ -389,6 +422,11 @@ def collect(now=None):
                             evidence["capacity"][extract["workload"]] = _stamp(dict(extract), [run], model["id"],
                                                                                context, now)
                             workloads[extract["workload"]] = extract["label"]
+                        elif kind == "users" and extract["user_model"] not in evidence["users"] \
+                                and any(r["status"] != "not_measured" for r in extract["results"]):
+                            evidence["users"][extract["user_model"]] = _stamp(dict(extract), [run], model["id"],
+                                                                              context, now)
+                            user_models[extract["user_model"]] = extract["label"]
             out.append(evidence)
     finally:
         db.close()
@@ -398,6 +436,7 @@ def collect(now=None):
         "suites": [{"key": key, "label": suite_label(key)}
                    for key in sorted(suites, key=lambda k: (order.get(k, 2), k))],
         "workloads": [{"key": key, "label": label} for key, label in sorted(workloads.items())],
+        "user_models": [{"key": key, "label": label} for key, label in sorted(user_models.items())],
     }
 
 
@@ -460,6 +499,12 @@ def _presets():
     return set(PRESETS)
 
 
+def _user_presets():
+    from app.benchmarking.session_workload import PRESETS
+
+    return set(PRESETS)
+
+
 def _validated(name, description, gates):
     name = (name or "").strip()
     description = (description or "").strip()
@@ -473,7 +518,8 @@ def _validated(name, description, gates):
         except ValueError:
             raise ScorecardError("The gates are not valid JSON") from None
     try:
-        gates = decision_gates.validate(gates, suite_exists=suite_exists, presets=_presets())
+        gates = decision_gates.validate(gates, suite_exists=suite_exists, presets=_presets(),
+                                        user_presets=_user_presets())
     except GateError as error:
         raise ScorecardError(str(error)) from None
     return name, description, gates
@@ -561,12 +607,15 @@ def evaluate_profile(profile, collected):
 def gate_labels(profile, collected=None):
     suites = {s["key"]: s["label"] for s in (collected or {}).get("suites", [])}
     workloads = {w["key"]: w["label"] for w in (collected or {}).get("workloads", [])}
+    user_models = {u["key"]: u["label"] for u in (collected or {}).get("user_models", [])}
     for gate in profile["gates"]:
         if gate["type"] == "quality" and gate["suite"] not in suites:
             suites[gate["suite"]] = suite_label(gate["suite"])
         if gate["type"] == "capacity" and gate["workload"] not in workloads:
             workloads[gate["workload"]] = workload_label(gate["workload"])
-    return [decision_gates.describe(g, suites, workloads) for g in profile["gates"]]
+        if gate["type"] == "users" and gate["user_model"] not in user_models:
+            user_models[gate["user_model"]] = user_model_label(gate["user_model"])
+    return [decision_gates.describe(g, suites, workloads, user_models) for g in profile["gates"]]
 
 
 # --- Decision records ---------------------------------------------------------------

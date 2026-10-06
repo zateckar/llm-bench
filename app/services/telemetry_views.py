@@ -19,6 +19,13 @@ def measurement_phases(perf):
         add(cell, "Cold · " + label)
         if cell.get("cache_reuse"):
             add(cell["cache_reuse"], "Warm · " + label)
+    for entry in perf.get("caps", []) if perf.get("kind") == "sessions" else []:
+        for level in entry.get("levels", []):
+            # The measured window, not the warmup.
+            window = {**level, "started_at": level.get("window_started_at", level.get("started_at")),
+                      "ended_at": level.get("window_ended_at", level.get("ended_at"))}
+            search = " · saturation" if level.get("phase") == "saturation" else ""
+            add(window, f"Users · {level['users']} · {entry.get('context_cap', 0):,}-token cap{search}")
     return sorted(phases, key=lambda p: p["started_at"])
 
 
@@ -67,6 +74,9 @@ def telemetry_view(run):
         ("Server queue, prefill and decode", ("queue", "prefill", "decode"), "ms", None),
         ("Server and client response time", ("latency",), "ms", ("latency.p95_ms", "Benchmark response · phase p95")),
         ("Preemptions", ("preemptions",), "events/s", None),
+        ("Server prompt and generation", ("input", "output"), "tok/s", None),
+        ("Server time per output token", ("tpot",), "ms", None),
+        ("GPU activity and memory", ("sm_active", "tensor_active", "dram_active", "gpu_memory"), "%", None),
     ):
         series = []
         for i, key in enumerate(keys):

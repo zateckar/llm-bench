@@ -12,7 +12,7 @@ import re
 
 REVISION = "decision-gates-v1"
 MAX_GATES = 20
-TYPES = ("quality", "capacity", "latency", "context", "operations")
+TYPES = ("quality", "capacity", "users", "latency", "context", "operations")
 QUALITY_METRICS = {"score": "achievement", "full_pass": "full pass"}
 LATENCY_METRICS = {
     # key: (label, unit, lower_is_better)
@@ -21,7 +21,7 @@ LATENCY_METRICS = {
     "request_output": ("per-request output p50", "tok/s", False),
 }
 LIMITS = {"capacity": (0.001, 10_000.0), "context": (1, 100_000_000), "concurrency": (1, 4096),
-          "ms": (1, 3_600_000), "tok/s": (0.001, 1_000_000)}
+          "ms": (1, 3_600_000), "tok/s": (0.001, 1_000_000), "users": (1, 1_000_000)}
 CUSTOM_WORKLOAD = re.compile(r"custom:[0-9a-f]{16}")
 STATUSES = ("pass", "fail", "missing", "stale")
 
@@ -42,8 +42,16 @@ def _number(raw, low, high, what):
     return value
 
 
-def validate(raw_gates, *, suite_exists, presets):
-    """Normalised gates or ``GateError``. ``suite_exists(key)`` checks quality suites."""
+def _whole(raw, kind, what):
+    value = _number(raw, *LIMITS[kind], what)
+    if value != int(value):
+        raise GateError(f"{what} must be a whole number")
+    return int(value)
+
+
+def validate(raw_gates, *, suite_exists, presets, user_presets=()):
+    """Normalised gates or ``GateError``. ``suite_exists(key)`` checks quality suites;
+    ``presets`` and ``user_presets`` name capacity workloads and users-stage user models."""
     if not isinstance(raw_gates, list) or not raw_gates:
         raise GateError("A profile needs at least one gate")
     if len(raw_gates) > MAX_GATES:
@@ -72,6 +80,14 @@ def validate(raw_gates, *, suite_exists, presets):
                 raise GateError(f"{where}: choose a workload preset or custom:<workload hash>")
             gates.append({"type": kind, "workload": workload,
                           "threshold": _number(raw.get("threshold"), *LIMITS["capacity"], f"{where}: rate")})
+        elif kind == "users":
+            user_model = raw.get("user_model")
+            if not isinstance(user_model, str) or not (user_model in user_presets
+                                                       or CUSTOM_WORKLOAD.fullmatch(user_model)):
+                raise GateError(f"{where}: choose a user-model preset or custom:<user model hash>")
+            gates.append({"type": kind, "user_model": user_model,
+                          "context": _whole(raw.get("context"), "context", f"{where}: context"),
+                          "threshold": _whole(raw.get("threshold"), "users", f"{where}: users")})
         elif kind == "latency":
             metric = raw.get("metric")
             if metric not in LATENCY_METRICS:
@@ -90,9 +106,12 @@ def validate(raw_gates, *, suite_exists, presets):
     return gates
 
 
-def describe(gate, suite_labels=None, workload_labels=None):
+def describe(gate, suite_labels=None, workload_labels=None, user_labels=None):
     """Readable requirement, e.g. ``Rigorous suite achievement ≥ 70%``."""
     kind = gate["type"]
+    if kind == "users":
+        label = (user_labels or {}).get(gate["user_model"], gate["user_model"])
+        return f"Users at SLO on {label} with sessions up to {gate['context']:,} tokens ≥ {gate['threshold']:,}"
     if kind == "quality":
         suite = (suite_labels or {}).get(gate["suite"], gate["suite"])
         scope = f" · {gate['category']}" if gate.get("category") else ""
@@ -160,6 +179,27 @@ def _capacity(gate, evidence):
                   note="Only a lower bound was established; test higher rates" if bound else None)
 
 
+def _users(gate, evidence):
+    """Judged at the smallest measured context cap that holds the required sessions:
+    a larger cap serves at most as many users, so it is conservative evidence."""
+    item = (evidence.get("users") or {}).get(gate["user_model"])
+    if not item:
+        return _result("missing", note="No users-stage run of this user model")
+    usable = [r for r in item.get("results") or [] if r.get("context_cap", 0) >= gate["context"]
+              and r.get("status") in ("established", "lower_bound", "not_met")]
+    if not usable:
+        return _result("missing", evidence=item,
+                       note=f"No conclusive result at a context cap of at least {gate['context']:,} tokens")
+    result = min(usable, key=lambda r: r["context_cap"])
+    users = result.get("users") or 0
+    cap = f"at the {result['context_cap']:,}-token cap"
+    if users >= gate["threshold"]:
+        return _judge(True, item, value=users, unit="users", note=cap)
+    bound = result["status"] == "lower_bound"
+    return _judge(False, item, value=users, unit="users", uncertain=bound,
+                  note=f"Only a lower bound was established {cap}; test more users" if bound else cap)
+
+
 def _latency(gate, evidence):
     item = evidence.get("latency")
     if not item:
@@ -202,7 +242,7 @@ def _operations(gate, evidence):
                   if canaries else "No open alerts; no canaries configured")
 
 
-EVALUATORS = {"quality": _quality, "capacity": _capacity, "latency": _latency, "context": _context,
+EVALUATORS = {"quality": _quality, "capacity": _capacity, "users": _users, "latency": _latency, "context": _context,
               "operations": _operations}
 
 

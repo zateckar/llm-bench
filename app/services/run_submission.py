@@ -8,10 +8,8 @@ from fastapi import HTTPException
 from app.database import fetch_all, get_db
 from app.services import run_modes
 from app.benchmarking.perf import DEFAULT_MAX_CONCURRENCY, MAX_CONCURRENCY, PerfConfig
-from app.benchmarking.load_workload import (
-    DEFAULT_IN_FLIGHT, MAX_IN_FLIGHT, PRESET_LABELS, PRESETS, default_settings, error_text, parse_settings,
-)
-from app.benchmarking import staged_performance
+from app.benchmarking.load_workload import error_text
+from app.benchmarking import session_workload, staged_performance
 from app.benchmarking.quality_suite import QUALITY_WORKERS
 from app.benchmarking.suites import DEFAULT_SUITE, RETIRED_SUITES, SUITE_NAMES, get_suite, suite_choices
 from app.benchmarking.usecase_suites import is_key as is_usecase_key
@@ -31,16 +29,19 @@ def _integer(raw):
 
 def make_run_options(*, mode="both", performance=None, max_concurrency=DEFAULT_MAX_CONCURRENCY,
                      context_max=None, sweep_rounds=None, sweep_output_tokens=None,
-                     suite=DEFAULT_SUITE, load=None, in_flight_cap=None):
+                     suite=DEFAULT_SUITE, load=None, in_flight_cap=None, context_concurrency=None,
+                     target_ttft_ms=None, target_output_rate=None, users=None):
     """Canonical options of a new run (docs/design-consolidation.md).
 
     ``mode`` is quality, performance or both. Quality runs store their suite;
     performance runs store the standard staged test with its stage settings:
     ``max_concurrency`` (latency stage, also capping quality workers),
-    ``context_max`` (optional context-stage limit), ``load`` and
-    ``in_flight_cap`` (capacity stage). Legacy performance kinds and modes are
-    mapped to the standard test, keeping compatible settings; the legacy sweep
-    settings ``sweep_rounds`` and ``sweep_output_tokens`` are accepted and ignored."""
+    ``context_max`` (optional context-stage limit), ``context_concurrency``,
+    ``target_ttft_ms`` and ``target_output_rate`` (context-stage limit
+    search) and ``users`` (users stage). Legacy performance kinds and modes
+    are mapped to the standard test, keeping compatible settings; the legacy
+    sweep settings ``sweep_rounds`` and ``sweep_output_tokens`` and the
+    dropped capacity stage's ``load`` and ``in_flight_cap`` are accepted and ignored."""
     requested = performance
     if requested is None and mode in ("performance", "both"):
         requested = "standard"
@@ -58,8 +59,7 @@ def make_run_options(*, mode="both", performance=None, max_concurrency=DEFAULT_M
     options = {"mode": mode}
     try:
         if kind == "load":
-            # The legacy load test's concurrency was its in-flight cap.
-            in_flight_cap = max_concurrency if in_flight_cap is None else in_flight_cap
+            # The legacy load test's concurrency was its in-flight cap, which no stage uses now.
             max_concurrency = DEFAULT_MAX_CONCURRENCY
         elif kind == "sweep" and _integer(max_concurrency) > MAX_CONCURRENCY:
             # A sweep's concurrency does not fit the latency stage.
@@ -70,13 +70,21 @@ def make_run_options(*, mode="both", performance=None, max_concurrency=DEFAULT_M
             options["suite"] = suite
         if kind:
             options["performance"] = "standard"
-            cap = DEFAULT_IN_FLIGHT if in_flight_cap is None else _integer(in_flight_cap)
-            if not 1 <= cap <= MAX_IN_FLIGHT:
-                raise ValueError(f"The in-flight cap must be between 1 and {MAX_IN_FLIGHT}")
-            options["in_flight_cap"] = cap
             if context_max is not None:
                 options["context_max"] = staged_performance.context_limit(_integer(context_max))
-            options["load"] = parse_settings(load if load is not None else default_settings()).model_dump()
+            options["context_concurrency"] = staged_performance.context_concurrency(
+                staged_performance.DEFAULT_CONTEXT_CONCURRENCY if context_concurrency is None
+                else _integer(context_concurrency))
+            targets = staged_performance.targets(
+                None if target_ttft_ms is None else _integer(target_ttft_ms),
+                None if target_output_rate is None else _integer(target_output_rate))
+            options["target_ttft_ms"] = targets.ttft_ms
+            options["target_output_rate"] = targets.output_tokens_per_sec
+            user_settings = session_workload.parse_settings(
+                users if users is not None else session_workload.default_settings())
+            for cap in user_settings.context_caps:
+                session_workload.check_fits(user_settings.model, cap)
+            options["users"] = user_settings.model_dump()
     except (TypeError, ValueError) as error:
         raise HTTPException(status_code=422, detail=error_text(error)) from error
     return options
@@ -102,8 +110,7 @@ def spec_from_run(run):
             max_concurrency=previous.get("max_concurrency", DEFAULT_MAX_CONCURRENCY),
             context_max=previous.get("context_max"),
             suite=suite,
-            load=previous.get("load"),
-            in_flight_cap=previous.get("in_flight_cap"),
+            **{key: previous.get(key) for key in STAGE_SETTINGS},
         )
     except (ValueError, TypeError, AttributeError, HTTPException):
         options = make_run_options()
@@ -143,8 +150,10 @@ def quality_config_for(options):
     return {**suite.provenance(), "name": suite.name}
 
 
-PERFORMANCE_SETTINGS = {"context_max", "load", "in_flight_cap"}
-LEGACY_SETTINGS = {"sweep_rounds", "sweep_output_tokens"}
+STAGE_SETTINGS = ("context_concurrency", "target_ttft_ms", "target_output_rate", "users")
+PERFORMANCE_SETTINGS = {"context_max", *STAGE_SETTINGS}
+# Accepted from saved plans and API callers, and ignored.
+LEGACY_SETTINGS = {"sweep_rounds", "sweep_output_tokens", "load", "in_flight_cap"}
 
 
 async def validated_specs(raw: str) -> list[tuple[int, dict, dict, int]]:
@@ -182,8 +191,7 @@ async def validated_specs(raw: str) -> list[tuple[int, dict, dict, int]]:
             max_concurrency=spec.get("max_concurrency", DEFAULT_MAX_CONCURRENCY),
             context_max=spec.get("context_max"),
             suite=spec.get("suite", DEFAULT_SUITE),
-            load=spec.get("load"),
-            in_flight_cap=spec.get("in_flight_cap"),
+            **{key: spec.get(key) for key in STAGE_SETTINGS},
         )
         prepared.append((model_id, options, _repeats(spec.get("repeats"), index)))
     if sum(repeats for _, _, repeats in prepared) > MAX_PLAN_RUNS:
@@ -253,11 +261,11 @@ def form_context(
         "spec_defaults": spec_defaults(),
         "prefill": specs,
         "max_concurrency": MAX_CONCURRENCY,
-        "load_form": {
-            "defaults": default_settings(),
-            "presets": {key: {"label": PRESET_LABELS[key], "workload": workload} for key, workload in PRESETS.items()},
-            "max_in_flight": MAX_IN_FLIGHT,
-            "default_in_flight": DEFAULT_IN_FLIGHT,
+        "users_form": {
+            "defaults": session_workload.default_settings(),
+            "presets": {key: {"label": session_workload.PRESET_LABELS[key], "model": model}
+                        for key, model in session_workload.PRESETS.items()},
+            "max_users": session_workload.MAX_USERS,
         },
         "submission_name": name,
         "scheduled_utc": scheduled,
@@ -277,12 +285,12 @@ async def _insert_runs(db, prepared, user_id, plan_id):
         model_id, quality_config, options = item[:3]
         repeats = item[3] if len(item) > 3 else 1
         model_cursor = await db.execute(
-            "SELECT temperature, reasoning_effort, b300_metrics_model FROM models WHERE id = ?", (model_id,)
+            "SELECT temperature, reasoning_effort, b300_metrics_model, b300_gpus FROM models WHERE id = ?", (model_id,)
         )
         model_settings = await model_cursor.fetchone()
         if model_settings is None:
             raise HTTPException(status_code=422, detail="Model no longer exists")
-        metrics = metrics_scope({"b300_metrics_model": model_settings[2]})
+        metrics = metrics_scope({"b300_metrics_model": model_settings[2], "b300_gpus": model_settings[3]})
         group_id = None
         for repeat_index in range(repeats):
             # Repeat i samples with seed i, so repeats measure the sampling

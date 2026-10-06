@@ -64,6 +64,8 @@ def sweep_view(run, offline=False):
                 "bursts": cell.get("burst_requests", 0),
                 "provider_input": at(cell, "prompt_tokens.mean"),
                 "cancelled": cell.get("cancelled", False),
+                "within_targets": cell.get("within_targets"),
+                "limit": cell.get("limit", ""),
                 "formatted": {
                     key: duration(value)
                     if key.startswith(("first_", "answer_"))
@@ -90,6 +92,8 @@ def sweep_view(run, offline=False):
         "complete": report.get("finished", False) and not report.get("cancelled"),
         "accepted": sum(e.get("status") == "accepted" for e in data["efforts"]),
         "exports": [],
+        "targets": protocol.get("targets"),
+        "limits": limit_rows(data) if protocol.get("targets") else [],
     }
     if offline:
         for effort in data["efforts"]:
@@ -101,6 +105,39 @@ def sweep_view(run, offline=False):
             ]
             view["exports"].append({**effort, "cells": effort_cells, "matrices": matrices})
     return view
+
+
+def limit_rows(data):
+    """Per effort and context: the load served within targets and the limit found.
+
+    "Within targets up to" counts only consecutive loads from one request, so a
+    load that missed a target is never hidden behind a later lucky one."""
+    rows = []
+    for effort in data["efforts"]:
+        for context in data["contexts"]:
+            row = sorted((c for c in data["cells"] if c["effort"] == effort["effort"] and c["context"] == context),
+                         key=lambda c: c["concurrency"])
+            measured = [c for c in row if c["requests"]]
+            if not row:
+                continue
+            within, unknown = None, False
+            for cell in measured:
+                if cell["within_targets"] is not True:
+                    unknown = cell["within_targets"] is None
+                    break
+                within = cell["concurrency"]
+            limit = next((c for c in measured if c["limit"]), None)
+            skipped = next((c for c in row if not c["requests"]), None)
+            rows.append({
+                "effort": effort["effort"], "context": context,
+                "within": within, "unknown": unknown,
+                "limit": limit["concurrency"] if limit else None,
+                "reason": limit["limit"] if limit else "",
+                "highest": max((c["concurrency"] for c in measured), default=None),
+                "note": "" if measured else (skipped["error"] if skipped else ""),
+                "cancelled": any(c["cancelled"] for c in row),
+            })
+    return rows
 
 
 def export_matrix(data, effort, metric):

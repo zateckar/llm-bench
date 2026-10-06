@@ -459,6 +459,8 @@ def staged_view(runs, *, offline=False):
     stages = []
     for key, label, _, _, description in staged.STAGES:
         members = [{**r, "perf": stages_[key]} for r, stages_ in split if key in stages_]
+        if key in staged.RETIRED_STAGES and not members:
+            continue
         stages.append({
             "key": key, "label": label, "description": description,
             "view": performance_view(members, offline=offline, capacity=False) if members else None,
@@ -484,6 +486,7 @@ def performance_view(runs, *, offline=False, capacity=True):
         return raw if raw.get("schema_version") == 3 else {}
 
     from app.services.load_views import is_open_loop, open_loop_views
+    from app.services.session_views import is_sessions, session_views
 
     current = [{**r, "perf": current_perf(r), "raw_perf": r["perf"], "is_sweep": r["perf"].get("schema_version") == 4
                 and r["perf"].get("kind") == "context_sweep"} for r in runs]
@@ -536,7 +539,7 @@ def performance_view(runs, *, offline=False, capacity=True):
     for r in current:
         perf = r["perf"]
         load_view = load_performance_view(r)
-        if not perf and not r["is_sweep"] and not is_open_loop(r.get("raw_perf")):
+        if not perf and not r["is_sweep"] and not is_open_loop(r.get("raw_perf")) and not is_sessions(r.get("raw_perf")):
             notes.append(f"{r['label']}: no performance report for the current protocol.")
         if perf.get("cancelled"):
             notes.append(f"{r['label']}: stopped early; measurements are incomplete.")
@@ -635,6 +638,7 @@ def performance_view(runs, *, offline=False, capacity=True):
     return {
         "comparison": performance_comparison(runs),
         "open_loop": open_loop_views(runs),
+        "session_views": session_views(runs),
         "cache_rows": cache_rows,
         "capacity_views": [estimate_capacity(r) for r in runs if r.get("perf")] if capacity else [],
         "telemetry_views": [view for r in runs if (view := telemetry_view(r))],

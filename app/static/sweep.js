@@ -35,7 +35,7 @@ function sweepExplorer(data) {
                 if (tile.left < box.left + 95 || tile.right > box.right) scroller.scrollLeft += tile.left - box.left - 100;
             });
         },
-        statusLabel(status) { return ({measured:'Measured', unsupported_context:'Context rejected', skipped_context:'Context skipped', skipped_failure:'Load skipped', failed:'Failed', incomplete:'Incomplete answer', not_measured:'Not measured', not_probed:'Not probed', accepted:'Accepted', unsupported:'Unsupported effort', probe_failed:'Probe failed'})[status] || status; },
+        statusLabel(status) { return ({measured:'Measured', unsupported_context:'Context rejected', skipped_context:'Context skipped', skipped_failure:'Load skipped', skipped_limit:'Beyond the limit', failed:'Failed', incomplete:'Incomplete answer', not_measured:'Not measured', not_probed:'Not probed', accepted:'Accepted', unsupported:'Unsupported effort', probe_failed:'Probe failed'})[status] || status; },
         format(value, unit = this.metricInfo.unit) {
             if (typeof value !== 'number' || !Number.isFinite(value)) return 'n/a';
             if (unit !== 'ms') return value.toLocaleString(undefined, {maximumFractionDigits:1}) + ' ' + unit;
