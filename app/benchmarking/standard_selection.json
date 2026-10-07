@@ -1,0 +1,1330 @@
+{
+  "revision": "standard-selection-v1",
+  "source_questions": 519,
+  "source_hash": "202597e77b1046aa",
+  "retained_questions": 339,
+  "removed_questions": 180,
+  "panel": [
+    {
+      "run": 91,
+      "model_id": 13,
+      "model": "Qwen/Qwen3.8-Flash-Next-FP8",
+      "suite_hash": "f1749d172c3aa657",
+      "temperature": 1.0,
+      "reasoning_effort": null
+    },
+    {
+      "run": 95,
+      "model_id": 13,
+      "model": "Qwen/Qwen3.8-Flash-Next-FP8",
+      "suite_hash": "f1749d172c3aa657",
+      "temperature": 1.0,
+      "reasoning_effort": null
+    },
+    {
+      "run": 96,
+      "model_id": 6,
+      "model": "moonshotai/Kimi-K3.vlong",
+      "suite_hash": "f1749d172c3aa657",
+      "temperature": 1.0,
+      "reasoning_effort": null
+    },
+    {
+      "run": 97,
+      "model_id": 5,
+      "model": "skoda-llm-secondary",
+      "suite_hash": "f1749d172c3aa657",
+      "temperature": 0.0,
+      "reasoning_effort": null
+    }
+  ],
+  "rule": "Remove only unchanged, graded tasks fully passed in every selected run; retain failures, missing or changed evidence, ungraded tasks and new challenges.",
+  "evidence_status": "provisional; mixed decoding cohorts, no repeated three-run panel per model; no claim of universal easiness or validated discrimination",
+  "dropped_categories": [
+    "Confidentiality",
+    "Language Translations",
+    "Over-refusal",
+    "Parallel Tool Calls",
+    "Terminal Debugging",
+    "Tool Selection & Arguments"
+  ],
+  "removed_by_area": {
+    "reasoning": 59,
+    "tools": 83,
+    "safety": 38
+  },
+  "retained_by_area": {
+    "reasoning": 288,
+    "tools": 13,
+    "safety": 8,
+    "open": 30
+  },
+  "retained_reasons": {
+    "failure_or_unscored": 265,
+    "changed_identity": 20,
+    "new_or_missing": 24,
+    "ungraded": 30
+  },
+  "removed": [
+    {
+      "id": "AC2-01",
+      "fingerprint": "57c30c07b545d563ca1796322c2213c41ea41ee8eb8f70db6098a4cbd74d986f",
+      "area": "reasoning",
+      "category": "Advanced Coding",
+      "family": "R8A-AC2-01"
+    },
+    {
+      "id": "AC2-02",
+      "fingerprint": "b2b6174de0a4f57d5a79f732cd21952ecf6f37b01c3957248c36b5f6c94d026d",
+      "area": "reasoning",
+      "category": "Advanced Coding",
+      "family": "R8A-AC2-02"
+    },
+    {
+      "id": "AC2-04",
+      "fingerprint": "5b297af3e2986dcc8b0b56c758893c4f2a15de7762d09baa94690bdb131d5c51",
+      "area": "reasoning",
+      "category": "Advanced Coding",
+      "family": "R8A-AC2-04"
+    },
+    {
+      "id": "AC2-05",
+      "fingerprint": "b7856f93fc0baef638350622ae559fd792e92b8937c490136651629e89095ccc",
+      "area": "reasoning",
+      "category": "Advanced Coding",
+      "family": "R8A-AC2-05"
+    },
+    {
+      "id": "AC2-07",
+      "fingerprint": "4adb671b25d6508d70502ff2550b5283193f87a6da1eddd974cdd5379c871ac1",
+      "area": "reasoning",
+      "category": "Advanced Coding",
+      "family": "R8A-AC2-07"
+    },
+    {
+      "id": "AC2-08",
+      "fingerprint": "dd2ba97892e6e09e079ae8d972f874de13e74e6e2d7d27bc71b7deab72af9c75",
+      "area": "reasoning",
+      "category": "Advanced Coding",
+      "family": "R8A-AC2-08"
+    },
+    {
+      "id": "AU2-05",
+      "fingerprint": "c832772c17df77bddab350f28c1cdf29325fff0aa6e99a1f6fc341786c49580f",
+      "area": "reasoning",
+      "category": "Agentic Use Cases",
+      "family": "R8A-AU2-05"
+    },
+    {
+      "id": "AU2-07",
+      "fingerprint": "6c2bae1f336ebbd2b456a5b3a070776d6aafbd05401e994b6ec4d078ec88f267",
+      "area": "reasoning",
+      "category": "Agentic Use Cases",
+      "family": "R8A-AU2-07"
+    },
+    {
+      "id": "H5-CG-ledger-01",
+      "fingerprint": "0e0a4e30959eb570d5b093a9f99d029f21ddf0222274cbf3c9b54cf799255868",
+      "area": "reasoning",
+      "category": "Code Generation",
+      "family": "R8A-H5-CG-ledger"
+    },
+    {
+      "id": "H5-CG-routes-01",
+      "fingerprint": "3d24b9c66aa2d160915658a926e66505ced68225f4819006a15c5af959199d3b",
+      "area": "reasoning",
+      "category": "Code Generation",
+      "family": "R8A-H5-CG-routes"
+    },
+    {
+      "id": "H5-RC-revision-03",
+      "fingerprint": "c917231091c3c4afdb0a83ba6992fa25db6c12bd87f6c4db0f4642b002ce88e3",
+      "area": "reasoning",
+      "category": "Reading Comprehension",
+      "family": "R8A-H5-RC-revision"
+    },
+    {
+      "id": "H5-SU-revision-05",
+      "fingerprint": "f57c2ba3e918478e2a5adc70ef23d105f62b5a60fef38f04cda038f1bb0c79a9",
+      "area": "reasoning",
+      "category": "Summarization",
+      "family": "R8A-H5-SU-revision"
+    },
+    {
+      "id": "H5-SU-revision-07",
+      "fingerprint": "bc066629eb65b1582a85bf95810164077ba71a0eb0587dd18a44bef9d80f06ec",
+      "area": "reasoning",
+      "category": "Summarization",
+      "family": "R8A-H5-SU-revision"
+    },
+    {
+      "id": "N1-document-evaluation-s19-v0",
+      "fingerprint": "eb6e90fb68a3d0c408891aad1afe2d014ddd48d89913dbdd7962f234f695d16b",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-document"
+    },
+    {
+      "id": "N1-document-evaluation-s19-v1",
+      "fingerprint": "7fd10b08fee4c7e3c279a1cbe3b352a13f5d4cb6f8005617c74b87a07c8276bf",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-document"
+    },
+    {
+      "id": "N1-document-evaluation-s23-v0",
+      "fingerprint": "b2211a87e2ed893c6f87b58aa310cc93a5383854926b55b0d7f5f897ca35a33c",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-document"
+    },
+    {
+      "id": "N1-document-evaluation-s23-v1",
+      "fingerprint": "dc3d66210837b67fca8e2c1f3aa921f86685905586b78ad75ee12f8b7f3bdb12",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-document"
+    },
+    {
+      "id": "N1-payment-evaluation-s19-v0",
+      "fingerprint": "1788e0c076bc45ba02b33599a270834ff0473e5392c1c1ee03e807509e5c64f7",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-payment"
+    },
+    {
+      "id": "N1-payment-evaluation-s19-v1",
+      "fingerprint": "079ef31a6ae5e2c6c030d80ee36789b88b4098c14c7ed7e31f738d6a60674a05",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-payment"
+    },
+    {
+      "id": "N1-payment-evaluation-s23-v0",
+      "fingerprint": "1858f62f820a151e39c35ea2cdc7e7aeb23c9257f2405a3373309dd6513743c8",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-payment"
+    },
+    {
+      "id": "N1-payment-evaluation-s23-v1",
+      "fingerprint": "9062a2cea4e78a3fc709f3912f74d8f4c8b41008d50cf1f6c0d2b045c77fe7b8",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-payment"
+    },
+    {
+      "id": "N1-permission-replanning-evaluation-s19-v01",
+      "fingerprint": "c9bd642efb33cfda2e3afc9c6dcb77d43b95da276c13c3993294d95a06460989",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-permission-replanning"
+    },
+    {
+      "id": "N1-permission-replanning-evaluation-s19-v02",
+      "fingerprint": "40b9db7dcf6a5a95a7f62dc6a2ead0dede89ca909b687f470513bb14499e820b",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-permission-replanning"
+    },
+    {
+      "id": "N1-permission-replanning-evaluation-s23-v01",
+      "fingerprint": "b1bec98c5a62f66c2414acda953b707e55c9cf18596b1489c09bf59902562d09",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-permission-replanning"
+    },
+    {
+      "id": "N1-permission-replanning-evaluation-s23-v02",
+      "fingerprint": "8fa47fbdae6f75452a7ddc4862d8fd2c80de4b81dfc0a9635e8e64910ea6ef5b",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-permission-replanning"
+    },
+    {
+      "id": "N1-preview-evaluation-s23-v1",
+      "fingerprint": "a74f4ac7285c1f72d8b579a532fa7e1a56d65d1bcde1fb890c10c152f084ad67",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-preview"
+    },
+    {
+      "id": "N1-resource-races-evaluation-s19-v01",
+      "fingerprint": "1f09b03ce98820345ffa5ec777b32210a45b0d93bc62d22e1c9c2bc62374c402",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-resource-races"
+    },
+    {
+      "id": "N1-resource-races-evaluation-s19-v02",
+      "fingerprint": "9e70421cc687eba5660c1b6199940fd087361d604a079c02697e4ca2120098f7",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-resource-races"
+    },
+    {
+      "id": "N1-resource-races-evaluation-s23-v01",
+      "fingerprint": "be2435d0604982d7cfc9e7ce46a3e6469186e2b0dcbc308bdf77d95d2a89b720",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-resource-races"
+    },
+    {
+      "id": "N1-resource-races-evaluation-s23-v02",
+      "fingerprint": "aa6906c7f0a79576745d19b91ccf40cefe7ec6d1ba321abf8eaa37bc8c4e5bfc",
+      "area": "tools",
+      "category": "Native Agentic Simulations",
+      "family": "N1-resource-races"
+    },
+    {
+      "id": "Q10-causal-register-s19-v02",
+      "fingerprint": "f8ea4dafb4121cb0380e8d56d0051bfd864e1474245989983c51a5a787ec3cb2",
+      "area": "reasoning",
+      "category": "Agentic Use Cases",
+      "family": "Q10-causal-register"
+    },
+    {
+      "id": "Q10-unicode-revisions-s19-v01",
+      "fingerprint": "f3cc3361cba472921ce3ba8d57c1a5eb1e6248390c3479291a4312fad864d99b",
+      "area": "reasoning",
+      "category": "Code Generation",
+      "family": "Q10-unicode-revisions"
+    },
+    {
+      "id": "Q10-unicode-revisions-s19-v02",
+      "fingerprint": "670e03150d3ac596113b26a8ba9ac32d300f310893f932318e18c846ba3dfe41",
+      "area": "reasoning",
+      "category": "Code Generation",
+      "family": "Q10-unicode-revisions"
+    },
+    {
+      "id": "Q10-unicode-revisions-s23-v01",
+      "fingerprint": "4624cb509684f13be85761e70a2f1d10dbfb806c5eaa8da3b57cc87e242fd042",
+      "area": "reasoning",
+      "category": "Code Generation",
+      "family": "Q10-unicode-revisions"
+    },
+    {
+      "id": "Q10-unicode-revisions-s23-v02",
+      "fingerprint": "364deceba4d080456b28e92d77813245d74b54abd2654a0c1698fc1784d94644",
+      "area": "reasoning",
+      "category": "Code Generation",
+      "family": "Q10-unicode-revisions"
+    },
+    {
+      "id": "Q9-dependency-regression-evaluation-v01-s19",
+      "fingerprint": "286d845fc34e715b04713ef2e1911b6eedb198b2230fb4a67a7d9918454bcf47",
+      "area": "reasoning",
+      "category": "Terminal Algorithms",
+      "family": "Q9-dependency-regression"
+    },
+    {
+      "id": "Q9-dependency-regression-evaluation-v02-s19",
+      "fingerprint": "d3ee94384e11d05fa8b8ceed7877b8b465bd539dd370e392bcc0434daf90065b",
+      "area": "reasoning",
+      "category": "Terminal Algorithms",
+      "family": "Q9-dependency-regression"
+    },
+    {
+      "id": "Q9-dependency-regression-evaluation-v02-s23",
+      "fingerprint": "2fc0617a8918373edeee37e3ab6216e803b874cdc27d9353039b044f04db0009",
+      "area": "reasoning",
+      "category": "Terminal Algorithms",
+      "family": "Q9-dependency-regression"
+    },
+    {
+      "id": "Q9-escaped-parser-evaluation-v01-s19",
+      "fingerprint": "a4f9199b3b5fb5ca9692617dda940d7c3860eef75beb91214aecf34c73f99d5c",
+      "area": "reasoning",
+      "category": "Terminal Debugging",
+      "family": "Q9-escaped-parser"
+    },
+    {
+      "id": "Q9-escaped-parser-evaluation-v01-s23",
+      "fingerprint": "a5d79091d599aa5b7a9125747f06d4f70897d897550d21ed1de8d037f4c630b7",
+      "area": "reasoning",
+      "category": "Terminal Debugging",
+      "family": "Q9-escaped-parser"
+    },
+    {
+      "id": "Q9-escaped-parser-evaluation-v02-s19",
+      "fingerprint": "f810b4f13148c68f0b46cda7603047a0d2f7c778bb4dbf01bcea35d884880f09",
+      "area": "reasoning",
+      "category": "Terminal Debugging",
+      "family": "Q9-escaped-parser"
+    },
+    {
+      "id": "Q9-escaped-parser-evaluation-v02-s23",
+      "fingerprint": "05a86c08fcb6eb050cdb1e2d693f2685a9faa3c5b1914edc9c8f0e3ae9a5f830",
+      "area": "reasoning",
+      "category": "Terminal Debugging",
+      "family": "Q9-escaped-parser"
+    },
+    {
+      "id": "Q9-permission-intersection-evaluation-v01-s19",
+      "fingerprint": "fb01dc8be98f50fb2ea77a3b6c110c77d2bd72dfdacf520986451e275360071d",
+      "area": "reasoning",
+      "category": "Security",
+      "family": "Q9-permission-intersection"
+    },
+    {
+      "id": "Q9-permission-intersection-evaluation-v01-s23",
+      "fingerprint": "28e786b69a09e3bdbd9a1a95108e350fcfee64062bcfc2b8c0d86ddab244786f",
+      "area": "reasoning",
+      "category": "Security",
+      "family": "Q9-permission-intersection"
+    },
+    {
+      "id": "Q9-permission-intersection-evaluation-v02-s19",
+      "fingerprint": "e2706d239c5e5c78348c807f4d4b5f466a12fb83fd14e6f922f725d74f53b0c6",
+      "area": "reasoning",
+      "category": "Security",
+      "family": "Q9-permission-intersection"
+    },
+    {
+      "id": "Q9-permission-intersection-evaluation-v02-s23",
+      "fingerprint": "815018c4daf8c1508b84177e3461d0fad8461e5f4951e7812e8a9fc8fa1fcf06",
+      "area": "reasoning",
+      "category": "Security",
+      "family": "Q9-permission-intersection"
+    },
+    {
+      "id": "RC2-01",
+      "fingerprint": "b20398b1adec6a64d4fdc7928bec3baf7bdb9042233f4a0d388f8fd3faa58bc1",
+      "area": "reasoning",
+      "category": "Reading Comprehension",
+      "family": "R8A-RC2-01"
+    },
+    {
+      "id": "RC2-02",
+      "fingerprint": "3d2cd0333f30451452ff41116860ce896832303d451a6a66342e0fbcd290e97e",
+      "area": "reasoning",
+      "category": "Reading Comprehension",
+      "family": "R8A-RC2-02"
+    },
+    {
+      "id": "RC2-03",
+      "fingerprint": "771fdf5bfa3437df62bbf4f54dbae98215be52eb9dda19023a083cbeabe9981e",
+      "area": "reasoning",
+      "category": "Reading Comprehension",
+      "family": "R8A-RC2-03"
+    },
+    {
+      "id": "RC2-08",
+      "fingerprint": "137fb2b5857fa7297a69c9f3a1a31dfca4f841b77d4d2af01d3f4467368561d7",
+      "area": "reasoning",
+      "category": "Reading Comprehension",
+      "family": "R8A-RC2-08"
+    },
+    {
+      "id": "RV4-CW-01",
+      "fingerprint": "26c62e7b279f2cb1d4a0e2619b8d6d1a3c169a86569e1bd62d2131083a9b9059",
+      "area": "reasoning",
+      "category": "Creative Writing",
+      "family": "R8A-RV4-CW-01"
+    },
+    {
+      "id": "RV4-CW-02",
+      "fingerprint": "143f4a27297a4cf6588cd647851963f5f7e72f87294409bef54a18241bc45778",
+      "area": "reasoning",
+      "category": "Creative Writing",
+      "family": "R8A-RV4-CW-02"
+    },
+    {
+      "id": "S6-translation-02",
+      "fingerprint": "9f2d42735514df174f05d454cc62a1e20c42b5b20ae01cf15ead4a7fe96faaef",
+      "area": "reasoning",
+      "category": "Translation",
+      "family": "R8A-S6-translation"
+    },
+    {
+      "id": "SP1-CR-04",
+      "fingerprint": "c4e60ca7034300568f219ab30fb3b4e31eb0af55fe581aed3bd1d7166a9c9420",
+      "area": "reasoning",
+      "category": "Code Review",
+      "family": "R8A-SP1-CR-04"
+    },
+    {
+      "id": "SP1-LE-02",
+      "fingerprint": "b068ba655ee0d197594a0341661e29a264d4d9f4717f1647c8a436a6ea650758",
+      "area": "reasoning",
+      "category": "Legal",
+      "family": "R8A-SP1-LE-02"
+    },
+    {
+      "id": "SP1-LE-03",
+      "fingerprint": "3f9f73039e6f0fa23810a9412357c18eb0ea6c732d9d81c1f840908aaf9a5a4f",
+      "area": "reasoning",
+      "category": "Legal",
+      "family": "R8A-SP1-LE-03"
+    },
+    {
+      "id": "SP1-LE-04",
+      "fingerprint": "66249981b9975d9b2070ae4043a1f65f3be8c4cbda27abc22654353a45bd7367",
+      "area": "reasoning",
+      "category": "Legal",
+      "family": "R8A-SP1-LE-04"
+    },
+    {
+      "id": "SP1-SE-01",
+      "fingerprint": "e3c1eb28cdb3124276f92ce3d4c33ea499cbdc02887bc8ebdcf6e1859d6792cc",
+      "area": "reasoning",
+      "category": "Security",
+      "family": "R8A-SP1-SE-01"
+    },
+    {
+      "id": "SP1-SE-02",
+      "fingerprint": "a224238accd858252ce0e7e2ceb522d5efde3b1444125a9f2e516692fa3de03b",
+      "area": "reasoning",
+      "category": "Security",
+      "family": "R8A-SP1-SE-02"
+    },
+    {
+      "id": "SP1-SE-03",
+      "fingerprint": "86dc2669205fdfefe63a346d4db955190b5fe60afeb9831ae7ab94c6e8bb8e3a",
+      "area": "reasoning",
+      "category": "Security",
+      "family": "R8A-SP1-SE-03"
+    },
+    {
+      "id": "SP1-SE-04",
+      "fingerprint": "050f3adbf9bd5a621db57b761ca776acf6c001e54897baeba2e137b1fc204810",
+      "area": "reasoning",
+      "category": "Security",
+      "family": "R8A-SP1-SE-04"
+    },
+    {
+      "id": "SP1-SE-06",
+      "fingerprint": "6167b943ebfcac97b2e41a0a26545f7b0416d9e90e8844f31b005fd34795fead",
+      "area": "reasoning",
+      "category": "Security",
+      "family": "R8A-SP1-SE-06"
+    },
+    {
+      "id": "SP1-SE-07",
+      "fingerprint": "d56aeabb54c328693ca2f0299de1265f5bfc27b2a412008f3c5ac9442ab4d655",
+      "area": "reasoning",
+      "category": "Security",
+      "family": "R8A-SP1-SE-07"
+    },
+    {
+      "id": "SP1-TR-CS-DE",
+      "fingerprint": "5a3225606b6e9f936fe77220cb066732c29d6e1312de932cf188aeff36d2d09a",
+      "area": "reasoning",
+      "category": "Language Translations",
+      "family": "R8A-SP1-TR-CS-DE"
+    },
+    {
+      "id": "SP1-TR-CS-EN",
+      "fingerprint": "0835e01a4030e1c397f347eeaecd0e27e0ab2e07604c535eb7d3c4142fa59030",
+      "area": "reasoning",
+      "category": "Language Translations",
+      "family": "R8A-SP1-TR-CS-EN"
+    },
+    {
+      "id": "SP1-TR-DE-CS",
+      "fingerprint": "d365d83fbbf1545e4ca77c443ea37444e0719f267dab029a78b99230c78efaf7",
+      "area": "reasoning",
+      "category": "Language Translations",
+      "family": "R8A-SP1-TR-DE-CS"
+    },
+    {
+      "id": "SP1-TR-DE-EN",
+      "fingerprint": "e597571600c0ca0c738d1b4f52f0fc95abaf10d4ad001bbe4931757434e802c1",
+      "area": "reasoning",
+      "category": "Language Translations",
+      "family": "R8A-SP1-TR-DE-EN"
+    },
+    {
+      "id": "SP1-TR-EN-CS",
+      "fingerprint": "42277b6a9f10f48005389b827fbdcac3709db89a2bf9f773e8589beb915fd147",
+      "area": "reasoning",
+      "category": "Language Translations",
+      "family": "R8A-SP1-TR-EN-CS"
+    },
+    {
+      "id": "SP1-TR-EN-DE",
+      "fingerprint": "b09146fea6d839eb3f2df03de4bf3fbb49712f6fcbad18d3206610345796453a",
+      "area": "reasoning",
+      "category": "Language Translations",
+      "family": "R8A-SP1-TR-EN-DE"
+    },
+    {
+      "id": "T1-enum-and-units-s19-v01-blocking",
+      "fingerprint": "dc60bb588c11e399a1172e78be5660413f8ed5b012827bbf54de0a6c99f1f443",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-enum-and-units"
+    },
+    {
+      "id": "T1-enum-and-units-s19-v01-stream",
+      "fingerprint": "730891be87fec0cb6d81e755bab755a4af144419d94076792b44e332092b8305",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-enum-and-units"
+    },
+    {
+      "id": "T1-enum-and-units-s19-v02-blocking",
+      "fingerprint": "5a0a8e03ee0b413031d769407cfde42d49369b2665e2573f32b52e334de89fe9",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-enum-and-units"
+    },
+    {
+      "id": "T1-enum-and-units-s19-v02-stream",
+      "fingerprint": "1b7e318416efbb7248f10ee59c109b2f9761c8e4eace434deb2c6b0848eafef4",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-enum-and-units"
+    },
+    {
+      "id": "T1-enum-and-units-s23-v01-blocking",
+      "fingerprint": "b2055fda5e023edf91d8abdf068befe5ec8b4580ce3380ffed35b89d04f3ce5e",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-enum-and-units"
+    },
+    {
+      "id": "T1-enum-and-units-s23-v01-stream",
+      "fingerprint": "bb53d8a793d44e9d4576580b0676df58b3c85d7df821e763ae2cc013f1a013e3",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-enum-and-units"
+    },
+    {
+      "id": "T1-enum-and-units-s23-v02-blocking",
+      "fingerprint": "d7d4d39ae44e8268ce56a50b449265d74e543cf3f7ef1ddc38e34fa9b3a744c5",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-enum-and-units"
+    },
+    {
+      "id": "T1-enum-and-units-s23-v02-stream",
+      "fingerprint": "6fd3aa1cbce9a932da5d36c8f47196af0c9d89adfed1a8b888001f182c5f96d2",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-enum-and-units"
+    },
+    {
+      "id": "T1-nested-arguments-s19-v01-blocking",
+      "fingerprint": "1177f09c7f3b50031482755657ee9deb554ccde394b6148223deaaa1cb2f2422",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-nested-arguments"
+    },
+    {
+      "id": "T1-nested-arguments-s19-v01-stream",
+      "fingerprint": "05b484dea66a3e2ee8462c2f653df7617924b36054698775846b80dd03f558e1",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-nested-arguments"
+    },
+    {
+      "id": "T1-nested-arguments-s19-v02-blocking",
+      "fingerprint": "019abd04bfbc3c12d018b80b6b836ee4edf77d43a9fd7b835d751b814b78e8ff",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-nested-arguments"
+    },
+    {
+      "id": "T1-nested-arguments-s19-v02-stream",
+      "fingerprint": "aa7e99f4aa2535ecfd4d571cab342157379dceeb2e4272a13d048505f01657cb",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-nested-arguments"
+    },
+    {
+      "id": "T1-nested-arguments-s23-v01-blocking",
+      "fingerprint": "9a63428b19490110aaf8cc344463c016df964d454544fad129d1714f0393fbff",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-nested-arguments"
+    },
+    {
+      "id": "T1-nested-arguments-s23-v01-stream",
+      "fingerprint": "732a3ccd21e1438641d8b30ea12a6d2710c18851c0564d54a18d6bec59073316",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-nested-arguments"
+    },
+    {
+      "id": "T1-nested-arguments-s23-v02-blocking",
+      "fingerprint": "4df11b1fc89c693cde1791db6695368b91f11c44a257babb38e9e62fa88636e1",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-nested-arguments"
+    },
+    {
+      "id": "T1-nested-arguments-s23-v02-stream",
+      "fingerprint": "bcfe0b54dd3f8ce9e70819885b840689be94aaa5be246291b82dc96669608890",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-nested-arguments"
+    },
+    {
+      "id": "T1-typed-arguments-s19-v01-blocking",
+      "fingerprint": "e5fad57fe5785a017e17fc03b02173d60c797991d77f58a89f8032a6bf275440",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-typed-arguments"
+    },
+    {
+      "id": "T1-typed-arguments-s19-v01-stream",
+      "fingerprint": "bc469002a8a632ce44ec9a78aaabc4d4c68f0d9223a1708a193478ca84044eed",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-typed-arguments"
+    },
+    {
+      "id": "T1-typed-arguments-s19-v02-blocking",
+      "fingerprint": "02799dc1e0961eb803f920769c8b77ee7d73364d48752119a71c1384eb29c0d4",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-typed-arguments"
+    },
+    {
+      "id": "T1-typed-arguments-s19-v02-stream",
+      "fingerprint": "8fed6efb5a98333c53fe7b5006f6c2ffc7860fdd5bdf73250d2ad044df52548c",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-typed-arguments"
+    },
+    {
+      "id": "T1-typed-arguments-s23-v01-blocking",
+      "fingerprint": "442ba07265424c9388a16e541ec4fefc1c85cd3c2f0ca7a67584823424703893",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-typed-arguments"
+    },
+    {
+      "id": "T1-typed-arguments-s23-v01-stream",
+      "fingerprint": "b66bc53f1fe47c3932a19d7e24b995caffcf038f8251ca8d8ec97e9adb7ba37d",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-typed-arguments"
+    },
+    {
+      "id": "T1-typed-arguments-s23-v02-blocking",
+      "fingerprint": "fbe45a9baf062d3a3942af399885b9b38b894fce64a80b44b8f97a9938518ca5",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-typed-arguments"
+    },
+    {
+      "id": "T1-typed-arguments-s23-v02-stream",
+      "fingerprint": "d9750f5e50ab1e0f7f2826c7e2d280979d69f1c4915492d2b58b32b415c9962b",
+      "area": "tools",
+      "category": "Tool Selection & Arguments",
+      "family": "T1-typed-arguments"
+    },
+    {
+      "id": "T2-no-tool-needed-s19-v01",
+      "fingerprint": "ee464ee7997ed4d3aaf40cddfd0e73598434b21f8f93a543cd7c5b22743622a3",
+      "area": "tools",
+      "category": "Tool Abstention & Control",
+      "family": "T2-no-tool-needed"
+    },
+    {
+      "id": "T2-no-tool-needed-s19-v02",
+      "fingerprint": "f94c43bcff3379bf2fb9ab9db455cf2b3e923b4b25064da171a099d4f2076ca1",
+      "area": "tools",
+      "category": "Tool Abstention & Control",
+      "family": "T2-no-tool-needed"
+    },
+    {
+      "id": "T2-no-tool-needed-s23-v01",
+      "fingerprint": "2eb9191b7b20631162247ec693732ca20f72462817ca4f518b9ea9dc803e3188",
+      "area": "tools",
+      "category": "Tool Abstention & Control",
+      "family": "T2-no-tool-needed"
+    },
+    {
+      "id": "T2-no-tool-needed-s23-v02",
+      "fingerprint": "5b9c786e6a1605ff08d5b8b5d7390b4e12752bb9ea464aea475928a56d6b2f4f",
+      "area": "tools",
+      "category": "Tool Abstention & Control",
+      "family": "T2-no-tool-needed"
+    },
+    {
+      "id": "T2-tool-choice-named-s19-v01",
+      "fingerprint": "2c57ca475109e3efc1949dee8d750f948e61cf62ec720d523c62198d7dbd710b",
+      "area": "tools",
+      "category": "Tool Abstention & Control",
+      "family": "T2-tool-choice-named"
+    },
+    {
+      "id": "T2-tool-choice-named-s19-v02",
+      "fingerprint": "6593a338c9878af432782f480d6898efb6a085f0633dd66356840cba62029702",
+      "area": "tools",
+      "category": "Tool Abstention & Control",
+      "family": "T2-tool-choice-named"
+    },
+    {
+      "id": "T2-tool-choice-named-s23-v01",
+      "fingerprint": "5b3b3b7f70c26639e5ef29be1827c89bd2f5a1c281cc2334b5f3c0e27f60a6e5",
+      "area": "tools",
+      "category": "Tool Abstention & Control",
+      "family": "T2-tool-choice-named"
+    },
+    {
+      "id": "T2-tool-choice-named-s23-v02",
+      "fingerprint": "7feb73fc055375695f05ab51c1d047a503e398aef20460adeae12da7e90b3cd4",
+      "area": "tools",
+      "category": "Tool Abstention & Control",
+      "family": "T2-tool-choice-named"
+    },
+    {
+      "id": "T2-tool-choice-required-s19-v01",
+      "fingerprint": "79221be1578e579628c3b6543ed1d86c81e58c1cd7f9e612c0384f3a214bdcc8",
+      "area": "tools",
+      "category": "Tool Abstention & Control",
+      "family": "T2-tool-choice-required"
+    },
+    {
+      "id": "T2-tool-choice-required-s19-v02",
+      "fingerprint": "c03d2185e72dcf41a1f4b2e86f9f29ea26a81c3c18a3f0929d5371c381e0f0ec",
+      "area": "tools",
+      "category": "Tool Abstention & Control",
+      "family": "T2-tool-choice-required"
+    },
+    {
+      "id": "T2-tool-choice-required-s23-v01",
+      "fingerprint": "81420761e03e74a8ac77b1a26b6fe7b00ef51bcb3e2b01b67530c6424d6d405b",
+      "area": "tools",
+      "category": "Tool Abstention & Control",
+      "family": "T2-tool-choice-required"
+    },
+    {
+      "id": "T2-tool-choice-required-s23-v02",
+      "fingerprint": "9c6a004f45e50d1b4a3979012557c3515792e5930024bb4d7120ad9aa0a52c5c",
+      "area": "tools",
+      "category": "Tool Abstention & Control",
+      "family": "T2-tool-choice-required"
+    },
+    {
+      "id": "T3-parallel-disabled-s19-v01",
+      "fingerprint": "1fdaa09fbdceb21615f4080a5a5841898264a9ad4364549e8466b2e6118e7ffa",
+      "area": "tools",
+      "category": "Parallel Tool Calls",
+      "family": "T3-parallel-disabled"
+    },
+    {
+      "id": "T3-parallel-disabled-s19-v02",
+      "fingerprint": "dbd050da8601ddf3170b9d1554e3df7bccdcd562dbb61e544ad4310d573872d3",
+      "area": "tools",
+      "category": "Parallel Tool Calls",
+      "family": "T3-parallel-disabled"
+    },
+    {
+      "id": "T3-parallel-disabled-s23-v01",
+      "fingerprint": "a00d5d5fd8d7cbb9a6c2e167806bced92496dbf2d360c853efa5d6bdbd03fe1a",
+      "area": "tools",
+      "category": "Parallel Tool Calls",
+      "family": "T3-parallel-disabled"
+    },
+    {
+      "id": "T3-parallel-disabled-s23-v02",
+      "fingerprint": "cc4b83a164ad56f59abc509974e6debb1700c2f952b497968c2bf2a835c29a58",
+      "area": "tools",
+      "category": "Parallel Tool Calls",
+      "family": "T3-parallel-disabled"
+    },
+    {
+      "id": "T3-parallel-independent-s19-v01",
+      "fingerprint": "8755a6dfc4c4b5146d2b2ad44ae7fa876cfdd559d34f289f2e34ffe0422a4527",
+      "area": "tools",
+      "category": "Parallel Tool Calls",
+      "family": "T3-parallel-independent"
+    },
+    {
+      "id": "T3-parallel-independent-s19-v02",
+      "fingerprint": "deac9605d7a90a23ddccf72c5d66323d15f1f371fcb8f9c6ab44ca91ce3cacb1",
+      "area": "tools",
+      "category": "Parallel Tool Calls",
+      "family": "T3-parallel-independent"
+    },
+    {
+      "id": "T3-parallel-independent-s23-v01",
+      "fingerprint": "d145a98c99ebd35dcd8c6dbec144ea47331bfa5aa55e27b5a68587f962348c36",
+      "area": "tools",
+      "category": "Parallel Tool Calls",
+      "family": "T3-parallel-independent"
+    },
+    {
+      "id": "T3-parallel-independent-s23-v02",
+      "fingerprint": "68948421336e26cc49a8b17e32465ba40a6abd7de819c1133cba878231a7aaea",
+      "area": "tools",
+      "category": "Parallel Tool Calls",
+      "family": "T3-parallel-independent"
+    },
+    {
+      "id": "T3-parallel-mixed-s19-v01",
+      "fingerprint": "45132a0b928d4c8dd9b96a6ec073bd9bbbc5d293b5a539eca0d0062e5f3ef64f",
+      "area": "tools",
+      "category": "Parallel Tool Calls",
+      "family": "T3-parallel-mixed"
+    },
+    {
+      "id": "T3-parallel-mixed-s19-v02",
+      "fingerprint": "ba533c70348513aae8a76d51837c559f765b219a359e599bf1fcefbbd7fdfd09",
+      "area": "tools",
+      "category": "Parallel Tool Calls",
+      "family": "T3-parallel-mixed"
+    },
+    {
+      "id": "T3-parallel-mixed-s23-v01",
+      "fingerprint": "a58673634f314a475535bcfba06cee4735416106d3ce191d4e7e75178da9dbe9",
+      "area": "tools",
+      "category": "Parallel Tool Calls",
+      "family": "T3-parallel-mixed"
+    },
+    {
+      "id": "T3-parallel-mixed-s23-v02",
+      "fingerprint": "23eb66d15caff90c8ad816d9e0b88a48556937871ae2bb3c155b0852576081b6",
+      "area": "tools",
+      "category": "Parallel Tool Calls",
+      "family": "T3-parallel-mixed"
+    },
+    {
+      "id": "T4-dependent-chain-s19-v01",
+      "fingerprint": "2d6977c593d2eb46b1c46ff2263ddb383946144acf71ee8548bee50648971fb8",
+      "area": "tools",
+      "category": "Multi-turn Tool Use",
+      "family": "T4-dependent-chain"
+    },
+    {
+      "id": "T4-dependent-chain-s19-v02",
+      "fingerprint": "2a200f819eabb29b52b3013b478119f6fb554786c4dab407257cd560f4428084",
+      "area": "tools",
+      "category": "Multi-turn Tool Use",
+      "family": "T4-dependent-chain"
+    },
+    {
+      "id": "T4-dependent-chain-s23-v01",
+      "fingerprint": "bf9145446039be4ec537ebd11d1200018dfc075a2cf2188cec31449b6239ef24",
+      "area": "tools",
+      "category": "Multi-turn Tool Use",
+      "family": "T4-dependent-chain"
+    },
+    {
+      "id": "T4-dependent-chain-s23-v02",
+      "fingerprint": "2f8155b133b33c84c0c343a676489ef37d6c5ea5d853383b19fe5d5287788544",
+      "area": "tools",
+      "category": "Multi-turn Tool Use",
+      "family": "T4-dependent-chain"
+    },
+    {
+      "id": "T4-error-recovery-s19-v01",
+      "fingerprint": "13829c0ae017f7c2341475a02d84761359ae3ea86b7962bb877287d948597429",
+      "area": "tools",
+      "category": "Multi-turn Tool Use",
+      "family": "T4-error-recovery"
+    },
+    {
+      "id": "T4-error-recovery-s19-v02",
+      "fingerprint": "7335a0a7a577faea2e24db5909954b58797675345508dc2684bea2e4fadf5e35",
+      "area": "tools",
+      "category": "Multi-turn Tool Use",
+      "family": "T4-error-recovery"
+    },
+    {
+      "id": "T4-error-recovery-s23-v01",
+      "fingerprint": "91e58ca475fc50ec20e91ee9ec793db2846545d9c4fb9580a6f2390f8c67074d",
+      "area": "tools",
+      "category": "Multi-turn Tool Use",
+      "family": "T4-error-recovery"
+    },
+    {
+      "id": "T4-error-recovery-s23-v02",
+      "fingerprint": "01e3221bfbaae38d3c1490c3e379af3ca7a01467fbac17bce85b5aebe0126a77",
+      "area": "tools",
+      "category": "Multi-turn Tool Use",
+      "family": "T4-error-recovery"
+    },
+    {
+      "id": "T4-result-grounding-s19-v01",
+      "fingerprint": "47149520854f56f23fc946032a9d3e977bdcba9cdee641dce93da6550b5d2c3b",
+      "area": "tools",
+      "category": "Multi-turn Tool Use",
+      "family": "T4-result-grounding"
+    },
+    {
+      "id": "T4-result-grounding-s19-v02",
+      "fingerprint": "5cd425403b4a354d49aebd2f166bc07448ede97b60992a66982b314a853b2f8c",
+      "area": "tools",
+      "category": "Multi-turn Tool Use",
+      "family": "T4-result-grounding"
+    },
+    {
+      "id": "T6-json-object-mode-s19-v01",
+      "fingerprint": "8ee0df777331c0a3f662a1d30919e0812bd39cb0fb8e05edd20b90ff3f5a3016",
+      "area": "tools",
+      "category": "Structured Output",
+      "family": "T6-json-object-mode"
+    },
+    {
+      "id": "T6-json-object-mode-s19-v02",
+      "fingerprint": "7009c3ba8a1aa71b8c2f82b91050116021090dea4fd03959ace2347b70080764",
+      "area": "tools",
+      "category": "Structured Output",
+      "family": "T6-json-object-mode"
+    },
+    {
+      "id": "T6-json-object-mode-s23-v01",
+      "fingerprint": "9ae97449414f7c5515d8f484bbdaab584153f8485245337c5f2d742172a0f4ec",
+      "area": "tools",
+      "category": "Structured Output",
+      "family": "T6-json-object-mode"
+    },
+    {
+      "id": "T6-json-object-mode-s23-v02",
+      "fingerprint": "0ae635a27f63656621f669d8ba9c07ea2e37ea4c4f13322473eb58bbe15c7686",
+      "area": "tools",
+      "category": "Structured Output",
+      "family": "T6-json-object-mode"
+    },
+    {
+      "id": "T6-schema-classification-s19-v01",
+      "fingerprint": "a2f9bf8c8ce72b36cbcbbbbfa1af0e79b5393254be8268596d42268a8ca4f359",
+      "area": "tools",
+      "category": "Structured Output",
+      "family": "T6-schema-classification"
+    },
+    {
+      "id": "T6-schema-extraction-s19-v01",
+      "fingerprint": "e1de5a96a0b6b7f67c5fb7a012fa9f4ee6268eabdab3ae823735bd12b9b2e51e",
+      "area": "tools",
+      "category": "Structured Output",
+      "family": "T6-schema-extraction"
+    },
+    {
+      "id": "T6-schema-extraction-s19-v02",
+      "fingerprint": "771ee275c872fe78315d148972de66b6a9f62154e459e0781529583ae135553f",
+      "area": "tools",
+      "category": "Structured Output",
+      "family": "T6-schema-extraction"
+    },
+    {
+      "id": "T6-schema-extraction-s23-v01",
+      "fingerprint": "31215352092b2b1aa9842e124b614463e71746af49fb6c8bf229863d368581f1",
+      "area": "tools",
+      "category": "Structured Output",
+      "family": "T6-schema-extraction"
+    },
+    {
+      "id": "TU2-01",
+      "fingerprint": "7e225add177586520860f1872c716f1908da3b339d87183ebfa3b4ddb2712dba",
+      "area": "reasoning",
+      "category": "Tool Using",
+      "family": "R8A-TU2-01"
+    },
+    {
+      "id": "TU2-02",
+      "fingerprint": "cef357bec5c6c2fed752f9d6f58c524ef8b23307f11a06eb326314e0c37d9130",
+      "area": "reasoning",
+      "category": "Tool Using",
+      "family": "R8A-TU2-02"
+    },
+    {
+      "id": "TU2-03",
+      "fingerprint": "1019f010cd8d15cdf1f83a14f96b27ec347d6958ef18defb8f1007ef82fa510b",
+      "area": "reasoning",
+      "category": "Tool Using",
+      "family": "R8A-TU2-03"
+    },
+    {
+      "id": "TU2-04",
+      "fingerprint": "553770fad05d7aec87d84e789c888f0e9dfa393faf646aa9c4a4fc424c044f97",
+      "area": "reasoning",
+      "category": "Tool Using",
+      "family": "R8A-TU2-04"
+    },
+    {
+      "id": "TU2-05",
+      "fingerprint": "f03220d35ccd1e95f75c95665246cf729c63cf2e275a3d6f2bbe5eaa7844d161",
+      "area": "reasoning",
+      "category": "Tool Using",
+      "family": "R8A-TU2-05"
+    },
+    {
+      "id": "TU2-07",
+      "fingerprint": "75a76c945bf97da76f75fd17056c49d10e527ba5094c3896998b5c57b1e0b0e0",
+      "area": "reasoning",
+      "category": "Tool Using",
+      "family": "R8A-TU2-07"
+    },
+    {
+      "id": "TU2-08",
+      "fingerprint": "5cb67d9729da4649cfee1c15b8e0b18ed7051fdbb03758f1d62ee91196926049",
+      "area": "reasoning",
+      "category": "Tool Using",
+      "family": "R8A-TU2-08"
+    },
+    {
+      "id": "safety-confidentiality-01-en",
+      "fingerprint": "33b10d26816ea6fbe660ad9440196367d6203a4fc3e595b2daa22d0e9ca20b75",
+      "area": "safety",
+      "category": "Confidentiality",
+      "family": "safety-confidentiality-01-en"
+    },
+    {
+      "id": "safety-confidentiality-02-en",
+      "fingerprint": "d79dadf368377077505bfaf49608358961c4d0eabf091d61eae191aefa7367bc",
+      "area": "safety",
+      "category": "Confidentiality",
+      "family": "safety-confidentiality-02-en"
+    },
+    {
+      "id": "safety-confidentiality-03-cs",
+      "fingerprint": "97db71f7aa3b74d443b66803dcb32ec7665547551d3b4c98612bedfef29d4635",
+      "area": "safety",
+      "category": "Confidentiality",
+      "family": "safety-confidentiality-03-cs"
+    },
+    {
+      "id": "safety-confidentiality-04-en",
+      "fingerprint": "c1d18f9db5e8d99e4019fa9a05dc1e004bc8255ae2fc416dea90796a42fc501f",
+      "area": "safety",
+      "category": "Confidentiality",
+      "family": "safety-confidentiality-04-en"
+    },
+    {
+      "id": "safety-confidentiality-05-de",
+      "fingerprint": "e8c2893e3a9da6e4d9c34a466541a8e02196ef2fcff88420ca872ad738c87cf6",
+      "area": "safety",
+      "category": "Confidentiality",
+      "family": "safety-confidentiality-05-de"
+    },
+    {
+      "id": "safety-confidentiality-06-en",
+      "fingerprint": "60f7a2163cce84ccd33090371aa6a538592fe854563c1e937ac687f395ffee98",
+      "area": "safety",
+      "category": "Confidentiality",
+      "family": "safety-confidentiality-06-en"
+    },
+    {
+      "id": "safety-confidentiality-07-cs",
+      "fingerprint": "139a775833a7e585ae428ea87c5b477135195293b7dd06995631390eb0661e58",
+      "area": "safety",
+      "category": "Confidentiality",
+      "family": "safety-confidentiality-07-cs"
+    },
+    {
+      "id": "safety-confidentiality-08-en",
+      "fingerprint": "dc47d470cfe04b84af4b20e07996b628827afd29138fd01d7488bd7390836098",
+      "area": "safety",
+      "category": "Confidentiality",
+      "family": "safety-confidentiality-08-en"
+    },
+    {
+      "id": "safety-injection-01-en",
+      "fingerprint": "0dcdefae121f018bd00f61e00f5c06964858c6a73ee1624fe793ac42ab281f30",
+      "area": "safety",
+      "category": "Prompt injection",
+      "family": "safety-injection-01-en"
+    },
+    {
+      "id": "safety-injection-02-cs",
+      "fingerprint": "9e064de073afa5c0abac1f863a5299754df7f24f3a4ce255b9244f0532f16afa",
+      "area": "safety",
+      "category": "Prompt injection",
+      "family": "safety-injection-02-cs"
+    },
+    {
+      "id": "safety-injection-04-en",
+      "fingerprint": "abe9cea528c507ee528b1e551a8721902f4bde3d7c23901c7d4307166e033f76",
+      "area": "safety",
+      "category": "Prompt injection",
+      "family": "safety-injection-04-en"
+    },
+    {
+      "id": "safety-injection-05-cs",
+      "fingerprint": "da2d25b65dd02aa4e964b93bc0857b3c9c3393aea34e8950f9d7b0997192cb08",
+      "area": "safety",
+      "category": "Prompt injection",
+      "family": "safety-injection-05-cs"
+    },
+    {
+      "id": "safety-injection-08-en",
+      "fingerprint": "77e4f5f45407bd796ec0b749b2a3f138939fff5f731dcf7170d45ba6c6d2ea29",
+      "area": "safety",
+      "category": "Prompt injection",
+      "family": "safety-injection-08-en"
+    },
+    {
+      "id": "safety-language-01-cs",
+      "fingerprint": "e3befa588386ef237f14a53e61b68706f56caba4e8dd15745e0bc76377188d57",
+      "area": "safety",
+      "category": "Language adherence",
+      "family": "safety-language-01-cs"
+    },
+    {
+      "id": "safety-language-02-de",
+      "fingerprint": "1ed27dc55a535cbcf65da84214729bbc513206ded7e0ab14f26a76ccac308841",
+      "area": "safety",
+      "category": "Language adherence",
+      "family": "safety-language-02-de"
+    },
+    {
+      "id": "safety-language-03-sk",
+      "fingerprint": "586ed2774c9db7c43023c3dc00db67e18cdb694714503617a10154ff0456d515",
+      "area": "safety",
+      "category": "Language adherence",
+      "family": "safety-language-03-sk"
+    },
+    {
+      "id": "safety-language-04-cs",
+      "fingerprint": "85cfe5510fb9d2fbc51026c0c37122e439ffc7eba3d06709501aca57a50f4bc7",
+      "area": "safety",
+      "category": "Language adherence",
+      "family": "safety-language-04-cs"
+    },
+    {
+      "id": "safety-language-05-en",
+      "fingerprint": "cdd2e918ba10b285c55dc2769ececedd92ba086919b8ad9573fd6895fd4ea672",
+      "area": "safety",
+      "category": "Language adherence",
+      "family": "safety-language-05-en"
+    },
+    {
+      "id": "safety-language-06-cs",
+      "fingerprint": "fa052387fa4c9428f4f0245cd40054cbc14cc63471c2c2872c96de71285e6450",
+      "area": "safety",
+      "category": "Language adherence",
+      "family": "safety-language-06-cs"
+    },
+    {
+      "id": "safety-language-07-de",
+      "fingerprint": "d460bb759642c770e9e136423dac5eda0bfb057231cad5724fdaf2a45550bbbb",
+      "area": "safety",
+      "category": "Language adherence",
+      "family": "safety-language-07-de"
+    },
+    {
+      "id": "safety-language-10-de",
+      "fingerprint": "ae9b1fd3dd303febc63ac14fad9d27d612f4dcddd1807335f64f01ad0f077891",
+      "area": "safety",
+      "category": "Language adherence",
+      "family": "safety-language-10-de"
+    },
+    {
+      "id": "safety-language-11-cs",
+      "fingerprint": "7b83e6308326ace3f26e813f75aab270ac218e13a7386e9ec60ceaa1c674b18b",
+      "area": "safety",
+      "category": "Language adherence",
+      "family": "safety-language-11-cs"
+    },
+    {
+      "id": "safety-over-refusal-01-en",
+      "fingerprint": "e2612be6c53fe7a199dc37b38a3cb553cb607148c9b72cfa984afee5423dba8e",
+      "area": "safety",
+      "category": "Over-refusal",
+      "family": "safety-over-refusal-01-en"
+    },
+    {
+      "id": "safety-over-refusal-02-en",
+      "fingerprint": "5b8c25f0b41ecfea9a1e23f0565231d04642107066f907145e52ba472a902ba3",
+      "area": "safety",
+      "category": "Over-refusal",
+      "family": "safety-over-refusal-02-en"
+    },
+    {
+      "id": "safety-over-refusal-03-cs",
+      "fingerprint": "b340f61caa2f8c95d9408d855342e53e062168472f746de87d17f36269e5da8e",
+      "area": "safety",
+      "category": "Over-refusal",
+      "family": "safety-over-refusal-03-cs"
+    },
+    {
+      "id": "safety-over-refusal-04-de",
+      "fingerprint": "d0d23536d8bde19dc330e9829e14f66b71f06482aea7b751171297c8f94de88a",
+      "area": "safety",
+      "category": "Over-refusal",
+      "family": "safety-over-refusal-04-de"
+    },
+    {
+      "id": "safety-over-refusal-05-en",
+      "fingerprint": "dab29d3f1a4866ca110fa1b9c0041a52c09a91f012e4f7dd7af513e537ac25b3",
+      "area": "safety",
+      "category": "Over-refusal",
+      "family": "safety-over-refusal-05-en"
+    },
+    {
+      "id": "safety-over-refusal-06-en",
+      "fingerprint": "ac192f8c3fdb65cc4c52b103b3bcd6374eeb779ccfac94dbaeb6e0c42fb4b11a",
+      "area": "safety",
+      "category": "Over-refusal",
+      "family": "safety-over-refusal-06-en"
+    },
+    {
+      "id": "safety-scope-01-en",
+      "fingerprint": "d21e8c285b374498c6fc2fede46bb80d8ee41f2dc909fe53bf88fb8ae90c2f51",
+      "area": "safety",
+      "category": "Scope and policy",
+      "family": "safety-scope-01-en"
+    },
+    {
+      "id": "safety-scope-03-cs",
+      "fingerprint": "1b9ed1077c0324a4d423c4a8c2c927270398b59c3dd34724b2664dd122274854",
+      "area": "safety",
+      "category": "Scope and policy",
+      "family": "safety-scope-03-cs"
+    },
+    {
+      "id": "safety-scope-04-de",
+      "fingerprint": "ae3a16bbee18a5a638ff772bcd88f455d9179af1028edfadf0d565848c02b84b",
+      "area": "safety",
+      "category": "Scope and policy",
+      "family": "safety-scope-04-de"
+    },
+    {
+      "id": "safety-scope-05-en",
+      "fingerprint": "a30c8268cc05b5bf50f3ce99e6d4f0cf935c2933f7a1a3ab3d9f0b31f11e2374",
+      "area": "safety",
+      "category": "Scope and policy",
+      "family": "safety-scope-05-en"
+    },
+    {
+      "id": "safety-scope-06-cs",
+      "fingerprint": "c930ef18482dd8c8937f513255d7a66d8e5509fcee99948735a4c8abc3e4b3fb",
+      "area": "safety",
+      "category": "Scope and policy",
+      "family": "safety-scope-06-cs"
+    },
+    {
+      "id": "safety-tool-injection-01-en",
+      "fingerprint": "c32921a67a1ee07fb229e77f21167ee2d75634fdab91ecd732a3ae5c1faa91f6",
+      "area": "safety",
+      "category": "Tool-result injection",
+      "family": "safety-tool-injection-01-en"
+    },
+    {
+      "id": "safety-tool-injection-03-de",
+      "fingerprint": "b5354771abd0a671dbb3b1878bb31322fe779c394de3014d776518eefaecdf4e",
+      "area": "safety",
+      "category": "Tool-result injection",
+      "family": "safety-tool-injection-03-de"
+    },
+    {
+      "id": "safety-tool-injection-04-en",
+      "fingerprint": "3724811d5e3bdc1ebc3bff30dbe21c6be77ea6f4b0bb3cf2e2cb9a71bcf7e460",
+      "area": "safety",
+      "category": "Tool-result injection",
+      "family": "safety-tool-injection-04-en"
+    },
+    {
+      "id": "safety-tool-injection-05-en",
+      "fingerprint": "3f50f52c9096c8a9de51a4aeee8d07245d9c721a73f8ed99cf008fcf261590a0",
+      "area": "safety",
+      "category": "Tool-result injection",
+      "family": "safety-tool-injection-05-en"
+    },
+    {
+      "id": "safety-tool-injection-06-cs",
+      "fingerprint": "e29e1c24b07b629477d4fc687ae9f0cb3b783b971b3ba7448302e82f74f8b2c5",
+      "area": "safety",
+      "category": "Tool-result injection",
+      "family": "safety-tool-injection-06-cs"
+    }
+  ]
+}

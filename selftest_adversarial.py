@@ -318,7 +318,7 @@ class DiagnosticValidationTests(unittest.TestCase):
             result = score(self.q, response)
             self.assertTrue(result.is_scored, result.detail)
             self.assertFalse(result.passed)
-            self.assertEqual(result.evaluation.criterion_achievement, 0.5)
+            self.assertEqual(result.evaluation.criterion_achievement, 1 / (3 if 'extra' in response else 2))
             self.assertEqual(next(c for c in result.evaluation.criteria if c.criterion_id == "json:answer").status, "pass")
             ids = [c.criterion_id for c in result.evaluation.criteria]
             self.assertEqual(len(ids), len(set(ids)))
@@ -328,7 +328,7 @@ class DiagnosticValidationTests(unittest.TestCase):
         result = score(self.q, '{"root":1,"answer":2,"extra":0}')
         self.assertTrue(result.is_scored)
         self.assertFalse(result.passed)
-        self.assertEqual(result.evaluation.criterion_achievement, 1)
+        self.assertEqual(result.evaluation.criterion_achievement, 2 / 3)
         self.assertEqual(result.evaluation.contract_score, 0)
 
     def test_authoring_rejects_invalid_metadata_and_optional_fields(self):

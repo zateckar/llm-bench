@@ -6,7 +6,7 @@ import json
 import random
 from pathlib import Path
 
-REVISION = "rigorous-v15"
+REVISION = "rigorous-v16"
 # Keep established instances stable when adding families or changing grading.
 # New families own their generation version, independently of the run protocol.
 GENERATION_REVISION = "rigorous-v11"
@@ -61,6 +61,7 @@ def load_questions(tests_dir=None):
     from app.benchmarking.rigorous_cases import load_new_questions
     from app.benchmarking.reasoning_cases import load_reasoning_questions
     from app.benchmarking.reconstruction_cases import make_reconstruction_tasks
+    from app.benchmarking.discrimination_cases import make_discrimination_tasks
     from app.benchmarking.test_loader import load_all_tests
 
     questions = load_all_tests(tests_dir or Path(__file__).resolve().parents[2] / "tests")
@@ -111,6 +112,7 @@ def load_questions(tests_dir=None):
             questions.extend(load_evidence_questions(seed, variant))
             questions.extend(load_reasoning_questions(seed, variant))
             questions.extend(make_reconstruction_tasks(seed, variant))
+            questions.extend(make_discrimination_tasks(seed, variant))
     questions.extend(
         context_question(size, seed, family)
         for family in FAMILIES

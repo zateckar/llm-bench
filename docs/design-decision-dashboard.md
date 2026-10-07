@@ -1,3 +1,5 @@
+Update 2026-10-07: users gates require a measured result at the exact configured context cap and exclude inherited results. Cache and batching effects need not be monotonic.
+
 # Design: model scorecards and decision profiles
 
 Status: accepted (recommended decisions), 2026-10-05. Item 7 of the evaluation roadmap.
@@ -71,7 +73,7 @@ Answering them means opening a dozen runs, checking that they are comparable and
    - **Drift warning:** an approval whose recorded fingerprint differs from the model's current fingerprint is shown with "deployment changed since this decision", linking to the monitoring timeline.
    - **Append-only:** records cannot be edited. A new decision supersedes the previous one for the same model and profile, and the history stays visible.
 7. **A/B studies are context, not gates.** A pairwise preference is relative to one opponent and one study, so it cannot be a requirement on one model. The model scorecard lists the studies involving the model with their people and judge verdicts.
-8. **Revision.** Gate evaluation is versioned (`decision-gates-v1`) and the revision is stored in every decision record.
+8. **Revision.** Gate evaluation is versioned (`decision-gates-v2`) and the revision is stored in every decision record.
 9. **Access.**
    - **Everyone signed in:** sees scorecards, profiles, verdicts and decisions. Application teams should see why a model was chosen.
    - **Admins:** create, edit and delete profiles, and record decisions.

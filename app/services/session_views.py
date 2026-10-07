@@ -210,7 +210,9 @@ def session_view(run):
         "saturation_search": protocol.get("saturation"),
         "diagnoses": diagnoses,
         "output_chart": {"title": "Output throughput by simulated users", "svg": output_chart, "series": throughput,
-                         "description": "Generated tokens per second over each measured window. Where the curve flattens "
+                         "description": ("Generated tokens per second for the measured request cohort, including drain time. "
+                                         if protocol.get("revision") != "sessions-v1" else
+                                         "Historical rates use the dispatch window and can include output delivered during drain. ") + "Where the curve flattens "
                                         "while first tokens grow, more users only add waiting."} if output_chart else None,
         "results": results,
         "levels": levels,

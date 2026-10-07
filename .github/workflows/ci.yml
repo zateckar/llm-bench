@@ -103,6 +103,9 @@ jobs:
         run: |
           uv run python selftest_calibration.py
           uv run python selftest_reconstruction.py
+          uv run python selftest_discrimination.py
+          uv run python selftest_measurement_audit.py
+          uv run python selftest_standard_selection.py
 
       - name: Verify portable HTML reports and comparisons
         run: uv run python selftest_reports.py

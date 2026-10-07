@@ -8,10 +8,9 @@ SLO. A level passes when every class reaches the attainment target.
 
 The user count is searched per context cap: doubling from the start count,
 then bisection between the highest passing and the lowest failing count. A
-level that is clearly failing stops early. Caps run in increasing order and a
-larger cap never serves more users than a smaller one, so each cap starts at
-the previous result and inherits its first failure: counts known to fail are
-never measured.
+level that is clearly failing stops early. Caps run in increasing order and
+each cap uses the previous result as a search hint. Failed counts and
+saturation limits are measured independently for every cap.
 
 After the SLO search a saturation search keeps doubling users until a level is
 beyond a hard limit (many failures, first tokens or output speed an order of
@@ -38,7 +37,7 @@ from app.benchmarking.session_workload import (
     SessionPrompts, caps_for, check_fits, plan_session, starting_plan, user_rng,
 )
 
-REVISION = "sessions-v1"
+REVISION = "sessions-v2"
 SCHEMA_VERSION = 7
 KIND = "sessions"
 LAG_LIMIT_MS = 100.0
@@ -96,6 +95,7 @@ class Record:
     first: bool = False
     # Leading context the prefix cache could hold from earlier turns (system prompt and history).
     reusable: int = 0
+    finished: float | None = None
 
     @property
     def status(self):
@@ -212,9 +212,13 @@ def analyse_level(model, settings, cap, users, records, *, window, started_at, e
     judged = [v for v in classes.values() if v["users"]]
     met = sum(v["slo_met"] for v in judged)
     total = sum(v["requests"] for v in judged)
-    passed = (not cancelled and not early_stop and total > 0 and not client_limited
-              and all(v["meets_target"] for v in judged if v["requests"]))
+    passed = (not cancelled and not early_stop and warmup_complete
+              and total > 0 and not client_limited
+              and all(v["meets_target"] for v in judged))
     seconds = max(end - start, 1e-9)
+    rate_end = max([end, *(r.finished if r.finished is not None else
+                          r.sent + r.metrics.latency_ms / 1000 for r in measured)])
+    rate_seconds = max(rate_end - start, 1e-9)
     good = [r.metrics for r in measured if r.metrics.ok]
     complete = [r for r in measured if r.status == "complete"]
     context = sum(r.context_tokens for r in complete)
@@ -230,6 +234,8 @@ def analyse_level(model, settings, cap, users, records, *, window, started_at, e
         "warmup_seconds": round(start, 3),
         "warmup_complete": warmup_complete,
         "measured_seconds": round(seconds, 3),
+        "rate_seconds": rate_seconds,
+        "drain_seconds": max(0, rate_end - end),
         "requests": total,
         "all_requests": len(records),
         "completed": sum(v["completed"] for v in judged),
@@ -247,10 +253,10 @@ def analyse_level(model, settings, cap, users, records, *, window, started_at, e
         # Share of prompt tokens a prefix cache that kept every history could serve.
         "expected_prefix_reuse": sum(r.reusable for r in complete) / context if context else None,
         "working_set_tokens": working_set,
-        "output_tokens_per_sec": sum(m.completion_tokens for m in good) / seconds,
-        "input_tokens_per_sec": sum(m.prompt_tokens for m in good) / seconds,
-        "requests_per_sec": len(measured) / seconds,
-        "cache_metrics": cache_metrics([r.metrics for r in measured], seconds * 1000),
+        "output_tokens_per_sec": sum(m.completion_tokens for m in good) / rate_seconds,
+        "input_tokens_per_sec": sum(m.prompt_tokens for m in good) / rate_seconds,
+        "requests_per_sec": len(measured) / rate_seconds,
+        "cache_metrics": cache_metrics([r.metrics for r in measured], rate_seconds * 1000),
         "classes": classes,
         "error_examples": list(dict.fromkeys(r.metrics.error for r in measured
                                              if not r.metrics.ok and r.metrics.error))[:3],
@@ -517,9 +523,10 @@ def protocol(settings, client_config, caps):
         "user_definition": "A simulated user runs one session after another. Each turn sends the whole history plus a new message, waits for the full answer, then thinks (people) or runs tools (agents) before the next turn. A session ends after its planned turns or when the next turn would exceed the context cap.",
         "steady_state_definition": "Users start in a session already in progress (length-biased) with its history, at random times within the first half of the warmup. Each user's first request is a cold prefill and is excluded; the measured window starts when the warmup has passed and every user has had a first answer.",
         "slo_definition": "A request meets its class SLO when it completes, dispatch lag + first token <= ttft_ms and its output token time <= 1000 / output_tokens_per_sec. Unmeasurable timings are misses.",
+        "rate_definition": "Tokens and responses of requests dispatched in the measurement window, divided by the time from window start through the last such response (drain included). This is cohort throughput, not an in-window engine token counter.",
         "pass_definition": "Every class with users reaches the attainment target over the requests sent in the measured window, and dispatch lag p99 <= lag_limit_ms.",
-        "search_definition": "Per context cap: double from start_users while levels pass, then bisect between the highest passing and the lowest failing count until the gap is within resolution of the passing count. Caps run in increasing order; a larger cap starts at the previous cap's result and inherits its first failing count. A level stops early when a class with enough judged requests is far below the target.",
-        "saturation_definition": "After the SLO search, users keep doubling from the largest measured count until a level is beyond a hard limit or saturation_max_users is reached. A level is beyond a hard limit when more than failure_share of its requests fail or are incomplete, a class's first token p95 exceeds factor x its target or its median output speed is under 1/factor of its target, not every user got a first answer within the request timeout, or throughput grew less than plateau_gain over a level with plateau_ratio fewer users while the median first token grew plateau_ttft-fold. Saturation levels stop early on the failure and first-token rules instead of the SLO rule. A larger cap is not measured at or above the count that exhausted a smaller cap.",
+        "search_definition": "Per context cap: double from start_users while levels pass, then bisect between the highest passing and the lowest failing count until the gap is within resolution of the passing count. Caps run in increasing order; the previous result is only a starting hint. Every cap measures its own failing count. A level stops early when a class with enough judged requests is far below the target.",
+        "saturation_definition": "After the SLO search, users keep doubling from the largest measured count until a level is beyond a hard limit or saturation_max_users is reached. A level is beyond a hard limit when more than failure_share of its requests fail or are incomplete, a class's first token p95 exceeds factor x its target or its median output speed is under 1/factor of its target, not every user got a first answer within the request timeout, or throughput grew less than plateau_gain over a level with plateau_ratio fewer users while the median first token grew plateau_ttft-fold. Saturation levels stop early on the failure and first-token rules instead of the SLO rule. Every cap measures its own saturation limit; cache and batching effects need not be monotonic.",
         "constraint_definition": "Failing and exhausted levels name one constraint from what the client saw and, with B300 telemetry over the measured window, from vLLM queue, batch, KV cache, preemption and prefix-cache signals and DCGM GPU activity; see constraints-v1 in docs/design-session-capacity.md.",
         "context_definition": "System prompt, history and the new message in cl100k_base reference tokens, plus a per-message framing allowance; provider counts are stored separately.",
         "output_definition": "Each message asks the model to count until stopped; max_tokens is the planned output length. Counts include reasoning tokens. Answers become history.",
@@ -570,7 +577,7 @@ def run_session_test(client_config, settings, usable_context, *, progress=None, 
         report.protocol["streaming"] = True
         user_clients = []
         done, estimate = 0, len(caps) * (9 if settings.saturation else 7)
-        prior_users, prior_failure, prior_saturation = None, None, None
+        prior_users = None
 
         def measure(entry, cap, users, phase):
             nonlocal done
@@ -593,10 +600,10 @@ def run_session_test(client_config, settings, usable_context, *, progress=None, 
             return level
 
         for cap in caps:
-            entry = {"context_cap": cap, "levels": [], "inherited_failure": prior_failure,
-                     "prior_users": prior_users, "inferred_not_met": prior_users == 0,
-                     "saturation_search": settings.saturation and prior_users != 0,
-                     "inherited_saturation": prior_saturation}
+            entry = {"context_cap": cap, "levels": [], "inherited_failure": None,
+                     "prior_users": prior_users, "inferred_not_met": False,
+                     "saturation_search": settings.saturation,
+                     "inherited_saturation": None}
             report.caps.append(entry)
             refresh_entry(entry)
             while not report.cancelled and not report.stop_reason and not entry["inferred_not_met"]:
@@ -605,7 +612,6 @@ def run_session_test(client_config, settings, usable_context, *, progress=None, 
                     break
                 passed = [lv["users"] for lv in levels if lv["passed"]]
                 failed = [lv["users"] for lv in levels if not lv["passed"]]
-                failed += [prior_failure] if prior_failure else []
                 if not levels and prior_users:
                     users = prior_users
                 else:
@@ -627,10 +633,6 @@ def run_session_test(client_config, settings, usable_context, *, progress=None, 
             if report.cancelled or report.stop_reason:
                 break
             prior_users = result["users"]
-            prior_failure = result["first_failed"]
-            saturation = entry.get("saturation") or {}
-            if saturation.get("status") in ("reached", "inherited"):
-                prior_saturation = saturation["users"]
         if progress:
             progress("Users stage finished", done, done)
         if any(entry["result"].get("client_limited") for entry in report.caps):
@@ -685,7 +687,8 @@ def _run_level(settings, prompts, clients, cap, users, index, cancelled, phase="
             except Exception as error:  # noqa: BLE001 - recorded as a failed request
                 text, metrics = "", RequestMetrics(ok=False, error=str(error))
             record = Record(u, klass, sent - t0, (sent - due) * 1000, context + step.input_tokens,
-                            step.output_tokens, turn, metrics, first, context)
+                            step.output_tokens, turn, metrics, first, context,
+                            finished=time.perf_counter() - t0)
             with lock:
                 records.append(record)
                 if first:

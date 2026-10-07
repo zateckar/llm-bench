@@ -190,7 +190,7 @@ class SubmissionTests(DatabaseCase):
         self.assertEqual((options["performance"], options["context_max"], options["suite"], repeats,
                           "load" in options, "in_flight_cap" in options),
                          ("standard", 65536, "standard", 2, False, False))
-        self.assertEqual((config["name"], config["revision"]), ("standard", "standard-v1"))
+        self.assertEqual((config["name"], config["revision"]), ("standard", "standard-v3"))
         # Saved plans and API callers may still name a former performance test.
         (_, _, options, _), = self.validate([{"model_id": 1, "mode": "both", "performance": "load",
                                               "max_concurrency": 64, "load": {"preset": "chat", "rates": [1, 2]}}])

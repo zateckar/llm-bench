@@ -221,10 +221,11 @@ class RequestMetrics:
     cached_tokens_reported: bool = False
     # HTTP status of a rejected request; None for successes and transport errors.
     http_status: int | None = None
+    first_delivery_fraction: float | None = None
 
     @property
     def output_token_time_ms(self) -> float | None:
-        """Client delivery proxy, not token-level or model-side decode latency."""
+        """Client delivery proxy; buffered spans cannot establish decode speed."""
         if (not self.ok or not self.streamed or self.burst_delivery
                 or self.completion_tokens_estimated or self.completion_tokens < 2
                 or self.stream_span_ms is None):
@@ -239,6 +240,13 @@ class RequestMetrics:
             and (
                 self.stream_chunks == 1
                 or (self.stream_span_ms is not None and self.stream_span_ms < 10)
+                # A large first delivery has already produced much of the
+                # reported output before the first-to-last timing starts.
+                or (self.first_delivery_fraction is not None and self.first_delivery_fraction > 0.1)
+                # Multiple SSE events in a buffered HTTP read do not provide
+                # independent delivery timings, even if there is a later pause.
+                or (len(self.chunk_gaps_ms) >= 4
+                    and sum(gap < 1 for gap in self.chunk_gaps_ms) / len(self.chunk_gaps_ms) > 0.8)
             )
         )
 

@@ -308,7 +308,7 @@ class EngineTests(ShortLevels):
     def test_search_finds_the_users_the_fake_server_serves(self):
         report, saved = self.run_test(context_caps=[2048, 8192])
         data = report.to_dict()
-        self.assertEqual((data["schema_version"], data["kind"], data["protocol"]["revision"]), (7, "sessions", "sessions-v1"))
+        self.assertEqual((data["schema_version"], data["kind"], data["protocol"]["revision"]), (7, "sessions", "sessions-v2"))
         first, second = data["caps"]
         tried = [lv["users"] for lv in first["levels"]]
         self.assertEqual(tried[:2], [16, 32])
@@ -317,17 +317,17 @@ class EngineTests(ShortLevels):
         self.assertTrue(16 <= result["users"] < 32, tried)
         self.assertEqual(result["limiting"]["factor"], "tpot")
         self.assertLessEqual(FakeServer.peak, 64)
-        # The larger cap starts at the smaller cap's result and never measures a count that failed there.
+        # The previous result is a starting hint; the larger cap measures its own failure.
         self.assertEqual(second["levels"][0]["users"], result["users"])
-        self.assertTrue(all(lv["users"] < result["first_failed"] for lv in second["levels"]))
-        self.assertEqual(second["inherited_failure"], result["first_failed"])
+        self.assertTrue(any(lv["users"] >= result["first_failed"] for lv in second["levels"]))
+        self.assertIsNone(second["inherited_failure"])
         self.assertEqual(data["summary"]["headline"]["context_cap"], 8192)
         self.assertEqual(len(saved), len(first["levels"]) + len(second["levels"]))
         # Sessions grow: agents at the larger cap send longer histories.
         self.assertGreater(second["levels"][0]["context_tokens"]["p95"], first["levels"][0]["context_tokens"]["p95"])
         self.assertLessEqual(max(FakeServer.contexts), 8192)
         failing = next(lv for lv in first["levels"] if not lv["passed"])
-        self.assertTrue(failing["early_stop"].startswith("Stopped early:"), failing["early_stop"])
+        self.assertLess(failing["attainment"], settings().attainment)
         # Without telemetry the constraint comes from the client: output speed misses on a prompt-heavy load.
         self.assertEqual(result["constraint"]["basis"], "client")
         self.assertIn(result["constraint"]["constraint"], ("decode", "prefill_interference"))
@@ -347,12 +347,12 @@ class EngineTests(ShortLevels):
         self.assertIn("failed or were incomplete", saturation["reason"])
         self.assertEqual(saturation["constraint"]["constraint"], "errors")
         self.assertEqual([u for u, phase in tried if phase == "saturation"], [64])
-        self.assertLessEqual(FakeServer.peak, 64)
-        # The larger cap never measures the count that exhausted the smaller one.
-        self.assertEqual(second["inherited_saturation"], 64)
-        self.assertTrue(all(lv["users"] < 64 for lv in second["levels"]))
-        self.assertIn(second["saturation"]["status"], ("reached", "inherited"))
-        self.assertLessEqual(second["saturation"]["users"], 64)
+        self.assertLessEqual(FakeServer.peak, 128)
+        # The larger cap independently measures its saturation limit.
+        self.assertIsNone(second["inherited_saturation"])
+        self.assertTrue(any(lv["phase"] == "saturation" for lv in second["levels"]))
+        self.assertEqual(second["saturation"]["status"], "reached")
+        self.assertLessEqual(second["saturation"]["users"], 128)
         results = report.to_dict()["summary"]["results"]
         self.assertEqual(results[0]["saturation"]["users"], 64)
 

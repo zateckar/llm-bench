@@ -79,6 +79,12 @@ class ClientTests(unittest.TestCase):
             self.assertFalse(metrics.ok)
             response.close.assert_called_once()
 
+    def test_first_delivery_share_includes_reasoning_and_answer(self):
+        _, _, metrics = self.complete(Response([event("aaa", "r" * 9), event("bbbb", finish="stop")]))
+        self.assertEqual(metrics.first_delivery_fraction, .75)
+        self.assertTrue(metrics.burst_delivery)
+        self.assertIsNone(metrics.output_token_time_ms)
+
     def test_terminal_finish_reason_is_sufficient_without_done_sentinel(self):
         text, _, metrics = self.complete(Response([event("answer", finish="stop")]))
         self.assertTrue(metrics.ok)

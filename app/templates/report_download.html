@@ -15,8 +15,10 @@
     <article class="panel run-card" style="--run-color:{{ colors[loop.index0 % colors|length] }}">
         <p class="eyebrow muted">RUN {{ run.id }} · {{ run.status }}</p><h3>{{ run.model_name }}</h3><p class="small muted">{{ run.model_id }}</p>
         <div class="score">{{ fmt(s.get('category_balanced'), '%') }}</div><p class="small muted">Category/family-balanced criterion achievement</p>
+        {% from "quality_macros.html" import selection_note %}{{ selection_note(run.quality.get('suite', {}).get('selection')) }}
         <p class="small muted">{% if s.get('category_balanced_ci95') %}95% interval {{ fmt(s.category_balanced_ci95[0], '%') }} – {{ fmt(s.category_balanced_ci95[1], '%') }}{% else %}Confidence interval unavailable{% endif %}</p>
         <div class="mini-metrics"><div><span class="small muted">Full task success</span><strong>{{ fmt(s.get('category_balanced_full_pass'), '%') }}</strong></div><div><span class="small muted">Evaluated / recorded</span><strong>{{ run.scored_questions }} / {{ run.recorded_questions }}</strong></div></div>
+        {% from "quality_macros.html" import capability_ladder %}{{ capability_ladder(s.get('challenge')) }}
     </article>{% endif %}{% endfor %}
     </div>{% endif %}
     {% if has_quality_results and runs|map(attribute='test_suite_hash')|unique|list|length > 1 %}<p class="notice">These runs use different suite fingerprints. Overall scores may cover different questions; paired comparisons below use identical questions only.</p>{% endif %}

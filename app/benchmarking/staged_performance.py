@@ -11,7 +11,7 @@ earlier staged runs keep it.
 
 import copy
 
-REVISION = "standard-performance-v4"
+REVISION = "standard-performance-v5"
 SCHEMA_VERSION = 6
 KIND = "staged"
 
@@ -23,7 +23,7 @@ STAGES = (
     ("context", "Context", 4, "context_sweep",
      "Limits by input context and concurrency, up to the deployment's declared context limit: each context "
      "climbs 1, 2, 4, 8, 16, 24, 32, 48, … concurrent requests until latency or output speed is far beyond "
-     "the targets, and larger contexts skip the loads that already failed."),
+     "the targets, with every context measured independently."),
     ("capacity", "Capacity", 5, "open_loop",
      "Sustainable arrival rate under per-class SLOs for an open-loop workload (earlier runs only)."),
     ("users", "Users", 7, "sessions",

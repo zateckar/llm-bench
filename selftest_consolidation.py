@@ -36,19 +36,22 @@ MODEL = {"id": 1, "name": "fake", "base_url": "http://fake.invalid", "api_key": 
 
 
 class StandardSuiteTests(unittest.TestCase):
-    def test_union_areas_and_unchanged_fingerprints(self):
+    def test_selected_areas_and_unchanged_fingerprints(self):
         questions = standard_suite.load_questions()
-        self.assertEqual(len(questions), 495)
+        self.assertEqual(len(questions), 339)
         counts = {key: sum(standard_suite.area_of(q.metadata) == key for q in questions)
                   for key in standard_suite.AREA_LABELS}
-        self.assertEqual(counts, {"reasoning": 323, "tools": 96, "safety": 46, "open": 30})
+        self.assertEqual(counts, {"reasoning": 288, "tools": 13, "safety": 8, "open": 30})
         self.assertEqual(standard_suite.validate_suite(questions), [])
-        # Every question keeps its metadata, so the rigorous subset hashes as before.
+        # Selection keeps every retained question's full identity.
         reasoning = [q for q in questions if standard_suite.area_of(q.metadata) == "reasoning"]
-        self.assertEqual(quality_suite.suite_hash(reasoning), "7909c6325d1abd7b")
-        self.assertEqual(quality_suite.suite_hash(reasoning), quality_suite.suite_hash(quality_suite.load_questions()))
+        self.assertEqual(quality_suite.suite_hash(reasoning), "be54465d172bce6b")
+        source = {q.id: quality_suite.fingerprint(q) for q in standard_suite.load_all_questions()}
+        self.assertEqual(len(source), 519)
+        self.assertTrue(all(source[q.id] == quality_suite.fingerprint(q) for q in questions))
         provenance = standard_suite.provenance()
-        self.assertEqual((provenance["revision"], provenance["questions"]), ("standard-v1", 495))
+        self.assertEqual((provenance["revision"], provenance["questions"]), ("standard-v3", 339))
+        self.assertEqual(provenance["selection"]["removed_questions"], 180)
         self.assertEqual([(a["area"], a["revision"], a["scored"]) for a in provenance["areas"]],
                          [("reasoning", quality_suite.REVISION, True), ("tools", tool_suite.REVISION, True),
                           ("safety", safety_suite.REVISION, True), ("open", open_suite.REVISION, False)])
@@ -60,7 +63,7 @@ class StandardSuiteTests(unittest.TestCase):
         suite = get_suite("standard")
         self.assertEqual(suite.label, "Standard quality suite")
         execution = suite.execution(4096)
-        self.assertEqual(execution["native"]["suite_revision"], "standard-v1")
+        self.assertEqual(execution["native"]["suite_revision"], "standard-v3")
         self.assertIn("native_tools", suite.client_extra())
         for name in RETIRED_SUITES:
             self.assertTrue(get_suite(name).load(), name)  # still loadable for history
@@ -230,9 +233,10 @@ class StagedRunnerTests(DatabaseCase):
         self.assertEqual((context["limit"], context["limit_source"], context["contexts"], context["effort"]),
                          (28160, "declared", [256, 8192, 28160], "default"))
         self.assertEqual((context["concurrencies"], context["targets"]["ttft_p95_ms"]), ([1, 2, 4], 1500))
+        self.assertEqual(context["minimum_samples_per_cell"], 20)
         sweep = perf["stages"]["context"]
         self.assertEqual((sweep["protocol"]["contexts"], sweep["protocol"]["candidate_efforts"],
-                          sweep["protocol"]["revision"]), ([256, 8192, 28160], ["default"], "context-limits-v1"))
+                          sweep["protocol"]["revision"]), ([256, 8192, 28160], ["default"], "context-limits-v2"))
         cells = self.sql("SELECT context_tokens, concurrency FROM performance_cells ORDER BY context_tokens, concurrency")
         self.assertEqual([(c["context_tokens"], c["concurrency"]) for c in cells],
                          [(n, c) for n in (256, 8192, 28160) for c in (1, 2, 4)])
@@ -288,7 +292,7 @@ class StagedRunnerTests(DatabaseCase):
                 patch.object(runner, "run_perf_suite", return_value=latency_result()):
             run = self.start(run_submission.make_run_options(mode="both", users=self.users))
         self.assertEqual((run["status"], run["scored_questions"]), ("completed", 4), run["error_message"])
-        self.assertEqual(json.loads(run["quality_config_json"])["revision"], "standard-v1")
+        self.assertEqual(json.loads(run["quality_config_json"])["revision"], "standard-v3")
         quality = json.loads(run["quality_json"])
         self.assertEqual(quality["suite"]["name"], "standard")
         self.assertEqual(set(quality["summary"]["areas"]), {"reasoning", "safety"})

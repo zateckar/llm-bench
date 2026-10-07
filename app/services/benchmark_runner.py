@@ -686,13 +686,14 @@ def _measure_staged(run_id, client_config, perf_config, context_max=None, metric
     concurrency, targets, user_settings = limits or (staged.DEFAULT_CONTEXT_CONCURRENCY, staged.targets(),
                                                      session_workload.parse_settings(
                                                          session_workload.default_settings()))
-    sweep_config = SweepConfig(context_max=limit, max_concurrency=concurrency, sweep_rounds=1,
+    sweep_config = SweepConfig(context_max=limit, max_concurrency=concurrency, sweep_rounds=1, min_samples=20,
                                sweep_output_tokens=staged.CONTEXT_OUTPUT_TOKENS,
                                context_lengths=staged.contexts_for(limit), effort_list=(effort,), targets=targets)
     report = staged.new_report(client_config.model, {
         "latency": {"levels": list(perf_config.levels), "max_concurrency": perf_config.max_concurrency},
         "context": {"contexts": list(sweep_config.contexts), "limit": limit, "limit_source": source,
                     "effort": effort, "concurrencies": list(sweep_config.concurrencies),
+                    "minimum_samples_per_cell": sweep_config.min_samples,
                     "targets": targets.to_dict(), "max_output_tokens": staged.CONTEXT_OUTPUT_TOKENS},
         "users": {"preset": user_settings.preset, "user_model_hash": user_settings.model.fingerprint(),
                   "context_caps": list(session_workload.caps_for(user_settings, limit)),

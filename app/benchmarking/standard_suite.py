@@ -1,15 +1,15 @@
 """The standard quality suite: one suite covering every built-in area.
 
-See docs/design-consolidation.md. The suite is the union of the four
-formerly separate built-in suites. Every question keeps its metadata, so
-fingerprints are unchanged; a question's area follows from ``metadata.cohort``.
+See docs/design-consolidation.md. New runs use a frozen subset of the four
+built-in areas. The full bank remains available for authoring and regression
+checks. Retained questions keep their metadata and fingerprints.
 """
 
 import functools
 
 from app.benchmarking import open_suite, quality_suite, safety_suite, tool_suite
 
-REVISION = "standard-v1"
+REVISION = "standard-v3"
 
 # (area key, label, source suite module, scored)
 AREAS = (
@@ -20,6 +20,8 @@ AREAS = (
 )
 AREA_LABELS = {key: label for key, label, _, _ in AREAS}
 _COHORTS = {module.REVISION: key for key, _, module, _ in AREAS}
+# Saved inventories must retain their areas after a bank revision.
+_COHORTS.update({"rigorous-v15": "reasoning"})
 
 
 def area_of(metadata):
@@ -27,7 +29,8 @@ def area_of(metadata):
     return _COHORTS.get((metadata or {}).get("cohort"))
 
 
-def load_questions():
+def load_all_questions():
+    """Unfiltered source bank, including questions retired from new runs."""
     questions = []
     for _, _, module, _ in AREAS:
         questions.extend(module.load_questions())
@@ -37,6 +40,12 @@ def load_questions():
             raise ValueError(f"Duplicate question id in the standard suite: {q.id}")
         seen.add(q.id)
     return questions
+
+
+def load_questions():
+    from app.benchmarking.standard_selection import select_questions
+
+    return select_questions(load_all_questions())
 
 
 def provenance():
@@ -54,7 +63,10 @@ def _provenance():
         items = [q for q in questions if area_of(q.metadata) == key]
         areas.append({"area": key, "label": label, "revision": module.REVISION, "questions": len(items),
                       "suite_hash": quality_suite.suite_hash(items), "scored": scored})
+    from app.benchmarking.standard_selection import provenance as selection_provenance
+
     return {"revision": REVISION, "questions": len(questions), "areas": areas,
+            "selection": selection_provenance(),
             "max_output_tokens": quality_suite.MAX_OUTPUT_TOKENS}
 
 

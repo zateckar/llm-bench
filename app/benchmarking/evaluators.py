@@ -1912,6 +1912,7 @@ def _json_mismatches(
                 "path": path or "root",
                 "at_root": not path,
                 "reason_code": "length_mismatch",
+                "extra_members": len(got) > len(target),
                 "detail": f"length {len(got)} != {len(target)}",
             }]
         else:
@@ -2068,7 +2069,7 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
             path = mismatch["path"]
             if path in covered and not mismatch.get("at_root"):
                 continue
-            if mismatch["reason_code"] == "value_mismatch" and any(
+            if any(
                 path.startswith(p + ".") or path.startswith(p + "[")
                 for p in spec.get("atomic_paths", [])
             ):
@@ -2078,7 +2079,11 @@ def eval_json_match(response: str, expected: Any, **kwargs) -> tuple[float, str]
                 "status": "fail",
                 "earned": 0.0,
                 "possible": 1.0,
-                "dimension": "contract" if mismatch["reason_code"] in {"type_mismatch", "length_mismatch", "unexpected_keys", "missing_key"} else "content",
+                # Extra answer members are a completeness/precision error in
+                # content too. Previously an overinclusive array earned 100%.
+                "dimension": "contract" if (mismatch["reason_code"] in {"type_mismatch", "missing_key"}
+                                            or mismatch["reason_code"] == "length_mismatch"
+                                            and not mismatch.get("extra_members")) else "content",
                 "reason_code": mismatch["reason_code"],
                 "evidence": {"path": path, "detail": mismatch["detail"]},
             })
@@ -2296,7 +2301,7 @@ EVALUATOR_VERSIONS = {
     "ordered_labels": "2",
     "set_match": "2",
     "regex_all": "2",
-    "json_match": "8",
+    "json_match": "9",
     "code_exec": "6",
     "format_check": "5",
     "contains_keywords": "3",

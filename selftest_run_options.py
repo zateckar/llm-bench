@@ -58,9 +58,9 @@ class OptionsTests(unittest.TestCase):
 
     def test_fixed_questions_are_reproducible_and_strict(self):
         a, b = load_questions(), load_questions()
-        self.assertEqual(len(a), 323)
+        self.assertEqual(len(a), 347)
         self.assertEqual(suite_hash(a), suite_hash(b))
-        self.assertEqual(len({q.id for q in a}), 323)
+        self.assertEqual(len({q.id for q in a}), 347)
         self.assertTrue(all(q.max_tokens == 65536 and q.pass_threshold == 1 for q in a))
         self.assertEqual(sum(bool(q.interaction) for q in a), 28)
         self.assertEqual(
@@ -75,7 +75,7 @@ class OptionsTests(unittest.TestCase):
         self.assertIsNone(error)
         rows = [row for items in categories.values() for row in items]
         # The browser shows the whole standard suite.
-        self.assertEqual(len(rows), 495)
+        self.assertEqual(len(rows), 339)
         self.assertEqual(sum(r["evaluator"] == "interactive_state" for r in rows), 20)
         self.assertEqual(sum(r["evaluator"] == "behavioral_reconstruction" for r in rows), 8)
 
@@ -207,7 +207,7 @@ class SubmissionTests(unittest.TestCase):
         page = self.client.get("/admin/run")
         self.assertEqual(page.status_code, 200)
         self.assertIn('action="/admin/run"', page.text)
-        self.assertIn("standard suite of 495 tasks", page.text)
+        self.assertIn("standard suite of 339 tasks", page.text)
         for word in (
             "Question limit",
             "Quality profile",

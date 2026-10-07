@@ -298,7 +298,7 @@ class ReasoningTests(unittest.TestCase):
         result = score(q, {**answer, "extra": True})
         self.assertFalse(result.passed)
         self.assertEqual(result.evaluation.contract_score, 0)
-        self.assertEqual(result.evaluation.criterion_achievement, 1)
+        self.assertAlmostEqual(result.evaluation.criterion_achievement, 2 / 3)
         result = score(q, [])
         self.assertFalse(result.passed)
         self.assertEqual(result.evaluation.criterion_achievement, 0)
@@ -321,7 +321,7 @@ class ReasoningTests(unittest.TestCase):
             self.assertTrue(result.passed, (q.id, result.detail))
             self.assertAlmostEqual(result.evaluation.criterion_achievement, 1, msg=q.id)
             checked += 1
-        self.assertEqual(checked, 264)
+        self.assertEqual(checked, 280)
 
     def test_boolean_mapping_keys_cannot_impersonate_numbers(self):
         self.assertFalse(values_equal({True: "x"}, {1: "x"}))

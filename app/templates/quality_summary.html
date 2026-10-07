@@ -3,6 +3,7 @@
 <section class="card p-4 space-y-3">
 <div class="flex justify-between"><h2 class="text-lg font-semibold text-white">Quality</h2><a class="text-blue-400" href="/runs/{{ run.id }}/quality.json">Download JSON</a></div>
 <p class="text-sm text-zinc-400">{{ quality.suite.label or quality.suite.revision }}{% if quality.suite.owner %} (owner {{ quality.suite.owner }}){% endif %} · {{ qs.scored }}/{{ qs.total }} evaluated · {{ qs.passes }} full passes. Categories and families receive equal weight. Formal creative-writing compliance is reported separately.</p>
+{% from "quality_macros.html" import selection_note %}{{ selection_note(quality.suite.selection) }}
 <p class="text-sm text-zinc-400">Temperature {{ quality.protocol.temperature }} · Reasoning {{ quality.protocol.reasoning_effort or 'provider default' }}{% if quality.protocol.execution and quality.protocol.execution.native %} · Up to two requests per ordinary question; native tools / response_format ({{ quality.protocol.execution.native.revision }}){% elif qs.native %} · Native tools / response_format ({{ quality.protocol.execution.revision }}){% elif quality.protocol.execution %} · Up to two requests per ordinary question{% endif %}</p>
 {% if qs.recovery and qs.recovery.questions %}<p class="text-sm text-zinc-300">{{ qs.recovery.initial_passes }} initial passes · {{ qs.recovery.attempted }} final-answer followups · {{ qs.recovery.recovered }} recovered passes · {{ qs.recovery.model_calls }} model calls for {{ qs.recovery.questions }} ordinary questions.</p>{% endif %}
 <div class="grid md:grid-cols-4 gap-4">
@@ -12,6 +13,7 @@
 <div><p class="text-sm text-zinc-400">Output contract</p><strong>{{ '%.1f%%'|format(qs.contract_compliance_mean*100) if qs.contract_compliance_mean is not none else 'n/a' }}</strong></div>
 <div><p class="text-sm text-zinc-400">Formal writing compliance</p><strong>{{ '%.1f%%'|format(qs.compliance_score*100) if qs.compliance_score is not none else 'n/a' }}</strong></div>
 </div>
+{% from "quality_macros.html" import capability_ladder %}{{ capability_ladder(qs.challenge) }}
 {% if qs.areas %}<table class="w-full text-sm"><caption class="text-left text-xs text-zinc-500 pb-1">By area · reported next to the headline score, which weights every category equally</caption>
 <thead><tr><th class="text-left">Area</th><th>Tasks</th><th>Categories</th><th>Evaluated</th><th>Criterion achievement</th><th>Full task success</th></tr></thead><tbody>
 {% for key, area in qs.areas.items() %}<tr><td>{{ area.label }}</td><td>{{ area.count }}</td><td>{{ area.categories }}</td>{% if area.graded %}<td>{{ area.scored }}/{{ area.count }}</td><td>{{ '%.1f%%'|format(area.score*100) if area.score is not none else 'n/a' }}</td><td>{{ '%.1f%%'|format(area.full_pass_rate*100) if area.full_pass_rate is not none else 'n/a' }}</td>{% else %}<td colspan="3">{{ area.recorded }} answers recorded for blind A/B studies · not scored</td>{% endif %}</tr>{% endfor %}

@@ -301,7 +301,7 @@ class SweepProtocolTests(unittest.TestCase):
                          ["measured", "failed", "failed", "failed", "skipped_failure", "skipped_failure"])
         later = [c for c in report.cells if c["context_tokens"] == 32768]
         self.assertEqual(later[0]["status"], "measured")
-        self.assertTrue(all(c["requests"] == 0 for c in later[1:]))
+        self.assertEqual([c["status"] for c in later], [c["status"] for c in first_row])
 
     def test_load_success_resets_streak(self):
         report = self.failure_sweep(bad_loads={16, 32, 64, 80})
@@ -381,8 +381,8 @@ class SweepProtocolTests(unittest.TestCase):
 def synthetic(context, concurrency, ttft_ms=500, token_ms=10, aggregate=None, errors=0):
     return {"context_tokens": context, "concurrency": concurrency, "status": "measured",
             "requests": concurrency, "completed": concurrency - errors, "errors": errors, "incomplete": 0,
-            "ttft": {"p50_ms": ttft_ms, "p95_ms": ttft_ms},
-            "output_token_time": {"p50_ms": token_ms, "p95_ms": token_ms},
+            "ttft": {"count": concurrency - errors, "p50_ms": ttft_ms, "p95_ms": ttft_ms},
+            "output_token_time": {"count": concurrency - errors, "p50_ms": token_ms, "p95_ms": token_ms},
             "aggregate_tokens_per_sec": 100 * concurrency if aggregate is None else aggregate, "error": ""}
 
 
@@ -444,15 +444,15 @@ class LimitSearchTests(unittest.TestCase):
         return report, measured
 
     def test_limit_skips_every_larger_load_and_context(self):
-        # Huge latency at 32 requests and 64k: 48 requests and 128k are never tried.
+        # Huge latency at 32 requests skips higher loads at this context only.
         report, measured = self.limit_sweep(lambda context, c: context >= 65536 and c >= 32)
         self.assertTrue(report.finished)
-        self.assertEqual(report.protocol["revision"], "context-limits-v1")
+        self.assertEqual(report.protocol["revision"], "context-limits-v2")
         by_row = {}
         for context, concurrency in measured:
             by_row.setdefault(context, []).append(concurrency)
         self.assertEqual(by_row, {256: [1, 2, 4, 8, 16, 24, 32, 48, 64], 65536: [1, 2, 4, 8, 16, 24, 32],
-                                  131072: [1, 2, 4, 8, 16, 24], 262144: [1, 2, 4, 8, 16, 24]})
+                                  131072: [1, 2, 4, 8, 16, 24, 32], 262144: [1, 2, 4, 8, 16, 24, 32]})
         cells = {(c["context_tokens"], c["concurrency"]): c for c in report.cells}
         self.assertEqual(len(cells), 4 * 9)
         limit = cells[(65536, 32)]
@@ -460,11 +460,11 @@ class LimitSearchTests(unittest.TestCase):
         self.assertFalse(limit["within_targets"])
         self.assertNotIn("cache_reuse", limit)
         self.assertIn("cache_reuse", cells[(65536, 24)])
-        for key in ((65536, 48), (131072, 32), (262144, 64)):
+        for key in ((65536, 48), (131072, 48), (262144, 64)):
             self.assertEqual(cells[key]["status"], "skipped_limit")
-            self.assertIn("the limit was reached at 32 concurrent requests and 65,536 tokens", cells[key]["error"])
+            self.assertIn("the limit was reached at 32 concurrent requests", cells[key]["error"])
         self.assertEqual(report.efforts[0]["limits"]["frontier"],
-                         [{"context_tokens": 65536, "concurrency": 32, "reason": limit["limit"]}])
+                         [{"context_tokens": ctx, "concurrency": 32, "reason": limit["limit"]} for ctx in (65536,131072,262144)])
 
     def test_slow_single_request_still_verifies_larger_contexts(self):
         report, measured = self.limit_sweep(lambda context, c: context >= 131072)
@@ -481,14 +481,14 @@ class LimitSearchTests(unittest.TestCase):
         rows = {row["context"]: row for row in limit_rows(view["data"])}
         self.assertEqual((rows[256]["within"], rows[256]["limit"], rows[256]["highest"]), (64, None, 64))
         self.assertEqual((rows[65536]["within"], rows[65536]["limit"], rows[65536]["highest"]), (24, 32, 32))
-        self.assertEqual((rows[131072]["within"], rows[131072]["limit"]), (24, None))
+        self.assertEqual((rows[131072]["within"], rows[131072]["limit"]), (24, 32))
         self.assertEqual(view["limits"], limit_rows(view["data"]))
         from app.templates_config import templates
 
         offline = sweep_view({"label": "#1", "perf": report.to_dict()}, offline=True)
         html = templates.get_template("performance_sweep.html").render(
             performance={"sweep_views": [offline]}, offline=True)
-        for text in ("Limits by input context", "first token p95 ≤ 2.0 s", "output speed p95 ≥ 40 tok/s",
+        for text in ("Limits by input context", "first token p95 ≤ 2.0 s", "slowest 5% output speed ≥ 40 tok/s",
                      "<td>24 concurrent</td>", "<td>32 concurrent</td>", "not reached", "skipped_limit"):
             self.assertIn(text, html)
 

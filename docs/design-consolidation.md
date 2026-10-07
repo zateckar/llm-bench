@@ -1,3 +1,7 @@
+Update 2026-10-07 (compact bank): `standard-v3` retains 339 of the 519 source questions. It excludes 180 unchanged questions fully passed in runs 91/95/96/97, keeps all 24 new ladder tasks, and archives definitions for regression checks. Selection is frozen and provisional; six categories are no longer tested. See [selection review](../reports/standard-selection-review-2026-10-07.md).
+
+Update 2026-10-07: `standard-v2` has 519 tasks, including 24 capability-ladder tasks. `standard-performance-v5` uses at least 20 context samples per cell, complete timing coverage for target passes, and independent context/user limits. Historical rules below describe the earlier protocols.
+
 # One quality suite, one performance test
 
 Status: accepted, 2026-10-05. It supersedes the selectable parts of the separate suite and performance-test designs.

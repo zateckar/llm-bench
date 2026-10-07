@@ -122,6 +122,10 @@
 {% for run in selected_runs %}{% if run.quality.get('schema_version') == 3 %}{% set s = run.quality.summary %}<tr><td>#{{ run.id }} {{ run.model_name }}</td><td>{{ '%.1f%%'|format(s.category_balanced*100) if s.category_balanced is not none else 'n/a' }}</td><td>{% if s.category_balanced_ci95 %}{{ '%.1f'|format(s.category_balanced_ci95[0]*100) }}–{{ '%.1f'|format(s.category_balanced_ci95[1]*100) }}%{% else %}n/a{% endif %}</td><td>{{ '%.1f%%'|format(s.category_balanced_full_pass*100) if s.category_balanced_full_pass is not none else 'n/a' }}</td><td>{{ s.scored }}/{{ s.total }}</td></tr>{% endif %}{% endfor %}
 </tbody></table>
 {% from "quality_macros.html" import comparison_sentence %}
+{% from "quality_macros.html" import selection_note %}
+{% for run in selected_runs %}{% if run.quality.get('suite', {}).get('selection') %}<p>#{{ run.id }} {{ run.model_name }}</p>{{ selection_note(run.quality.suite.selection) }}{% endif %}{% endfor %}
+{% from "quality_macros.html" import capability_ladder %}
+{% for run in selected_runs %}{% if run.quality.get('summary', {}).get('challenge') %}<p>#{{ run.id }} {{ run.model_name }}</p>{{ capability_ladder(run.quality.summary.challenge) }}{% endif %}{% endfor %}
 {% for row in quality_comparisons %}<p class="text-sm text-zinc-300">#{{ row.right }} minus #{{ row.left }}: {{ comparison_sentence(row.comparison) }}</p>{% endfor %}
 {% set grouped = selected_runs|selectattr('repeat_group_id')|map(attribute='repeat_group_id')|unique|list %}
 {% if grouped %}<p class="text-sm text-sky-300">Some selected runs belong to repeat groups. Comparing whole groups also accounts for run-to-run variability:

@@ -1,3 +1,5 @@
+Update 2026-10-07: `sessions-v2` measures each context independently; the earlier inheritance rules below describe v1. Cohort throughput includes drain time, and incomplete warmup or an assigned class with no measured requests cannot pass.
+
 # Users at SLO: session-based capacity
 
 Status: accepted, 2026-10-06. Stage 3 of the standard performance test (`standard-performance-v4`, which dropped the open-loop capacity stage; v3 ran it as stage 4); engine revision `sessions-v1`, report `schema_version` 7, `kind` "sessions".

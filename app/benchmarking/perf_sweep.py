@@ -16,8 +16,8 @@ from app.benchmarking.models import LatencyStats, RequestMetrics
 from app.benchmarking.evaluators import strip_think_blocks
 from app.benchmarking.cache_metrics import cache_metrics
 
-REVISION = "context-sweep-v3"
-LIMIT_REVISION = "context-limits-v1"
+REVISION = "context-sweep-v4"
+LIMIT_REVISION = "context-limits-v2"
 MAX_CONTEXT = 1_048_576
 CONTEXT_STEP = 65_536
 CONCURRENCY_STEP = 16
@@ -82,8 +82,8 @@ def judge(cell, previous, targets):
     token_time = cell.get("output_token_time") or {}
     ttft_p95, token_p95, token_p50 = ttft.get("p95_ms"), token_time.get("p95_ms"), token_time.get("p50_ms")
     checks = [failed / requests <= TARGET_FAILURE_RATE,
-              None if ttft_p95 is None else ttft_p95 <= targets.ttft_ms,
-              None if token_p95 is None else token_p95 <= targets.output_token_time_ms]
+              None if ttft_p95 is None or ttft.get("count", 0) < requests - failed else ttft_p95 <= targets.ttft_ms,
+              None if token_p95 is None or token_time.get("count", 0) < requests - failed else token_p95 <= targets.output_token_time_ms]
     within = False if False in checks else None if None in checks else True
     if failed / requests > LIMIT_FAILURE_RATE:
         return within, f"{failed} of {requests} requests failed or were incomplete"
@@ -115,9 +115,10 @@ class SweepConfig:
     # Reasoning efforts to probe and measure, in order; empty means every effort.
     effort_list: tuple = ()
     # Limit search: the LIMIT_LADDER concurrencies, judged against these
-    # targets, skipping every cell with at least the load and context of a
-    # cell that reached the limit. None keeps the full grid.
+    # targets, skipping higher loads at that context after a limit.
+    # None keeps the full grid.
     targets: Targets | None = None
+    min_samples: int = 1
 
     def __post_init__(self):
         for name, value, low, high in (
@@ -125,6 +126,7 @@ class SweepConfig:
             ("Maximum concurrency", self.max_concurrency, 1, MAX_CONCURRENCY),
             ("Rounds per cell", self.sweep_rounds, 1, 8),
             ("Output token limit", self.sweep_output_tokens, 256, 65_536),
+            ("Minimum samples per cell", self.min_samples, 1, 100),
         ):
             if type(value) is not int or not low <= value <= high:
                 raise ValueError(f"{name} must be an integer between {low} and {high}")
@@ -156,7 +158,10 @@ class SweepConfig:
 
     @property
     def requests_per_effort(self):
-        return len(self.contexts) * (2 * sum(self.concurrencies) * self.sweep_rounds + 1)
+        return len(self.contexts) * (2 * sum(c * self.rounds_for(c) for c in self.concurrencies) + 1)
+
+    def rounds_for(self, concurrency):
+        return max(self.sweep_rounds, (self.min_samples + concurrency - 1) // concurrency)
 
 
 class PromptBank:
@@ -270,7 +275,7 @@ def measure_cell(clients, concurrency, bank, config, cancelled, cache_mode="cold
             raise
         barrier.wait()
         samples = []
-        for round_index in range(config.sweep_rounds):
+        for round_index in range(config.rounds_for(concurrency)):
             if cancelled():
                 break
             if round_index:
@@ -313,6 +318,7 @@ def measure_cell(clients, concurrency, bank, config, cancelled, cache_mode="cold
         if all_context_rejected
         else ("measured" if good else "incomplete" if transport_good else "failed"),
         "requests": len(samples),
+        "thin": len(samples) < 20,
         "completed": len(good),
         "errors": len(bad),
         "incomplete": len(transport_good) - len(good),
@@ -408,13 +414,14 @@ def run_sweep(
                 "Explicit single-worker context rejection stops larger inputs immediately. "
                 "Three consecutive contexts without a complete single-worker answer infer a "
                 "context ceiling. Three consecutive load levels without any complete answers "
-                "infer a concurrency ceiling for this and larger contexts. A 256-token "
+                "infer a concurrency ceiling at this context only. A 256-token "
                 "single-worker control must succeed before inferring a ceiling; an unsuccessful "
                 "control stops the sweep. Controls are outside timed measurements. Success resets "
                 "each streak. Inferred ceilings are workload-specific heuristics, not provider limits."
             ),
             "reference_tokenizer": "cl100k_base",
             "rounds_per_cell": config.sweep_rounds,
+            "minimum_samples_per_cell": config.min_samples,
             "max_output_tokens": config.sweep_output_tokens,
             "temperature": client_config.temperature,
             "attempts_per_request": 1,
@@ -439,12 +446,12 @@ def run_sweep(
             revision=LIMIT_REVISION,
             targets=config.targets.to_dict(),
             limit_policy=(
-                "Within targets: first token p95 and per-request output speed p95 meet the targets, with at most "
+                "Within targets: first token p95 and slow-tail per-request output speed meets the target with complete timing coverage, with at most "
                 f"{TARGET_FAILURE_RATE:.0%} failed or incomplete requests. A cell reaches the limit when more than "
                 f"{LIMIT_FAILURE_RATE:.0%} of requests fail or are incomplete, first token p95 exceeds "
                 f"{LIMIT_FACTOR}× its target, median output speed falls under 1/{LIMIT_FACTOR} of its target, or "
                 f"aggregate output grows less than {PLATEAU_GAIN - 1:.0%} over the previous load while the median "
-                f"first token grows {PLATEAU_TTFT}×. Every cell with at least that load and context is then "
+                f"first token grows {PLATEAU_TTFT}×. Higher load cells at that context are then "
                 "skipped. Single requests are still measured at every context to verify it, unless they fail; "
                 "limit cells get no cached-prefix pair."
             ),
@@ -585,6 +592,9 @@ def run_sweep(
                 failed_load = None
                 load_failures = []
                 previous = None
+                # A smaller-context failure is not a measurement at this
+                # context: batching and caching need not be monotonic.
+                frontier, frontier_reason, load_ceiling = None, "", None
                 for concurrency in config.concurrencies:
                     if cancelled() or report.stop_error:
                         break
@@ -713,7 +723,7 @@ def run_sweep(
                                     clients, concurrency, bank, config, cancelled, "warm", warm_index
                                 )
                                 cell["cache_reuse"]["priming_ok"] = True
-                                warm_index += concurrency * config.sweep_rounds
+                                warm_index += concurrency * config.rounds_for(concurrency)
                             else:
                                 cell["cache_reuse"] = {"status": "priming_failed", "priming_ok": False,
                                                        "error": cache_prime.error or "Cancelled"}

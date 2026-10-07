@@ -106,8 +106,8 @@ def _standard():
     return SuiteDef(
         name="standard",
         label="Standard quality suite",
-        description="Reasoning & knowledge, tool calling & structured output, safety & language, plus "
-                    "open-ended requests answered for blind A/B studies.",
+        description="Compact bank of retained reasoning, tool and safety challenges, plus "
+                    "open-ended requests answered for blind A/B studies; universally passed panel tasks are retired.",
         revision=lambda: standard_suite.REVISION,
         load=standard_suite.load_questions,
         provenance=standard_suite.provenance,

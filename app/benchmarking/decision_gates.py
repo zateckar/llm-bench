@@ -1,4 +1,4 @@
-"""Requirement gates of decision profiles (``decision-gates-v1``).
+"""Requirement gates of decision profiles (``decision-gates-v2``).
 
 A gate checks one piece of a model's scorecard evidence against a threshold.
 See docs/design-decision-dashboard.md. Everything here is pure: the evidence
@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import re
 
-REVISION = "decision-gates-v1"
+REVISION = "decision-gates-v2"
 MAX_GATES = 20
 TYPES = ("quality", "capacity", "users", "latency", "context", "operations")
 QUALITY_METRICS = {"score": "achievement", "full_pass": "full pass"}
@@ -180,17 +180,17 @@ def _capacity(gate, evidence):
 
 
 def _users(gate, evidence):
-    """Judged at the smallest measured context cap that holds the required sessions:
-    a larger cap serves at most as many users, so it is conservative evidence."""
+    """Require measured evidence at the requested cap; capacity is not monotonic."""
     item = (evidence.get("users") or {}).get(gate["user_model"])
     if not item:
         return _result("missing", note="No users-stage run of this user model")
-    usable = [r for r in item.get("results") or [] if r.get("context_cap", 0) >= gate["context"]
+    usable = [r for r in item.get("results") or [] if r.get("context_cap") == gate["context"]
+              and not r.get("inherited")
               and r.get("status") in ("established", "lower_bound", "not_met")]
     if not usable:
         return _result("missing", evidence=item,
-                       note=f"No conclusive result at a context cap of at least {gate['context']:,} tokens")
-    result = min(usable, key=lambda r: r["context_cap"])
+                       note=f"No measured result at the {gate['context']:,}-token context cap")
+    result = usable[0]
     users = result.get("users") or 0
     cap = f"at the {result['context_cap']:,}-token cap"
     if users >= gate["threshold"]:

@@ -1,8 +1,39 @@
-# Rigorous v15 design and critical review
+# Rigorous v16 design and critical review
 
-Review completed on 2026-10-04. This document describes the current protocol.
-Historical scores are retained and are not relabelled as v15 results. The v10-v14
-review records below describe earlier passes; the v15 review records the current changes.
+The current review is dated 2026-10-07. Historical results retain their saved
+protocols and scores. The dated v10-v15 sections below describe earlier revisions.
+
+## Compact standard v3 selection
+
+At the user's request, 180 unchanged questions fully passed in runs 91, 95, 96
+and 97 are excluded from new standard runs. The default bank has 339 questions:
+288 reasoning, 13 native tools, eight safety/language and 30 open-ended. All 24
+new ladder tasks remain. Full source banks stay in the regression gates.
+Selection is frozen and fingerprint-checked; it never reads the live database
+during a run. [Evidence and scope changes](reports/standard-selection-review-2026-10-07.md)
+include six dropped categories and the preliminary mixed-decoding panel.
+Post-selection scores require fresh matched runs for empirical interpretation.
+The full v16 source inventory described below remains 347 reasoning / 519 total.
+
+## V16 newest-run audit and capability ladder
+
+The [newest-run review](reports/latest-run-review-2026-10-07.md) records the
+read-only analysis of runs 95-97, evaluator counterfactuals, measured coverage,
+performance corrections and limits on model-ranking claims. `rigorous-v16`
+contains 347 reasoning tasks and is the reasoning area of the 519-task
+`standard-v2` bank. Its 24 original capability-ladder tasks combine interacting
+constraints, exact optimization, completeness and canonical witnesses. Two
+code families each have 28 adversarial fixtures per task. Independent exhaustive
+oracles and actual reference-program execution verify source correctness;
+matched repeated model runs are required to establish empirical discrimination.
+
+`json_match` v9 penalizes extra answer members and groups descendant structural
+errors once for atomic fragments. Ladder reports display full success separately
+from partial achievement, with coverage per predeclared complexity tier.
+Performance and quality stay separate. Current performance protocols require
+complete timing coverage for target passes, at least 20 standard context samples,
+independent per-context limits, and session cohort throughput including drain.
+The exact measured context cap is required by users decision gates.
 
 ## Current scoring, caching and storage revision
 

@@ -545,6 +545,12 @@ def performance_view(runs, *, offline=False, capacity=True):
             notes.append(f"{r['label']}: stopped early; measurements are incomplete.")
         notes.extend(f"{r['label']}: {note}" for note in perf.get("notes", []))
         for p in points(perf, "concurrency"):
+            delivered = (p.get("output_token_time") or {}).get("count", 0)
+            successful = (p.get("requests") or 0) - (p.get("errors") or 0)
+            if successful and delivered < successful:
+                notes.append(f"{r['label']} · concurrency {p['concurrency']}: output-token timing covers "
+                             f"{delivered}/{successful} successful requests. Buffered or unmeasurable "
+                             "deliveries are excluded; this subset does not establish the deployment's slow-tail speed.")
             load_rows.append(
                 {
                     "run": r["label"],

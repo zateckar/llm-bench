@@ -23,7 +23,7 @@ import urllib3
 from app.benchmarking.models import ChatMessage, RequestMetrics, TokenUsage, ToolCall
 
 logger = logging.getLogger(__name__)
-CLIENT_PROTOCOL_VERSION = "chat-client-v6"
+CLIENT_PROTOCOL_VERSION = "chat-client-v7"
 # Native tool-call assembly and wire-defect rules used by complete_chat().
 # Recorded only in reports that send tools or response_format, so text-only
 # protocols stay comparable with historical runs.
@@ -249,6 +249,7 @@ class ChatClient:
             self._stream_span_ms = None
             self._stream_diagnostics = {}
             self._chunk_gaps_ms = []
+            self._first_delivery_fraction = None
             # Recomputed per attempt: a fallback branch below may clear the
             # capability flags, and the next retry must honour that instead
             # of re-sending the payload that was just rejected.
@@ -333,6 +334,7 @@ class ChatClient:
                 stream_chunks=self._stream_chunks,
                 stream_span_ms=self._stream_span_ms,
                 chunk_gaps_ms=self._chunk_gaps_ms,
+                first_delivery_fraction=self._first_delivery_fraction,
                 attempt_diagnostics=diagnostics,
             )
             return message, usage, metrics
@@ -452,6 +454,7 @@ class ChatClient:
         ttft: float | None = None
         delta_count = 0
         first_arrival = last_arrival = None
+        first_delivery_chars = 0
         usage = _parse_usage({})
         terminated = False
         done_sent = False
@@ -542,6 +545,7 @@ class ChatClient:
                     arrival = time.perf_counter()
                     if first_arrival is None:
                         first_arrival = arrival
+                        first_delivery_chars = len(piece) + len(reasoning)
                     if last_arrival is not None:
                         self._chunk_gaps_ms.append((arrival - last_arrival) * 1000)
                     last_arrival = arrival
@@ -607,6 +611,12 @@ class ChatClient:
             usage.prompt_tokens_estimated = True
             usage.prompt_tokens = _estimate_tokens(_message_chars(messages))
         self._stream_chunks = delta_count
+        deliveries = [len(s) for s in chunks + reasoning_chunks]
+        # Character share is a buffering diagnostic, not a token estimate.
+        # Include both channels in the share of the first actual delivery.
+        self._first_delivery_fraction = (
+            first_delivery_chars / sum(deliveries) if deliveries and sum(deliveries) else None
+        )
         self._stream_span_ms = (
             (last_arrival - first_arrival) * 1000 if first_arrival is not None else None
         )

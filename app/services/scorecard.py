@@ -170,7 +170,7 @@ def _sessions(perf):
     preset, model_hash = protocol.get("preset") or "custom", protocol.get("user_model_hash") or ""
     key = preset if preset != "custom" else f"custom:{model_hash}"
     return {"kind": "users", "user_model": key, "label": user_model_label(key), "user_model_hash": model_hash,
-            "results": [{k: r.get(k) for k in ("context_cap", "users", "status", "first_failed")}
+            "results": [{k: r.get(k) for k in ("context_cap", "users", "status", "first_failed", "inherited")}
                         | {"limiting": ((r.get("constraint") or {}).get("label")
                                        or (r.get("limiting") or {}).get("label")),
                            "exhausted": _exhausted(r.get("saturation"))}

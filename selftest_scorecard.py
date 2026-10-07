@@ -146,15 +146,21 @@ class GateTests(unittest.TestCase):
         def one(context, threshold, item=evidence):
             return decision_gates.evaluate([{**gate, "context": context, "threshold": threshold}], item)["results"][0]
 
-        # The smallest measured cap that holds the required sessions decides.
-        self.assertEqual([(r["status"], r["value"]) for r in (one(100_000, 50), one(100_000, 70), one(32768, 70))],
+        # Evidence must measure this cap, without inheriting a failure from another cap.
+        self.assertEqual([(r["status"], r["value"]) for r in (one(131072, 50), one(131072, 70), one(32768, 70))],
                          [("pass", 60), ("fail", 60), ("pass", 90)])
-        bound = one(200_000, 50)
+        bound = one(262144, 50)
         self.assertEqual((bound["status"], bound["uncertain"], bound["run_id"]), ("fail", True, 7))
         self.assertEqual(one(500_000, 1)["status"], "missing")
+        self.assertEqual(one(100_000, 50)["status"], "missing")
+        self.assertEqual(one(200_000, 50)["status"], "missing")
         self.assertEqual(one(1, 1, {})["status"], "missing")
         not_met = {"users": {"mixed": {"results": [{"context_cap": 8192, "users": 0, "status": "not_met"}]}}}
         self.assertEqual((one(8192, 1, not_met)["status"], one(8192, 1, not_met)["value"]), ("fail", 0))
+        not_met["users"]["mixed"]["results"][0]["inherited"] = True
+        self.assertEqual(one(8192, 1, not_met)["status"], "missing")
+        adapted = scorecard._sessions({"summary": {"results": not_met["users"]["mixed"]["results"]}})
+        self.assertTrue(adapted["results"][0]["inherited"])
 
     def test_verdicts(self):
         status = lambda *s: decision_gates.verdict([{"status": x} for x in s])  # noqa: E731

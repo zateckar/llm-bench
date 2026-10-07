@@ -2,6 +2,19 @@
 
 {% macro p_text(value) %}{% if value is none %}n/a{% elif value < 0.001 %}&lt; 0.001{% else %}{{ '%.3f'|format(value) }}{% endif %}{% endmacro %}
 
+{% macro selection_note(selection) -%}
+{% if selection %}<p class="text-xs text-zinc-400">Compact bank: {{ selection.removed_questions }} questions fully passed in every selected historical run are excluded. Results cover the retained tasks; omitted categories: {{ selection.dropped_categories|join(', ') }}. The selection is provisional; scores apply to this retained coverage.</p>{% endif %}
+{%- endmacro %}
+
+{% macro capability_ladder(challenge) -%}
+{% if challenge %}
+<table class="w-full text-sm"><caption class="text-left">Capability ladder · {{ challenge.revision }}</caption>
+<thead><tr><th class="text-left">Tier</th><th>Evaluated</th><th>Full task success</th><th>Criterion achievement</th></tr></thead>
+<tbody>{% for tier, item in challenge.tiers.items() %}<tr><td>{{ tier }}</td><td>{{ item.scored }}/{{ item.planned }}</td><td>{{ '%.1f%%'|format(item.full_pass*100) if item.full_pass is not none else 'n/a' }}</td><td>{{ '%.1f%%'|format(item.achievement*100) if item.achievement is not none else 'n/a' }}</td></tr>{% endfor %}</tbody>
+</table><p class="text-xs text-zinc-400">{{ challenge.note }}</p>
+{% endif %}
+{%- endmacro %}
+
 {#- One plain-language line for a paired comparison (single runs or repeat groups). -#}
 {% macro comparison_sentence(c) -%}
 {%- if c.compatible -%}

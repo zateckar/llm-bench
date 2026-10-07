@@ -237,8 +237,8 @@ class SuiteShapeTests(unittest.TestCase):
 
     def test_rigorous_suite_identity_unchanged(self):
         rigorous = load_questions()
-        self.assertEqual(len(rigorous), 323)
-        self.assertEqual(suite_hash(rigorous), "7909c6325d1abd7b")
+        self.assertEqual(len(rigorous), 347)
+        self.assertEqual(suite_hash(rigorous), "fa1e19790c3d84f0")
         self.assertTrue(all(q.request is None for q in rigorous))
 
     def test_native_prompts_do_not_describe_the_text_protocol(self):

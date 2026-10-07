@@ -1,11 +1,12 @@
 # Fixed rigorous question suite
 
-The canonical run bank is assembled by [quality_suite.py](../app/benchmarking/quality_suite.py). Every quality run uses the same 323 questions; the test browser displays that complete bank.
+New standard quality runs use 339 questions, including 288 reasoning questions. [standard_suite.py](../app/benchmarking/standard_suite.py) applies a frozen, fingerprint-checked selection that excludes 180 questions fully passed across the saved panel. The test browser displays the retained run bank. The full 519-question source inventory, including 347 reasoning questions assembled by [quality_suite.py](../app/benchmarking/quality_suite.py), remains available for authoring and evaluator regression checks. [Selection evidence and coverage changes](../reports/standard-selection-review-2026-10-07.md).
 
 | Component | Count |
 |---|---:|
 | Static questions: one file per question in questions/ | 171 |
 | Generated reasoning/code: 29 families × 2 seeds × 2 variants | 116 |
+| Capability ladder: 6 families × 2 seeds × 2 complexity levels | 24 |
 | Interactive simulations: 5 families × 2 seeds × 2 variants | 20 |
 | Behavioral reconstruction: 2 families × 2 seeds × 2 variants | 8 |
 | Long-context: 2 families × 2 seeds × 8k/32k sizes | 8 |

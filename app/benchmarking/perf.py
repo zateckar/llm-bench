@@ -15,7 +15,7 @@ from app.benchmarking.llm_client import ChatClient, client_protocol
 from app.benchmarking.models import ConcurrencyPoint, LatencyStats, PerfReport, RequestMetrics
 from app.benchmarking.cache_metrics import cache_metrics
 
-REVISION = "performance-v8"
+REVISION = "performance-v9"
 DEFAULT_MAX_CONCURRENCY = 8
 MAX_CONCURRENCY = 32
 MIN_SAMPLES = 24

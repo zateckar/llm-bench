@@ -184,6 +184,22 @@ def summarize(rows):
     areas = area_summary(rows)
     if areas:
         extra["areas"] = areas
+    challenge = [r for r in rows if r["metadata"].get("challenge") == "capability-ladder-v1"]
+    if challenge:
+        tiers = {}
+        for tier in sorted({r["metadata"]["tier"] for r in challenge}):
+            items = [r for r in challenge if r["metadata"]["tier"] == tier]
+            scored = [r for r in items if r["scored"]]
+            tiers[tier] = {
+                "planned": len(items), "scored": len(scored),
+                "achievement": balanced(clusters(scored)),
+                "full_pass": balanced(clusters(scored, "passed")),
+            }
+        extra["challenge"] = {
+            "revision": "capability-ladder-v1",
+            "note": "Predeclared capability ladder; empirical discrimination requires matched repeated runs. Partial achievement is diagnostic; full success requires the complete answer.",
+            "tiers": tiers,
+        }
     return {
         "count": len(rows),
         "total": len(rows),
