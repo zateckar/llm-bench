@@ -13,9 +13,17 @@ from datetime import datetime, timezone
 # another module imported app.database first. app.services.run_queue and
 # benchmark_runner already resolve it lazily -- this matches them.
 from app import config as app_config
-from app.storage import DETECT_TYPES
+from app.storage import DETECT_TYPES, cancel_performance
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
+READ_INDEXES = """
+CREATE INDEX IF NOT EXISTS idx_test_runs_status ON test_runs(status, id);
+CREATE INDEX IF NOT EXISTS idx_test_runs_model_status ON test_runs(model_id, status, id);
+CREATE INDEX IF NOT EXISTS idx_test_runs_canary ON test_runs(canary_id, id);
+CREATE INDEX IF NOT EXISTS idx_test_runs_repeat ON test_runs(repeat_group_id, id);
+CREATE INDEX IF NOT EXISTS idx_deployment_checks_run ON deployment_checks(run_id);
+CREATE INDEX IF NOT EXISTS idx_monitor_events_run ON monitor_events(run_id);
+"""
 
 # Columns added after the initial release. `CREATE TABLE IF NOT EXISTS` in
 # schema.sql does not alter an existing table, so every added column needs an
@@ -29,6 +37,8 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("test_runs", "decoding_config_json", "TEXT"),
     ("test_runs", "quality_config_json", "TEXT"),
     ("test_runs", "quality_json", "TEXT"),
+    ("test_runs", "quality_summary_json", "TEXT"),
+    ("test_results", "prompt_preview", "TEXT"),
     ("test_results", "quality_metadata_json", "TEXT"),
     ("test_results", "quality_scored", "INTEGER"),
     ("test_results", "quality_outcome", "TEXT"),
@@ -119,6 +129,14 @@ async def _apply_migrations(db: aiosqlite.Connection) -> None:
             WHERE created_at IS NULL"""
     )
     await _migrate_retired_suites(db)
+    await db.executescript(READ_INDEXES)
+    from app.services.quality_views import backfill_projections
+    from starlette.concurrency import run_in_threadpool
+
+    # Commit schema changes before the bounded synchronous backfill opens its
+    # own connection. It runs once per missing projection, never per request.
+    await db.commit()
+    await run_in_threadpool(backfill_projections, app_config.DATABASE_PATH)
 
 
 async def _migrate_retired_suites(db: aiosqlite.Connection) -> None:
@@ -153,6 +171,7 @@ async def get_db() -> aiosqlite.Connection:
     """Get a database connection."""
     db = await aiosqlite.connect(str(app_config.DATABASE_PATH), detect_types=DETECT_TYPES)
     db.row_factory = aiosqlite.Row
+    await db.create_function("cancel_performance", 1, cancel_performance)
     await db.execute("PRAGMA journal_mode=WAL")
     await db.execute("PRAGMA foreign_keys=ON")
     return db

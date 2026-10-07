@@ -170,7 +170,10 @@
             <div class="flex items-center gap-3 px-3 py-2 rounded bg-zinc-900/50">
                 <span class="font-mono text-xs text-zinc-500">{{ r.test_id }}</span>
                 <span class="text-sm text-zinc-300 truncate flex-1">{{ r.category }}</span>
-                <details class="text-xs text-amber-400"><summary class="cursor-pointer">{{ r.detail[:100] }}</summary><p class="py-2">{{ r.detail }}</p>{% for attempt in r.attempt_diagnostics %}<p class="py-1">Attempt {{ attempt.attempt }} · {{ ms(attempt.elapsed_ms) }} · TTFT {{ ms(attempt.ttft_ms) }} · {{ attempt.stream_chunks }} chunks · {{ attempt.content_chars }} content chars · {{ attempt.reasoning_chars }} reasoning chars</p>{% endfor %}{% if not r.attempt_diagnostics %}<p class="py-1 text-zinc-400">Stream progress was not retained by this client version.</p>{% endif %}</details>
+                <details class="text-xs text-amber-400"><summary class="cursor-pointer">{{ r.detail[:100] }}</summary><p class="py-2">{{ r.detail }}</p>
+                    <button type="button" class="btn-ghost" hx-get="/runs/{{ run.id }}/results/{{ r.id }}" hx-target="#error-detail-{{ r.id }}">Full answer and stream diagnostics</button>
+                    <div id="error-detail-{{ r.id }}"></div>
+                </details>
             </div>
             {% endfor %}
         </div>
@@ -216,7 +219,7 @@
             {% for cat in categories %}
             <div class="rounded-md bg-zinc-800/50 overflow-hidden">
                 <button class="w-full flex items-center justify-between p-4 text-left hover:bg-zinc-800 transition-colors"
-                        @click="expandedCategories['{{ cat.category }}'] = !expandedCategories['{{ cat.category }}']">
+                        @click="expandedCategories[{{ cat.category|tojson|forceescape }}] = !expandedCategories[{{ cat.category|tojson|forceescape }}]; if (expandedCategories[{{ cat.category|tojson|forceescape }}]) $dispatch('open-category', { category: {{ cat.category|tojson|forceescape }} })">
                     <div class="flex items-center gap-3">
                         {% if cat.avg_score is not none %}
                         <div class="w-10 h-10 rounded-md flex items-center justify-center text-sm font-bold
@@ -246,7 +249,7 @@
                             {% endif %}
                         </div>
                         <svg class="w-4 h-4 text-zinc-500 transition-transform"
-                             :class="expandedCategories['{{ cat.category }}'] ? 'rotate-180' : ''"
+                             :class="expandedCategories[{{ cat.category|tojson|forceescape }}] ? 'rotate-180' : ''"
                              fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                         </svg>
@@ -254,97 +257,14 @@
                 </button>
 
                 <!-- Expanded questions -->
-                <div x-show="expandedCategories['{{ cat.category }}']" x-collapse>
+                <div x-show="expandedCategories[{{ cat.category|tojson|forceescape }}]" x-collapse>
                     <div class="px-4 pb-4 space-y-2">
-                        {% for r in results_by_category.get(cat.category, []) %}
-                        <div class="rounded-md bg-zinc-900/50 p-3 cursor-pointer hover:bg-zinc-900 transition-colors"
-                             @click="expandedQuestion = expandedQuestion === '{{ r.test_id }}_{{ run.id }}' ? null : '{{ r.test_id }}_{{ run.id }}'">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-2">
-                                    <span class="w-6 h-6 rounded flex items-center justify-center text-xs
-                                        {% if not r.request_ok and r.quality_outcome != 'feature_rejected' %}bg-amber-900/50 text-amber-400
-                                        {% elif r.passed %}bg-emerald-900/50 text-emerald-400
-                                        {% else %}bg-red-900/50 text-red-400{% endif %}"
-                                        {% if r.quality_outcome == 'feature_rejected' %}title="The deployment rejected a request feature; scored as a failure"{% endif %}>
-                                        {% if not r.request_ok and r.quality_outcome != 'feature_rejected' %}!{% elif r.passed %}&#10003;{% else %}&#10007;{% endif %}
-                                    </span>
-                                    <span class="font-mono text-xs text-zinc-500">{{ r.test_id }}</span>
-                                    <span class="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide bg-zinc-800 text-zinc-400">{{ r.difficulty or 'medium' }}</span>
-                                    <span class="text-sm text-zinc-300 truncate max-w-md">{{ r.prompt[:80] }}{% if r.prompt|length > 80 %}...{% endif %}</span>
-                                </div>
-                                <div class="flex items-center gap-3">
-                                    <span class="text-xs text-zinc-500">{{ ms(r.latency_ms) }}</span>
-                                    <span class="text-xs text-zinc-500">{{ r.prompt_tokens + r.completion_tokens }} tok</span>
-                                    <span class="text-xs font-medium {% if r.passed %}text-emerald-400{% else %}text-red-400{% endif %}"
-                                          title="Criterion achievement; full task success is shown separately">
-                                        {{ "%.0f"|format(r.score * 100) }}%
-                                    </span>
-                                </div>
-                            </div>
-
-                            <!-- Expanded detail -->
-                            <div x-show="expandedQuestion === '{{ r.test_id }}_{{ run.id }}'" x-collapse class="mt-3 space-y-3">
-                                {% if r.quality_requests|length > 1 %}
-                                <details class="text-xs text-zinc-300"><summary class="cursor-pointer">Final-answer recovery · {{ r.quality_requests|length }} requests</summary>
-                                {% for call in r.quality_requests %}
-                                <p class="mt-2">Request {{ call.request }} · {{ call.tokens.completion_tokens }} output tokens · {{ ms(call.metrics.latency_ms) }} · {{ call.metrics.finish_reason or 'error' }}</p>
-                                {% if call.metrics.error %}<p>{{ call.metrics.error }}</p>{% endif %}
-                                <pre class="max-h-64 overflow-auto whitespace-pre-wrap">{{ call.response }}</pre>
-                                {% endfor %}</details>
-                                {% endif %}
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div>
-                                        <p class="text-xs font-medium text-zinc-500 mb-1">Prompt</p>
-                                        <div class="bg-zinc-950 rounded p-3 text-xs text-zinc-300 max-h-40 overflow-auto scrollbar-thin whitespace-pre-wrap">{{ r.prompt }}</div>
-                                    </div>
-                                    <div>
-                                        <p class="text-xs font-medium text-zinc-500 mb-1">{{ ('Native tool-call transcript (graded as a whole)' if r.interactive_turns[0].native else 'Interactive transcript (each assistant turn is graded separately)') if r.interactive_turns else 'Response' }}</p>
-                                        <div class="bg-zinc-950 rounded p-3 text-xs text-zinc-300 max-h-64 overflow-auto scrollbar-thin whitespace-pre-wrap">{% if r.interactive_turns %}{% for turn in r.interactive_turns %}<p class="font-semibold">Turn {{ turn.number }} · {{ turn.role }}</p><pre class="whitespace-pre-wrap">{{ turn.content }}</pre>{% endfor %}{% else %}{{ r.response }}{% endif %}</div>
-                                    </div>
-                                </div>
-                                <div>
-                                    <p class="text-xs font-medium text-zinc-500 mb-1">Evaluation</p>
-                                    <p class="text-sm text-zinc-300">{{ r.detail }}</p>
-                                    {% if r.evaluation %}
-                                    <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                                        <span class="text-zinc-500">Criterion achievement:</span>
-                                        <span class="text-zinc-300">{{ '%.1f%%'|format(r.evaluation.criterion_achievement * 100) if r.evaluation.criterion_achievement is not none else 'n/a' }}</span>
-                                        <span class="text-zinc-500">Contract:</span>
-                                        <span class="text-zinc-300">{{ '%.1f%%'|format(r.evaluation.contract_score * 100) if r.evaluation.contract_score is not none else 'n/a' }}</span>
-                                        <span class="text-zinc-500">{{ r.evaluation.criterion_count }} criteria</span>
-                                    </div>
-                                    <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1 text-xs">
-                                        {% for criterion in r.evaluation.criteria %}
-                                        <div class="rounded px-2 py-1 {% if criterion.status == 'pass' %}bg-emerald-950/40 text-emerald-300{% elif criterion.status in ['fail', 'error'] %}bg-red-950/40 text-red-300{% else %}bg-zinc-800 text-zinc-400{% endif %}">
-                                            <span class="font-mono">{{ criterion.id }}</span> · {{ criterion.status|replace('_', ' ') }}{% if criterion.reason_code %} · {{ criterion.reason_code|replace('_', ' ') }}{% endif %}
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
-                                </div>
-                                <div class="flex items-center gap-4 text-xs text-zinc-500">
-                                    <div class="flex items-center gap-1">
-                                        <span>Evaluator:</span>
-                                        <span class="font-mono text-zinc-400">{{ r.evaluator }}</span>
-                                    </div>
-                                    <div class="flex items-center gap-1">
-                                        <span>Tokens:</span>
-                                        <span class="text-zinc-400">{{ r.prompt_tokens }} in + {{ r.completion_tokens }} out = {{ r.prompt_tokens + r.completion_tokens }} total</span>
-                                    </div>
-                                    <div class="flex items-center gap-1">
-                                        <span>Latency:</span>
-                                        <span class="text-zinc-400">
-                                            {{ ms(r.latency_ms) }}{% if r.ttft_ms %} (TTFT {{ ms(r.ttft_ms) }}){% endif %}
-                                        </span>
-                                    </div>
-                                    <div class="flex items-center gap-1">
-                                        <span>Pass bar:</span>
-                                        <span class="text-zinc-400">{{ "%.0f%%"|format((r.pass_threshold or 1.0) * 100) }}</span>
-                                    </div>
-                                </div>
-                            </div>
+                        <div hx-get="/runs/{{ run.id }}/answers?category={{ cat.category|urlencode }}"
+                             hx-trigger="load-category" hx-swap="innerHTML"
+                             @open-category.window="if ($event.detail.category === {{ cat.category|tojson|forceescape }} && !$el.dataset.loaded) htmx.trigger($el, 'load-category')"
+                             hx-on::after-request="if(event.detail.successful) this.dataset.loaded = 'true'">
+                            <p class="text-sm text-zinc-500">Loading questions...</p>
                         </div>
-                        {% endfor %}
                     </div>
                 </div>
             </div>

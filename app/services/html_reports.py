@@ -11,6 +11,7 @@ import json
 import math
 
 from markupsafe import Markup, escape
+from starlette.concurrency import run_in_threadpool
 
 from app.database import fetch_all, fetch_one
 from app.templates_config import templates
@@ -64,9 +65,9 @@ def native_turns(transcript):
     return turns
 
 
-def interactive_turns(result):
+def interactive_turns(result, metadata=None):
     """Display stored actions separately from the enclosing transcript JSON."""
-    meta = object_json(result.get("quality_metadata_json"))
+    meta = metadata if metadata is not None else object_json(result.get("quality_metadata_json"))
     protocol = meta.get("metadata", {}).get("protocol")
     if protocol == "native-tools-v1":
         transcript = meta.get("diagnostics", {}).get("transcript", [])
@@ -139,11 +140,36 @@ def points(perf, key):
     return [p for p in raw if isinstance(p, dict)] if isinstance(raw, list) else []
 
 
-async def load_run(run_id):
+def _prepare_result_rows(results, scores, include_answers):
+    """Decode full audit rows outside the server event loop for downloads."""
+    groups = defaultdict(list)
+    for result in results:
+        result["scored"] = bool(
+            result["quality_scored"]
+            if result.get("quality_scored") is not None
+            else result.get("request_ok", 1)
+        )
+        metadata = object_json(result.get("quality_metadata_json"))
+        result["interactive_turns"] = interactive_turns(result, metadata)
+        result["evaluation"] = metadata.get("evaluation")
+        result["score"] = achievement_score({**result, "evaluation": result["evaluation"]})
+        if not include_answers:
+            result["score"] = scores.get(result["test_id"], result["score"])
+        result["attempt_diagnostics"] = metadata.get("metrics", {}).get("attempt_diagnostics", [])
+        result["quality_requests"] = metadata.get("diagnostics", {}).get("quality_requests", [])
+        result["outcome"] = metadata.get("outcome") or (
+            "excluded" if not result["scored"] else "pass" if result["passed"] else "task_failure"
+        )
+        groups[result["category"]].append(result)
+    return groups
+
+
+async def load_run(run_id, *, include_answers=True):
     if not 0 < run_id <= 2**63 - 1:
         return None
+    from app.services.run_reads import run_columns, result_columns
     run = await fetch_one(
-        """SELECT tr.*, m.name AS model_name, m.model_id AS model_identifier
+        f"""SELECT {run_columns(include_answers)}, m.name AS model_name, m.model_id AS model_identifier
            FROM test_runs tr JOIN models m ON tr.model_id = m.id WHERE tr.id = ?""",
         (run_id,),
     )
@@ -152,35 +178,24 @@ async def load_run(run_id):
     # The templates historically call the provider's identifier model_id.
     run["model_id"] = run.pop("model_identifier")
     run["label"] = f"#{run['id']} · {run['model_name']}"
-    run["quality"] = object_json(run.get("quality_json"))
+    if include_answers:
+        run["quality"] = await run_in_threadpool(object_json, run.get("quality_json"))
+    else:
+        from app.services.quality_views import load_quality_view
+        run["quality"] = await load_quality_view(run_id, run.get("quality_summary_json")) or {}
     if run["quality"].get("schema_version") != 3:
         run["quality"] = {}
-    else:
-        run["quality"] = rescore_report(run["quality"])
+    elif include_answers:
+        run["quality"] = await run_in_threadpool(rescore_report, run["quality"])
     run["perf"] = object_json(run.get("perf_json"))
     from app.services.sweep_reports import hydrate_sweep
     run["perf"] = await hydrate_sweep(run_id, run["perf"])
     run["results"] = await fetch_all(
-        "SELECT * FROM test_results WHERE run_id = ? ORDER BY category, question_index, id",
+        f"SELECT {result_columns(include_answers)} FROM test_results WHERE run_id = ? ORDER BY category, question_index, id",
         (run_id,),
     )
-    groups = defaultdict(list)
-    for result in run["results"]:
-        result["interactive_turns"] = interactive_turns(result)
-        result["scored"] = bool(
-            result["quality_scored"]
-            if result.get("quality_scored") is not None
-            else result.get("request_ok", 1)
-        )
-        metadata = object_json(result.get("quality_metadata_json"))
-        result["evaluation"] = metadata.get("evaluation")
-        result["score"] = achievement_score({**result, "evaluation": result["evaluation"]})
-        result["attempt_diagnostics"] = metadata.get("metrics", {}).get("attempt_diagnostics", [])
-        result["quality_requests"] = metadata.get("diagnostics", {}).get("quality_requests", [])
-        result["outcome"] = metadata.get("outcome") or (
-            "excluded" if not result["scored"] else "pass" if result["passed"] else "task_failure"
-        )
-        groups[result["category"]].append(result)
+    scores = {r["id"]: r["score"] for r in run["quality"].get("results", [])}
+    groups = await run_in_threadpool(_prepare_result_rows, run["results"], scores, include_answers)
     run["categories"] = {}
     for name, items in groups.items():
         scored = [r for r in items if r["scored"]]
@@ -327,22 +342,40 @@ def line_chart(series, title, x_label, unit, *, percentile=False, x_range=None, 
     parts.append(svg_text(left, 14, axis_unit))
     for s in series:
         color = s["color"]
-        previous = None
+        segments, segment = [], []
         for x, y in sorted(s["points"], key=lambda p: number(p[0]) or 0):
             if number(x) is None or number(y) is None:
-                previous = None
+                if segment:
+                    segments.append(segment)
+                    segment = []
                 continue
-            px, py = cx(x), cy(y)
-            if previous:
-                parts.append(
-                    f'<path d="M{previous[0]:g} {previous[1]:g}L{px:g} {py:g}" fill="none" stroke="{color}" stroke-width="2.5"/>'
-                )
-            radius = 2 if len(s["points"]) > 40 else 4
+            segment.append((x, y))
+        if segment:
+            segments.append(segment)
+        # Keep every vertex and every missing-data break in one SVG path.
+        # Thousands of separate paths, circles and titles made hidden charts
+        # expensive for the browser's DOM, Alpine and runtime CSS compiler.
+        commands, markers = [], []
+        for segment in segments:
+            if len(segment) > 1:
+                commands.extend(f"{'M' if i == 0 else 'L'}{cx(x):g} {cy(y):g}"
+                                for i, (x, y) in enumerate(segment))
+            if len(s["points"]) <= 64:
+                markers.extend(segment)
+            else:
+                # Dense charts retain endpoint and extrema tooltips; detailed
+                # measurements remain in the report tables and downloads.
+                indexes = sorted({0, len(segment) - 1,
+                                  min(range(len(segment)), key=lambda i: segment[i][1]),
+                                  max(range(len(segment)), key=lambda i: segment[i][1])})
+                markers.extend(segment[i] for i in indexes)
+        if commands:
+            parts.append(f'<path d="{"".join(commands)}" fill="none" stroke="{color}" stroke-width="2.5"/>')
+        for x, y in markers:
             display = duration(y) if unit == "ms" else fmt(y, unit)
             parts.append(
-                f'<circle cx="{px:g}" cy="{py:g}" r="{radius}" fill="{color}"><title>{escape(s["label"])}: {x:g}, {escape(display)}</title></circle>'
+                f'<circle cx="{cx(x):g}" cy="{cy(y):g}" r="4" fill="{color}"><title>{escape(s["label"])}: {x:g}, {escape(display)}</title></circle>'
             )
-            previous = (px, py)
     parts.append("</g></svg>")
     return Markup("".join(parts))
 

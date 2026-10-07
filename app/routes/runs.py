@@ -6,11 +6,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.auth import get_current_user, require_admin
 from app.benchmarking.suites import HISTORICAL_SUITE
 from app.database import execute_transaction, fetch_all, fetch_one
 from app.templates_config import templates
+from app.services.run_reads import run_columns, result_columns
+from app.services.quality_views import load_quality_view
 from app.services.capacity import CapacityAssumptions, estimate_capacity
 
 logger = logging.getLogger(__name__)
@@ -28,7 +31,7 @@ async def run_report_download(request: Request, run_id: int):
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return HTMLResponse(
-        render_report([run]),
+        await run_in_threadpool(render_report, [run]),
         headers={
             "Content-Disposition": f'attachment; filename="run-{run_id}.html"',
             "Cache-Control": "no-store",
@@ -107,7 +110,7 @@ async def capacity_results(request: Request, run_id: int, assumptions: Annotated
 
 
 @router.get("/runs")
-async def runs_list(request: Request):
+async def runs_list(request: Request, page: int = Query(1, ge=1, le=1000000)):
     user = await get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=302)
@@ -133,7 +136,8 @@ async def runs_list(request: Request):
                   ) as evaluator_error_count
            FROM test_runs tr
            JOIN models m ON tr.model_id = m.id
-           ORDER BY tr.id DESC"""
+           ORDER BY tr.id DESC LIMIT 50 OFFSET ?""",
+        ((page - 1) * 50,),
     )
     from app.services.run_modes import PERFORMANCE_LABELS, parts
 
@@ -148,7 +152,8 @@ async def runs_list(request: Request):
     return templates.TemplateResponse(
         request,
         "runs_list.html",
-        {"runs": runs, "performance_labels": PERFORMANCE_LABELS},
+        {"runs": runs, "performance_labels": PERFORMANCE_LABELS, "page": page,
+         "total_runs": (await fetch_one("SELECT COUNT(*) AS n FROM test_runs"))["n"]},
     )
 
 
@@ -192,9 +197,11 @@ async def run_detail(request: Request, run_id: int):
     user = await get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=302)
+    if not 0 < run_id <= 2**63 - 1:
+        raise HTTPException(status_code=404, detail="Run not found")
 
     run = await fetch_one(
-        """SELECT tr.*, m.name as model_name, m.model_id AS model_identifier
+        f"""SELECT {run_columns()}, m.name as model_name, m.model_id AS model_identifier
            FROM test_runs tr
            JOIN models m ON tr.model_id = m.id
            WHERE tr.id = ?""",
@@ -218,38 +225,17 @@ async def run_detail(request: Request, run_id: int):
     )
 
     results = await fetch_all(
-        """SELECT * FROM test_results WHERE run_id = ?
-           ORDER BY category, question_index""",
+        f"""SELECT {result_columns()} FROM test_results WHERE run_id = ?
+           ORDER BY category, question_index, id""",
         (run_id,),
     )
 
-    results_by_category = {}
-    from app.services.html_reports import interactive_turns
-
+    quality_data = await load_quality_view(run_id, run.get("quality_summary_json"))
+    scores = {r["id"]: r["score"] for r in (quality_data or {}).get("results", [])}
     for r in results:
-        r["interactive_turns"] = interactive_turns(r)
-        try:
-            metadata = json.loads(r.get("quality_metadata_json") or "{}")
-        except (TypeError, ValueError):
-            metadata = {}
-        r["evaluation"] = metadata.get("evaluation")
-        from app.benchmarking.quality_report import achievement_score
-        r["score"] = achievement_score({**r, "evaluation": r["evaluation"]})
-        r["attempt_diagnostics"] = metadata.get("metrics", {}).get("attempt_diagnostics", [])
-        r["quality_requests"] = metadata.get("diagnostics", {}).get("quality_requests", [])
-        cat = r["category"]
-        if cat not in results_by_category:
-            results_by_category[cat] = []
-        results_by_category[cat].append(r)
-
-    # Evaluator/suite bugs and transport failures are different problems from a
-    # wrong answer, and are surfaced separately so they are not read as quality.
-    evaluator_errors = await fetch_all(
-        """SELECT * FROM test_results
-           WHERE run_id = ? AND (detail LIKE 'Evaluator error:%' OR detail LIKE 'Unknown evaluator:%')
-           ORDER BY category, question_index""",
-        (run_id,),
-    )
+        r["score"] = scores.get(r["test_id"], r["score"])
+    evaluator_errors = [r for r in results if (r.get("detail") or "").startswith(
+        ("Evaluator error:", "Unknown evaluator:"))]
     # A rejected request feature (e.g. tool_choice without a tool parser) is a
     # scored conformance failure, not an infrastructure error.
     transport_errors = [r for r in results
@@ -258,22 +244,14 @@ async def run_detail(request: Request, run_id: int):
     perf_data = _parse_perf(run.get("perf_json"))
     from app.services.sweep_reports import hydrate_sweep
     perf_data = await hydrate_sweep(run_id, perf_data)
-    try:
-        quality_data = json.loads(run.get("quality_json") or "null")
-    except (ValueError, TypeError):
-        quality_data = None
     if quality_data and quality_data.get("schema_version") == 3:
-        from app.benchmarking.quality_report import rescore_report
-        quality_data = rescore_report(quality_data)
         run["avg_score"] = quality_data["summary"]["category_balanced"] or 0.0
         for category in categories:
             summary = quality_data["summary"]["categories"].get(category["category"])
             if summary:
                 category["avg_score"] = summary["score"]
     from app.services.html_reports import quality_timing_view, staged_view
-    from app.services.language_views import language_report
-
-    languages = language_report(quality_data, results)
+    languages = (quality_data or {}).get("answer_languages")
     from app.services.run_modes import describe
 
     measures = describe(run.get("run_options_json"))
@@ -297,7 +275,6 @@ async def run_detail(request: Request, run_id: int):
             "run": run,
             "quality": quality_data,
             "categories": categories,
-            "results_by_category": results_by_category,
             "evaluator_errors": evaluator_errors,
             "transport_errors": transport_errors,
             "perf": perf_data,
@@ -310,6 +287,45 @@ async def run_detail(request: Request, run_id: int):
             "measures": measures,
         },
     )
+
+
+@router.get("/runs/{run_id}/results/{result_id}")
+async def result_detail(request: Request, run_id: int, result_id: int):
+    if not await get_current_user(request):
+        return RedirectResponse(url="/login", status_code=302)
+    if not (0 < run_id <= 2**63 - 1 and 0 < result_id <= 2**63 - 1):
+        raise HTTPException(status_code=404, detail="Answer not found")
+    result = await fetch_one("SELECT * FROM test_results WHERE run_id=? AND id=?", (run_id, result_id))
+    if result is None:
+        raise HTTPException(status_code=404, detail="Answer not found")
+    from app.services.html_reports import interactive_turns, object_json
+    metadata = object_json(result.get("quality_metadata_json"))
+    result["interactive_turns"] = interactive_turns(result, metadata)
+    result["evaluation"] = metadata.get("evaluation")
+    result["quality_requests"] = metadata.get("diagnostics", {}).get("quality_requests", [])
+    result["attempt_diagnostics"] = metadata.get("metrics", {}).get("attempt_diagnostics", [])
+    return templates.TemplateResponse(request, "result_detail.html", {"r": result},
+                                      headers={"Cache-Control": "no-store"})
+
+
+@router.get("/runs/{run_id}/answers")
+async def answer_rows(request: Request, run_id: int, category: str = Query(max_length=200)):
+    if not await get_current_user(request):
+        return RedirectResponse(url="/login", status_code=302)
+    if not 0 < run_id <= 2**63 - 1:
+        raise HTTPException(status_code=404, detail="Run not found")
+    results = await fetch_all(
+        f"SELECT {result_columns()} FROM test_results WHERE run_id=? AND category=? ORDER BY question_index,id",
+        (run_id, category))
+    row = await fetch_one("SELECT quality_summary_json FROM test_runs WHERE id=?", (run_id,))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    view = await load_quality_view(run_id, row.get("quality_summary_json"))
+    scores = {r["id"]: r["score"] for r in (view or {}).get("results", [])}
+    for result in results:
+        result["score"] = scores.get(result["test_id"], result["score"])
+    return templates.TemplateResponse(request, "answer_rows.html", {"run": {"id": run_id}, "results": results},
+                                      headers={"Cache-Control": "no-store"})
 
 
 @router.post("/runs/{run_id}/stop")
@@ -340,17 +356,7 @@ async def stop_run(request: Request, run_id: int):
                     (run_id,),
                 ),
                 (
-                    """UPDATE test_runs SET perf_json = CASE WHEN json_valid(perf_json)
-                        THEN CASE WHEN json_extract(perf_json,'$.schema_version')=4
-                                  AND json_extract(perf_json,'$.kind')='context_sweep'
-                             THEN json_set(perf_json,'$.cancelled',json('true'),'$.finished',json('false'))
-                             WHEN json_extract(perf_json,'$.schema_version')=5
-                                  AND json_extract(perf_json,'$.kind')='open_loop'
-                             THEN json_set(perf_json,'$.cancelled',json('true'))
-                             WHEN json_extract(perf_json,'$.schema_version')=6
-                                  AND json_extract(perf_json,'$.kind')='staged'
-                             THEN json_set(perf_json,'$.cancelled',json('true'),'$.finished',json('false'))
-                             ELSE perf_json END ELSE perf_json END
+                    """UPDATE test_runs SET perf_json = cancel_performance(perf_json)
                         WHERE id=? AND status='failed' AND error_message='Stopped by administrator.'""",
                     (run_id,),
                 ),

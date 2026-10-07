@@ -1,3 +1,10 @@
+{% macro ms(value) -%}
+{%- if value is none -%}n/a
+{%- elif value >= 1000 -%}{{ "%.2f s"|format(value / 1000) }}
+{%- else -%}{{ "%.0f ms"|format(value) }}
+{%- endif -%}
+{%- endmacro %}
+
 {% macro metrics(items) %}
 <div class="perf-metrics">
     {% for metric in items %}

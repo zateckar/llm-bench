@@ -1,0 +1,66 @@
+{% from "measurement_macros.html" import ms %}
+<div class="space-y-3">
+{% if r.attempt_diagnostics %}
+<details class="text-xs text-zinc-300"><summary class="cursor-pointer">Stream diagnostics</summary>
+{% for attempt in r.attempt_diagnostics %}<p>Attempt {{ attempt.attempt }} · {{ ms(attempt.elapsed_ms) }} · TTFT {{ ms(attempt.ttft_ms) }} · {{ attempt.stream_chunks }} chunks · {{ attempt.content_chars }} content chars · {{ attempt.reasoning_chars }} reasoning chars</p>{% endfor %}
+</details>
+{% elif not r.request_ok %}<p class="text-xs text-zinc-400">Stream progress was not retained by this client version.</p>{% endif %}
+                                {% if r.quality_requests|length > 1 %}
+                                <details class="text-xs text-zinc-300"><summary class="cursor-pointer">Final-answer recovery · {{ r.quality_requests|length }} requests</summary>
+                                {% for call in r.quality_requests %}
+                                <p class="mt-2">Request {{ call.request }} · {{ call.tokens.completion_tokens }} output tokens · {{ ms(call.metrics.latency_ms) }} · {{ call.metrics.finish_reason or 'error' }}</p>
+                                {% if call.metrics.error %}<p>{{ call.metrics.error }}</p>{% endif %}
+                                <pre class="max-h-64 overflow-auto whitespace-pre-wrap">{{ call.response }}</pre>
+                                {% endfor %}</details>
+                                {% endif %}
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <p class="text-xs font-medium text-zinc-500 mb-1">Prompt</p>
+                                        <div class="bg-zinc-950 rounded p-3 text-xs text-zinc-300 max-h-40 overflow-auto scrollbar-thin whitespace-pre-wrap">{{ r.prompt }}</div>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs font-medium text-zinc-500 mb-1">{{ ('Native tool-call transcript (graded as a whole)' if r.interactive_turns[0].native else 'Interactive transcript (each assistant turn is graded separately)') if r.interactive_turns else 'Response' }}</p>
+                                        <div class="bg-zinc-950 rounded p-3 text-xs text-zinc-300 max-h-64 overflow-auto scrollbar-thin whitespace-pre-wrap">{% if r.interactive_turns %}{% for turn in r.interactive_turns %}<p class="font-semibold">Turn {{ turn.number }} · {{ turn.role }}</p><pre class="whitespace-pre-wrap">{{ turn.content }}</pre>{% endfor %}{% else %}{{ r.response }}{% endif %}</div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-medium text-zinc-500 mb-1">Evaluation</p>
+                                    <p class="text-sm text-zinc-300">{{ r.detail }}</p>
+                                    {% if r.evaluation %}
+                                    <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                                        <span class="text-zinc-500">Criterion achievement:</span>
+                                        <span class="text-zinc-300">{{ '%.1f%%'|format(r.evaluation.criterion_achievement * 100) if r.evaluation.criterion_achievement is not none else 'n/a' }}</span>
+                                        <span class="text-zinc-500">Contract:</span>
+                                        <span class="text-zinc-300">{{ '%.1f%%'|format(r.evaluation.contract_score * 100) if r.evaluation.contract_score is not none else 'n/a' }}</span>
+                                        <span class="text-zinc-500">{{ r.evaluation.criterion_count }} criteria</span>
+                                    </div>
+                                    <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1 text-xs">
+                                        {% for criterion in r.evaluation.criteria %}
+                                        <div class="rounded px-2 py-1 {% if criterion.status == 'pass' %}bg-emerald-950/40 text-emerald-300{% elif criterion.status in ['fail', 'error'] %}bg-red-950/40 text-red-300{% else %}bg-zinc-800 text-zinc-400{% endif %}">
+                                            <span class="font-mono">{{ criterion.id }}</span> · {{ criterion.status|replace('_', ' ') }}{% if criterion.reason_code %} · {{ criterion.reason_code|replace('_', ' ') }}{% endif %}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="flex items-center gap-4 text-xs text-zinc-500">
+                                    <div class="flex items-center gap-1">
+                                        <span>Evaluator:</span>
+                                        <span class="font-mono text-zinc-400">{{ r.evaluator }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <span>Tokens:</span>
+                                        <span class="text-zinc-400">{{ r.prompt_tokens }} in + {{ r.completion_tokens }} out = {{ r.prompt_tokens + r.completion_tokens }} total</span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <span>Latency:</span>
+                                        <span class="text-zinc-400">
+                                            {{ ms(r.latency_ms) }}{% if r.ttft_ms %} (TTFT {{ ms(r.ttft_ms) }}){% endif %}
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <span>Pass bar:</span>
+                                        <span class="text-zinc-400">{{ "%.0f%%"|format((r.pass_threshold or 1.0) * 100) }}</span>
+                                    </div>
+                                </div>
+</div>

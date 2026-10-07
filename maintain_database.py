@@ -16,10 +16,12 @@ import tempfile
 
 from app.storage import DETECT_TYPES, pack_text, unpack_text
 from app.benchmarking.quality_report import achievement_score, rescore_report
+from app.services.quality_views import refresh_projections
+from app.database import READ_INDEXES
 
 PAYLOADS = {
     "test_results": ("prompt", "response", "quality_metadata_json"),
-    "test_runs": ("quality_json", "perf_json"),
+    "test_runs": ("quality_json", "perf_json", "quality_summary_json"),
     "performance_cells": ("result_json",),
 }
 
@@ -64,10 +66,21 @@ def maintain_database(path, backup_dir=None):
             columns = {row[1] for row in db.execute("PRAGMA table_info(test_results)")}
             if "quality_outcome" not in columns:
                 db.execute("ALTER TABLE test_results ADD COLUMN quality_outcome TEXT")
+            if "prompt_preview" not in columns:
+                db.execute("ALTER TABLE test_results ADD COLUMN prompt_preview TEXT")
+            run_columns = {row[1] for row in db.execute("PRAGMA table_info(test_runs)")}
+            if "quality_summary_json" not in run_columns:
+                db.execute("ALTER TABLE test_runs ADD COLUMN quality_summary_json TEXT")
+            # execute statements individually: executescript would commit and
+            # release the writer reservation before the idle-only work finishes.
+            for statement in READ_INDEXES.split(";"):
+                if statement.strip():
+                    db.execute(statement)
+            db.execute("CREATE INDEX IF NOT EXISTS idx_test_results_order ON test_results(run_id,category,question_index,id)")
             db.execute("UPDATE test_results SET quality_outcome='' WHERE quality_metadata_json IS NULL AND quality_outcome IS NULL")
             for row_id, raw in db.execute(
                 "SELECT id,quality_metadata_json FROM test_results WHERE quality_metadata_json IS NOT NULL"
-            ).fetchall():
+            ):
                 record = json.loads(raw)
                 record.setdefault("evaluator_score", record.get("score", 0))
                 record["score"] = achievement_score(record)
@@ -76,7 +89,7 @@ def maintain_database(path, backup_dir=None):
                            (record["score"], payload, record.get("outcome", ""), row_id))
             for run_id, raw in db.execute(
                 "SELECT id,quality_json FROM test_runs WHERE quality_json IS NOT NULL"
-            ).fetchall():
+            ):
                 report = json.loads(raw)
                 if report.get("schema_version") != 3:
                     continue
@@ -88,18 +101,21 @@ def maintain_database(path, backup_dir=None):
                 rescored.append({"run_id": run_id, "achievement": summary["category_balanced"],
                                  "full_pass": summary["category_balanced_full_pass"],
                                  "scored": summary["scored"], "outcomes": summary["outcomes"]})
+                # A rescore must also replace the matching read projection.
+                db.execute("UPDATE test_runs SET quality_summary_json=NULL WHERE id=?", (run_id,))
+            refresh_projections(db)
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             for table, columns in PAYLOADS.items():
                 if table not in tables:
                     continue
                 for column in columns:
-                    for row_id, value in db.execute(
-                        f"SELECT rowid,{column} FROM {table} WHERE {column} IS NOT NULL AND typeof({column})='text'"
-                    ).fetchall():
+                    for row_id, value, stored_bytes in db.execute(
+                        f"SELECT rowid,{column},length(CAST({column} AS BLOB)) FROM {table} WHERE {column} IS NOT NULL"
+                    ):
                         packed = pack_text(value)
                         if unpack_text(packed) != value:
                             raise RuntimeError("Compression roundtrip verification failed")
-                        if isinstance(packed, bytes):
+                        if isinstance(packed, bytes) and len(packed) < stored_bytes:
                             db.execute(f"UPDATE {table} SET {column}=? WHERE rowid=?", (packed, row_id))
                             changed += 1
             if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":

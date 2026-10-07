@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, PlainTextResponse
+from starlette.middleware.gzip import GZipMiddleware
 from pathlib import Path
 
 from app.config import HOST, PORT
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="LLM Bench", docs_url=None, redoc_url=None, lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=4)
 
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
@@ -74,7 +76,7 @@ async def add_security_headers(request: Request, call_next):
 
 @app.middleware("http")
 async def add_user_to_context(request: Request, call_next):
-    request.state.user = await get_current_user(request)
+    request.state.user = None if request.url.path.startswith("/static/") else await get_current_user(request)
     return await call_next(request)
 
 

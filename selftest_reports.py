@@ -296,10 +296,15 @@ class ReportTests(unittest.TestCase):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
             self.assertIn("achievement", response.text)
-            self.assertIn("Interactive transcript", response.text)
-            self.assertIn("Turn 2", response.text)
-            self.assertIn("&lt;script&gt;bad()&lt;/script&gt;", response.text)
-            self.assertNotIn("<script>bad()</script>", response.text)
+            rendered = response.text
+            if url == "/runs/1":
+                with closing(sqlite3.connect(self.path)) as db:
+                    ids = [r[0] for r in db.execute("SELECT id FROM test_results WHERE run_id=1")]
+                rendered += "".join(self.client.get(f"/runs/1/results/{rid}").text for rid in ids)
+            self.assertIn("Interactive transcript", rendered)
+            self.assertIn("Turn 2", rendered)
+            self.assertIn("&lt;script&gt;bad()&lt;/script&gt;", rendered)
+            self.assertNotIn("<script>bad()</script>", rendered)
 
         for url in ("/compare?runs=1&runs=2", "/compare/report.html?runs=1&runs=2"):
             response = self.client.get(url)
@@ -351,11 +356,16 @@ class ReportTests(unittest.TestCase):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
             self.assertIn("Tool-calling wire diagnostics", response.text)
-            self.assertIn("Native tool-call transcript", response.text)
-            self.assertIn("tool call create_calendar_event", response.text)
-            self.assertIn("request rejected (HTTP 400)", response.text)
-            self.assertIn("&lt;script&gt;bad()&lt;/script&gt;", response.text)
-            self.assertNotIn("<script>bad()</script>", response.text)
+            rendered = response.text
+            if url == "/runs/1":
+                with closing(sqlite3.connect(self.path)) as db:
+                    ids = [r[0] for r in db.execute("SELECT id FROM test_results WHERE run_id=1")]
+                rendered += "".join(self.client.get(f"/runs/1/results/{rid}").text for rid in ids)
+            self.assertIn("Native tool-call transcript", rendered)
+            self.assertIn("tool call create_calendar_event", rendered)
+            self.assertIn("request rejected (HTTP 400)", rendered)
+            self.assertIn("&lt;script&gt;bad()&lt;/script&gt;", rendered)
+            self.assertNotIn("<script>bad()</script>", rendered)
             self.assertNotIn("Infrastructure Errors", response.text)
 
     def test_repeat_group_page_badges_and_group_comparison(self):

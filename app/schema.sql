@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS test_runs (
     perf_json TEXT,                     -- serialised PerfReport, when the perf suite ran
     quality_config_json TEXT,
     quality_json TEXT,
+    quality_summary_json TEXT,
     run_options_json TEXT,                -- full start parameters, so the queue can re-dispatch a pending run
     decoding_config_json TEXT,            -- model settings captured when the run is submitted
     metrics_config_json TEXT,             -- B300 telemetry selectors, without credentials
@@ -262,6 +263,7 @@ CREATE TABLE IF NOT EXISTS test_results (
     test_id TEXT NOT NULL,
     category TEXT NOT NULL,
     prompt TEXT,
+    prompt_preview TEXT,
     response TEXT,
     score REAL DEFAULT 0.0,
     detail TEXT,
@@ -288,6 +290,7 @@ CREATE TABLE IF NOT EXISTS test_results (
 
 CREATE INDEX IF NOT EXISTS idx_test_results_run ON test_results(run_id);
 CREATE INDEX IF NOT EXISTS idx_test_results_run_category ON test_results(run_id, category);
+CREATE INDEX IF NOT EXISTS idx_test_results_order ON test_results(run_id, category, question_index, id);
 
 -- Each sweep cell is durable without rewriting a growing report after every request.
 CREATE TABLE IF NOT EXISTS performance_cells (

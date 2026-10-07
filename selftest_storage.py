@@ -69,8 +69,11 @@ class StorageTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def test_mixed_payloads_and_iso_timestamps_through_application_reads(self):
-        for value in (None, "", "short", "LLMBZ1\x00literal", "Příliš žluťoučký 🐈\n" * 1000):
+        for value in (None, "", "short", "LLMBZ1\x00literal", "LLMBX1\x00literal", "Příliš žluťoučký 🐈\n" * 1000):
             self.assertEqual(unpack_text(pack_text(value)), value)
+            with closing(sqlite3.connect(self.path, detect_types=DETECT_TYPES)) as db, db:
+                db.execute("UPDATE test_runs SET quality_json=? WHERE id=1", (pack_text(value),))
+                self.assertEqual(db.execute("SELECT quality_json FROM test_runs WHERE id=1").fetchone()[0], value)
         result = partial()
         _store_result(1, 1, result)
         row = asyncio.run(fetch_one("SELECT * FROM test_results WHERE run_id=1"))

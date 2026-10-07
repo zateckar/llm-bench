@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.auth import get_current_user
 from app.database import fetch_all
@@ -44,7 +45,7 @@ async def comparison_download(request: Request):
             raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
         selected.append(run)
     return HTMLResponse(
-        render_report(selected),
+        await run_in_threadpool(render_report, selected),
         headers={
             "Content-Disposition": 'attachment; filename="comparison-'
             + "-".join(map(str, ids))
@@ -59,16 +60,17 @@ async def compare_page(request: Request):
     if not await get_current_user(request):
         return RedirectResponse(url="/login", status_code=302)
     completed_runs = await fetch_all(
-        """SELECT tr.*, m.name as model_name, m.model_id
+        """SELECT tr.id,tr.created_at,tr.total_questions,tr.test_suite_hash,
+                  m.name as model_name, m.model_id
            FROM test_runs tr JOIN models m ON tr.model_id = m.id
            WHERE tr.status = 'completed' ORDER BY tr.id DESC"""
     )
     selected_runs = []
     for run_id in selected_run_ids(request):
-        run = await load_run(run_id)
+        run = await load_run(run_id, include_answers=False)
         if run:
             selected_runs.append(run)
-    context = comparison_context(selected_runs)
+    context = await run_in_threadpool(comparison_context, selected_runs)
     return templates.TemplateResponse(
         request,
         "compare.html",

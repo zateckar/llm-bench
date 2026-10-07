@@ -288,9 +288,11 @@ Each gate passes, fails, is missing or is stale. A model *meets* a profile only 
 
 ## Database storage
 
-Large prompts, answers and report payloads are stored as versioned, lossless zlib blobs. Application reads and JSON/HTML downloads decode them transparently; indexed scores and queryable outcomes remain plain columns. Standalone SQLite readers must use `app.storage.DETECT_TYPES` with sqlite3 or call `unpack_text` on payload columns.
+Large prompts, answers and report payloads use versioned, lossless compression: zlib for small records and LZMA when its larger dictionary saves more space on large records. Existing zlib and plain-text rows remain readable. Application reads and JSON/HTML downloads decode them transparently; indexed scores and queryable outcomes remain plain columns. Standalone SQLite readers must use `app.storage.DETECT_TYPES` with sqlite3 or call `unpack_text` on payload columns.
 
-Run `python maintain_database.py` to inspect space usage, or add `--apply --report reports/database-maintenance.json` to compress historical payloads, reaggregate saved criteria under `criterion-achievement-v1`, and reclaim free pages. Maintenance requires an idle queue and first creates a consistent compressed SQLite backup under `data/backups`. Prompts, answers, evaluation criteria, original evaluator scores, full-pass verdicts and timing data are preserved. Restore a backup by decompressing its `.db.gz` to a database file while the application is stopped.
+Interactive pages use persisted quality projections and short prompt previews, populated when a run finishes or once during migration. Category question lists and complete answer details load on demand. Run history has 50 rows per page. Full JSON and portable HTML downloads retain every audit record; projections do not replace the original reports.
+
+Run `python maintain_database.py` to inspect space usage, or add `--apply --report reports/database-maintenance.json` to compress historical payloads (including older compressed records), reaggregate saved criteria under `criterion-achievement-v1`, refresh read projections and reclaim free pages. Maintenance processes one report at a time and requires an idle queue; it first creates a consistent compressed SQLite backup under `data/backups`. Prompts, answers, evaluation criteria, original evaluator scores, full-pass verdicts and timing data are preserved. Restore a backup by decompressing its `.db.gz` to a database file while the application is stopped. Keep the application code supporting the stored compression versions with a restored database.
 
 ## Configuration and deployment
 
@@ -318,6 +320,7 @@ uv run python selftest_reconstruction.py
 uv run python -m unittest selftest_discrimination selftest_measurement_audit selftest_standard_selection
 uv run python -m unittest selftest_repeats selftest_tool_client selftest_tool_conformance selftest_usecase_suites selftest_load_test selftest_ab_studies selftest_monitoring selftest_scorecard selftest_safety_language selftest_run_modes selftest_consolidation
 uv run python -m unittest selftest_sessions selftest_constraints selftest_vllm_telemetry
+uv run python -m unittest selftest_storage selftest_database_performance
 uv run --frozen ruff check .
 ```
 

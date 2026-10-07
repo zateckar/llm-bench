@@ -111,11 +111,16 @@ def _slim_report(db, run_id):
     """The parts of a rescored quality report that summaries and comparisons use."""
     from app.benchmarking.quality_report import achievement_score, rescore_report
 
-    row = _one(db, "SELECT quality_json FROM test_runs WHERE id = ?", (run_id,))
-    report = _loads(row and row["quality_json"], {})
+    row = _one(db, "SELECT quality_summary_json FROM test_runs WHERE id = ?", (run_id,))
+    report = _loads(row and row["quality_summary_json"], {})
+    projected = report.get("projection_revision") == 1 if isinstance(report, dict) else False
+    if not projected:
+        row = _one(db, "SELECT quality_json FROM test_runs WHERE id = ?", (run_id,))
+        report = _loads(row and row["quality_json"], {})
     if not isinstance(report, dict) or report.get("schema_version") != 3 or not report.get("results"):
         return None
-    report = rescore_report(report)
+    if not projected:
+        report = rescore_report(report)
     keep = ("id", "fingerprint", "category", "family", "scope", "scored", "passed", "outcome")
     return {
         "schema_version": 3, "suite": report.get("suite"), "suite_hash": report.get("suite_hash"),

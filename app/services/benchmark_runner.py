@@ -19,6 +19,7 @@ from app.benchmarking.quality_report import make_report as make_quality_report, 
 from app.benchmarking.quality_suite import MAX_OUTPUT_TOKENS, QUALITY_WORKERS, load_questions, provenance, suite_hash
 from app.benchmarking.suites import get_suite
 from app.storage import DETECT_TYPES, pack_text
+from app.services.quality_views import projection_json
 
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 180.0
@@ -75,10 +76,10 @@ def _store_result(run_id: int, index: int, result: Result) -> None:
     try:
         db.execute(
             """INSERT INTO test_results
-                   (run_id, test_id, category, prompt, response, score, detail, evaluator,
+                   (run_id, test_id, category, prompt, response, score, detail, evaluator, prompt_preview,
                     question_index, prompt_tokens, completion_tokens, passed, pass_threshold,
                     difficulty, weight, latency_ms, ttft_ms, request_ok, quality_metadata_json, quality_scored, quality_outcome)
-               SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+               SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 WHERE EXISTS (
                     SELECT 1 FROM test_runs
                      WHERE id = ? AND status IN ('pending', 'running')
@@ -92,6 +93,7 @@ def _store_result(run_id: int, index: int, result: Result) -> None:
                 result.achievement_score,
                 result.detail,
                 q.evaluator,
+                q.prompt[:80],
                 index,
                 result.tokens.prompt_tokens,
                 result.tokens.completion_tokens,
@@ -811,8 +813,9 @@ def _summarise_and_finish(
             db = _connect()
             try:
                 db.execute(
-                    "UPDATE test_runs SET quality_json=? WHERE id=? AND status IN ('pending','running')",
-                    (pack_text(json.dumps(report, separators=(",", ":"))), run_id),
+                    "UPDATE test_runs SET quality_json=?,quality_summary_json=? WHERE id=? AND status IN ('pending','running')",
+                    (pack_text(json.dumps(report, separators=(",", ":"))),
+                     projection_json(report, [{"test_id": r.question.id, "response": r.response} for r in done]), run_id),
                 )
                 db.commit()
             finally:

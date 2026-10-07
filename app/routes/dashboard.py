@@ -1,7 +1,5 @@
 """Dashboard route."""
 
-import json
-
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
@@ -41,7 +39,7 @@ async def dashboard(request: Request):
 
     # Active (running/pending) benchmarks
     active_runs = await fetch_all(
-        """SELECT tr.*, m.name as model_name, m.model_id AS provider_model_id
+        """SELECT tr.id,tr.status, m.name as model_name, m.model_id AS provider_model_id
            FROM test_runs tr
            JOIN models m ON tr.model_id = m.id
            WHERE tr.status IN ('running', 'pending')
@@ -49,7 +47,8 @@ async def dashboard(request: Request):
     )
 
     recent_runs = await fetch_all(
-        """SELECT tr.*, m.name as model_name, m.model_id AS provider_model_id
+        """SELECT tr.id,tr.status,tr.test_suite_hash,tr.total_questions,tr.scored_questions,
+                  tr.passed_questions,tr.avg_score, m.name as model_name, m.model_id AS provider_model_id
            FROM test_runs tr
            JOIN models m ON tr.model_id = m.id
            ORDER BY tr.id DESC LIMIT 10"""
@@ -66,7 +65,7 @@ async def dashboard(request: Request):
     # Only standard-suite runs and historical rigorous runs (its reasoning
     # area) qualify; the category descriptions describe them.
     last_run = await fetch_one(
-        """SELECT tr.id, tr.quality_json, m.name AS model_name
+        """SELECT tr.id, tr.quality_summary_json, m.name AS model_name
            FROM test_runs tr
            JOIN models m ON tr.model_id = m.id
            WHERE tr.status = 'completed'
@@ -91,10 +90,8 @@ async def dashboard(request: Request):
             (last_run["id"],),
         )
 
-        try:
-            quality = json.loads(last_run.get("quality_json") or "{}")
-        except (TypeError, ValueError):
-            quality = {}
+        from app.services.quality_views import load_quality_view
+        quality = await load_quality_view(last_run["id"], last_run.get("quality_summary_json"))
         if quality and quality.get("schema_version") == 3:
             for category in last_run_categories:
                 summary = quality["summary"]["categories"].get(category["category"])

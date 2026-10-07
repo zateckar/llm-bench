@@ -65,6 +65,9 @@ async def get_current_user(request: Request) -> dict | None:
     The token's token_version must match the current one in the database; a
     password change bumps it so sessions issued before the change are rejected.
     """
+    if hasattr(request.state, "authenticated_user"):
+        return request.state.authenticated_user
+    request.state.authenticated_user = None
     token = request.cookies.get("session")
     if not token:
         return None
@@ -74,6 +77,7 @@ async def get_current_user(request: Request) -> dict | None:
     user = await fetch_one("SELECT * FROM users WHERE id = ?", (data["user_id"],))
     if not user or data["token_version"] != user["token_version"]:
         return None
+    request.state.authenticated_user = user
     return user
 
 
