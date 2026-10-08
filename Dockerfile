@@ -54,8 +54,10 @@ ENV PATH="/app/.venv/bin:$PATH" \
     ENVIRONMENT=production
 
 # Health check: the app must respond within 5 seconds, with 3 retries,
-# checked every 30 seconds after a 15-second startup grace period.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+# checked every 30 seconds. Historical storage migration can take minutes on
+# the persistent production volume; readiness still succeeds as soon as HTTP
+# starts responding, but migration must not be killed as an unhealthy startup.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10m --retries=3 \
     CMD curl -sf http://localhost:8000/dashboard || exit 1
 
 EXPOSE 8000

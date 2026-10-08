@@ -294,6 +294,22 @@ Interactive pages use persisted quality projections and short prompt previews, p
 
 Run `python maintain_database.py` to inspect space usage, or add `--apply --report reports/database-maintenance.json` to compress historical payloads (including older compressed records), reaggregate saved criteria under `criterion-achievement-v1`, refresh read projections and reclaim free pages. Maintenance processes one report at a time and requires an idle queue; it first creates a consistent compressed SQLite backup under `data/backups`. Prompts, answers, evaluation criteria, original evaluator scores, full-pass verdicts and timing data are preserved. Restore a backup by decompressing its `.db.gz` to a database file while the application is stopped. Keep the application code supporting the stored compression versions with a restored database.
 
+**Production rollout:** application startup now runs a versioned storage migration against its configured database on the mounted persistent volume, after schema/recovery initialization and before HTTP service or queue dispatch. The first deployment creates one consistent `.db.gz` backup, recompresses historical plain-text and older compressed payloads, checks integrity and foreign keys, and runs `VACUUM` with WAL truncation. It preserves all saved scores and decoded data. Pending runs wait until migration finishes. Completion is recorded in `database_storage_migrations`; subsequent restarts skip it. An interrupted compaction resumes using the existing backup. Errors stop startup before any queued work starts. Run one application process against the volume during migration; stop any older container still using it.
+
+Deploy the new image **on the production host**, retaining the existing database volume. With this repository's Compose setup, use `docker compose up --build -d app` and inspect `docker compose logs app` for `Server database storage migration`, including before/after database and WAL sizes and the backup path. The image allows ten minutes for initial health readiness; adjust your platform's startup timeout for larger databases. Allow at least three times the current database plus WAL size in free disk space for the backup and SQLite rewrite. The migration checks this before changing payloads. A backup remains on the volume and uses additional disk space; move it to your backup storage after verifying the deployment. No backup is deleted automatically.
+
+For deployments pulling the CI image, pull the new tag and recreate the container rather than only restarting it. Verify the running container's `org.opencontainers.image.revision` label against the intended Git commit; the CI image includes this label. The startup log's `lossless-lzma-v1` revision confirms that the storage migration code ran.
+
+To compact again without changing historical scores, stop the server and run the same image as a one-off job against its production volume. For Compose:
+
+```sh
+docker compose stop app
+docker compose run --rm --no-deps app python maintain_database.py --database /app/data/bench.db --storage-only --apply --report /app/data/database-maintenance.json
+docker compose up -d app
+```
+
+This targets the **remote persistent database** when executed on the production host. Inspection without mutation is available with `docker compose exec app python maintain_database.py --database /app/data/bench.db`. Database storage still increases as new benchmark history is retained; compression reduces the cost per record and VACUUM reclaims unused pages. Limiting retained history would require a separate retention policy.
+
 ## Configuration and deployment
 
 Copy [.env.example](.env.example) to .env for local configuration. Development creates an admin account using ADMIN_USERNAME / ADMIN_PASSWORD (defaults admin / changeme). For production, set ENVIRONMENT=production, a unique SECRET_KEY and ADMIN_PASSWORD; startup rejects missing/default values. Models and API keys are managed by administrators. OIDC settings remain optional.

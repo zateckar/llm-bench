@@ -22,6 +22,15 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    # Apply to the mounted server database before the queue or HTTP requests
+    # can write. A revision marker makes later restarts cheap.
+    from app import config
+    from app.services.database_maintenance import migrate_storage
+    from starlette.concurrency import run_in_threadpool
+
+    logging.getLogger(__name__).info("Checking server database storage migration: %s", config.DATABASE_PATH)
+    storage = await run_in_threadpool(migrate_storage, config.DATABASE_PATH, startup=True)
+    logging.getLogger(__name__).info("Server database storage migration: %s", storage)
     # Resume the run queue: pending runs left by a previous process pick up
     # again here, and the tick thread fires future-dated plans.
     from app.services import run_queue

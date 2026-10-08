@@ -18,22 +18,13 @@ from app.storage import DETECT_TYPES, pack_text, unpack_text
 from app.benchmarking.quality_report import achievement_score, rescore_report
 from app.services.quality_views import refresh_projections
 from app.database import READ_INDEXES
+from app.services.database_maintenance import migrate_storage, inspect_database
 
 PAYLOADS = {
     "test_results": ("prompt", "response", "quality_metadata_json"),
     "test_runs": ("quality_json", "perf_json", "quality_summary_json"),
     "performance_cells": ("result_json",),
 }
-
-
-def inspect_database(path):
-    path = Path(path).resolve()
-    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as db:
-        return {"bytes": path.stat().st_size,
-                "free_bytes": db.execute("PRAGMA freelist_count").fetchone()[0]
-                * db.execute("PRAGMA page_size").fetchone()[0],
-                "runs": db.execute("SELECT COUNT(*) FROM test_runs").fetchone()[0],
-                "results": db.execute("SELECT COUNT(*) FROM test_results").fetchone()[0]}
 
 
 def maintain_database(path, backup_dir=None):
@@ -139,9 +130,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database", type=Path, default=Path(__file__).parent / "data" / "bench.db")
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--storage-only", action="store_true",
+                        help="Lossless compression/VACUUM without changing scores; stop the app first")
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
-    result = maintain_database(args.database) if args.apply else inspect_database(args.database)
+    if args.apply and args.storage_only:
+        result = migrate_storage(args.database, force=True)
+    else:
+        result = maintain_database(args.database) if args.apply else inspect_database(args.database)
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

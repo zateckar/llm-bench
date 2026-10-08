@@ -81,6 +81,7 @@ jobs:
           uv run python selftest_capacity.py
           uv run python selftest_cache.py
           uv run python selftest_storage.py
+          uv run python selftest_database_maintenance.py
           uv run python selftest_database_performance.py
 
       - name: Verify independent v10 oracles and review regressions
